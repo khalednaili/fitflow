@@ -1,0 +1,82 @@
+Flutter crash report.
+Please report a bug at https://github.com/flutter/flutter/issues.
+
+## command
+
+flutter run -d chrome
+
+## exception
+
+FileSystemException: FileSystemException: Failed to get type of stdio handle (fd 0), path = '' (OS Error: Bad file descriptor, errno = 9)
+
+```
+#0      _StdIOUtils._getStdioInputStream (dart:io-patch/stdio_patch.dart:13:7)
+#1      _stdin (dart:io/stdio.dart:504:34)
+#2      _stdin (dart:io/stdio.dart)
+#3      stdin (dart:io/stdio.dart:523:40)
+#4      Stdio.stdin (package:flutter_tools/src/base/io.dart:273:37)
+#5      Stdio.stdinHasTerminal (package:flutter_tools/src/base/io.dart:325:9)
+#6      AnsiTerminal.singleCharMode= (package:flutter_tools/src/base/terminal.dart:321:17)
+#7      TerminalHandler.setupTerminal (package:flutter_tools/src/resident_runner.dart:1632:15)
+#8      RunCommand.runCommand.<anonymous closure> (package:flutter_tools/src/commands/run.dart:920:19)
+#9      _rootRunUnary (dart:async/zone.dart:1538:47)
+#10     Future._propagateToListeners.handleValueCallback (dart:async/future_impl.dart:932:45)
+#11     Future._propagateToListeners (dart:async/future_impl.dart:961:13)
+#12     Future._complete (dart:async/future_impl.dart:703:7)
+#13     _SyncCompleter.complete (dart:async/future_impl.dart:100:12)
+#14     ResidentWebRunner.attach (package:flutter_tools/src/isolated/resident_web_runner.dart:725:26)
+<asynchronous suspension>
+#15     asyncGuard.<anonymous closure> (package:flutter_tools/src/base/async_guard.dart:109:26)
+<asynchronous suspension>
+```
+
+## flutter doctor
+
+```
+[✓] Flutter (Channel stable, 3.29.0, on macOS 26.4.1 25E253 darwin-arm64, locale en-US) [1,948ms]
+    • Flutter version 3.29.0 on channel stable at /Users/khalednaili/Documents/flutter
+    • Upstream repository https://github.com/flutter/flutter.git
+    • Framework revision 35c388afb5 (1 year, 3 months ago), 2025-02-10 12:48:41 -0800
+    • Engine revision f73bfc4522
+    • Dart version 3.7.0
+    • DevTools version 2.42.2
+
+[✓] Android toolchain - develop for Android devices (Android SDK version 36.0.0) [3.2s]
+    • Android SDK at /Users/khalednaili/Library/Android/sdk
+    • Platform android-36, build-tools 36.0.0
+    • Java binary at: /Applications/Android Studio.app/Contents/jbr/Contents/Home/bin/java
+      This is the JDK bundled with the latest Android Studio installation on this machine.
+      To manually set the JDK path, use: `flutter config --jdk-dir="path/to/jdk"`.
+    • Java version OpenJDK Runtime Environment (build 21.0.6+-13355223-b631.42)
+    • All Android licenses accepted.
+
+[✓] Xcode - develop for iOS and macOS (Xcode 26.4) [1,391ms]
+    • Xcode at /Applications/Xcode.app/Contents/Developer
+    • Build 17E192
+    • CocoaPods version 1.16.2
+
+[✓] Chrome - develop for the web [5ms]
+    • Chrome at /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+
+[✓] Android Studio (version 2024.3) [5ms]
+    • Android Studio at /Applications/Android Studio.app/Contents
+    • Flutter plugin can be installed from:
+      🔨 https://plugins.jetbrains.com/plugin/9212-flutter
+    • Dart plugin can be installed from:
+      🔨 https://plugins.jetbrains.com/plugin/6351-dart
+    • Java version OpenJDK Runtime Environment (build 21.0.6+-13355223-b631.42)
+
+[✓] VS Code (version 1.118.1) [4ms]
+    • VS Code at /Applications/Visual Studio Code.app/Contents
+    • Flutter extension version 3.134.0
+
+[✓] Connected device (3 available) [6.2s]
+    • iPhone 17 Pro Max (mobile)      • D2DC0CC6-A7F1-4791-99D2-261A31402285 • ios            • com.apple.CoreSimulator.SimRuntime.iOS-26-4 (simulator)
+    • Mac Designed for iPad (desktop) • mac-designed-for-ipad                • darwin         • macOS 26.4.1 25E253 darwin-arm64
+    • Chrome (web)                    • chrome                               • web-javascript • Google Chrome 147.0.7727.138
+
+[✓] Network resources [480ms]
+    • All expected network resources are available.
+
+• No issues found!
+```

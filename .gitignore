@@ -1,0 +1,46 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub/
+build/
+*.g.dart
+*.freezed.dart
+doc/api/
+
+# Firebase — secrets (never commit these)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+lib/firebase_options.dart
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+.firebaserc
+
+# IDE
+.idea/
+.vscode/*.code-workspace
+*.iml
+
+# macOS
+.DS_Store
+
+# Android
+android/.gradle/
+android/local.properties
+android/key.properties
+*.keystore
+*.jks
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+
+# Web
+web/firebase-messaging-sw.js
+
+# Environment / secrets
+.env
+*.env
+*.pem
