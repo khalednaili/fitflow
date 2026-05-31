@@ -161,7 +161,8 @@ class AppLocalizations {
     'Could not load offers': 'Could not load offers',
     'Search member or plan…': 'Search member or plan…',
     'Delete recurring class?': 'Delete recurring class?',
-    'Which occurrences do you want to delete?': 'Which occurrences do you want to delete?',
+    'Which occurrences do you want to delete?':
+        'Which occurrences do you want to delete?',
     'This only': 'This only',
     'This & following': 'This & following',
     'Entire series': 'Entire series',
@@ -200,7 +201,8 @@ class AppLocalizations {
     'Good': 'Good',
     'Strong': 'Strong',
     'Date of Birth': 'Date of Birth',
-    'Creates a Firebase Auth account and member profile.': 'Creates a Firebase Auth account and member profile.',
+    'Creates a Firebase Auth account and member profile.':
+        'Creates a Firebase Auth account and member profile.',
     'Add Member': 'Add Member',
     'Create a new gym account': 'Create a new gym account',
     'New Member': 'New Member',
@@ -209,13 +211,15 @@ class AppLocalizations {
     'Full name is required': 'Full name is required',
     'Email *': 'Email *',
     'Email is required': 'Email is required',
-    'Enter a valid email (e.g. name@gym.com)': 'Enter a valid email (e.g. name@gym.com)',
+    'Enter a valid email (e.g. name@gym.com)':
+        'Enter a valid email (e.g. name@gym.com)',
     'Phone number': 'Phone number',
     '+1 555 000 0000': '+1 555 000 0000',
     'Password *': 'Password *',
     'Password is required': 'Password is required',
     'Minimum 6 characters': 'Minimum 6 characters',
-    'Use 8+ chars with uppercase, numbers & symbols.': 'Use 8+ chars with uppercase, numbers & symbols.',
+    'Use 8+ chars with uppercase, numbers & symbols.':
+        'Use 8+ chars with uppercase, numbers & symbols.',
     'Confirm password *': 'Confirm password *',
     'Passwords do not match': 'Passwords do not match',
     'Gender': 'Gender',
@@ -233,7 +237,8 @@ class AppLocalizations {
     'Allergies, injuries, conditions…': 'Allergies, injuries, conditions…',
     'Roles & Permissions': 'Roles & Permissions',
     'selected': 'selected',
-    'A member can hold multiple roles simultaneously.': 'A member can hold multiple roles simultaneously.',
+    'A member can hold multiple roles simultaneously.':
+        'A member can hold multiple roles simultaneously.',
     'Creating account…': 'Creating account…',
     'Create Member': 'Create Member',
     'Class Types': 'Class Types',
@@ -270,7 +275,8 @@ class AppLocalizations {
     'Emergency': 'Emergency',
     'Clear': 'Clear',
     'Save Note': 'Save Note',
-    'No assigned offers found for this member.': 'No assigned offers found for this member.',
+    'No assigned offers found for this member.':
+        'No assigned offers found for this member.',
     'Select Coaches': 'Select Coaches',
     'Tap a coach to assign them': 'Tap a coach to assign them',
     'Skip': 'Skip',
@@ -289,20 +295,27 @@ class AppLocalizations {
     'Joined': 'Joined',
     'Promote to booked': 'Promote to booked',
     'promoted.': 'promoted.',
-    'No upcoming classes. Create some first.': 'No upcoming classes. Create some first.',
+    'No upcoming classes. Create some first.':
+        'No upcoming classes. Create some first.',
     'Failed to generate QR': 'Failed to generate QR',
     'Regenerate QR Code?': 'Regenerate QR Code?',
     'Regenerate': 'Regenerate',
     'Gym Check-in QR': 'Gym Check-in QR',
-    'One QR code for all classes.\nMembers scan it to check in.': 'One QR code for all classes.\nMembers scan it to check in.',
+    'One QR code for all classes.\nMembers scan it to check in.':
+        'One QR code for all classes.\nMembers scan it to check in.',
     'No QR code yet': 'No QR code yet',
-    'Generate your gym QR code once and display it\nat the entrance for members to scan.': 'Generate your gym QR code once and display it\nat the entrance for members to scan.',
+    'Generate your gym QR code once and display it\nat the entrance for members to scan.':
+        'Generate your gym QR code once and display it\nat the entrance for members to scan.',
     'Generate QR Code': 'Generate QR Code',
-    'Print this QR code and post it at the entrance': 'Print this QR code and post it at the entrance',
-    'Members open their app and tap "Scan" to check in': 'Members open their app and tap "Scan" to check in',
-    'Check-in window: 30 min before → 30 min after class': 'Check-in window: 30 min before → 30 min after class',
+    'Print this QR code and post it at the entrance':
+        'Print this QR code and post it at the entrance',
+    'Members open their app and tap "Scan" to check in':
+        'Members open their app and tap "Scan" to check in',
+    'Check-in window: 30 min before → 30 min after class':
+        'Check-in window: 30 min before → 30 min after class',
     'Regenerate QR Code': 'Regenerate QR Code',
-    'Only regenerate if the QR is compromised.': 'Only regenerate if the QR is compromised.',
+    'Only regenerate if the QR is compromised.':
+        'Only regenerate if the QR is compromised.',
     'Tomorrow': 'Tomorrow',
     'No classes yet': 'No classes yet',
     'No matching classes': 'No matching classes',
@@ -342,9 +355,11 @@ class AppLocalizations {
     'Capacity must be a number': 'Capacity must be a number',
     'Capacity must be greater than 0': 'Capacity must be greater than 0',
     'End time must be after start time': 'End time must be after start time',
-    'Select at least one day of the week for repeat': 'Select at least one day of the week for repeat',
+    'Select at least one day of the week for repeat':
+        'Select at least one day of the week for repeat',
     'Please set a repeat end date': 'Please set a repeat end date',
-    'Repeat end date must be after the class date': 'Repeat end date must be after the class date',
+    'Repeat end date must be after the class date':
+        'Repeat end date must be after the class date',
     'All in series': 'All in series',
     'SCHEDULE': 'SCHEDULE',
     'Date': 'Date',
@@ -352,7 +367,8 @@ class AppLocalizations {
     'End': 'End',
     'RECURRENCE': 'RECURRENCE',
     'Repeat weekly': 'Repeat weekly',
-    'Create recurring classes on selected weekdays': 'Create recurring classes on selected weekdays',
+    'Create recurring classes on selected weekdays':
+        'Create recurring classes on selected weekdays',
     'Class duration': 'Class duration',
     'Select end date': 'Select end date',
     '4 weeks': '4 weeks',
@@ -370,7 +386,8 @@ class AppLocalizations {
     'Any offer can join': 'Any offer can join',
     'Select offers': 'Select offers',
     'Allow Drop-ins': 'Allow Drop-ins',
-    'Non-members can join as drop-in guests': 'Non-members can join as drop-in guests',
+    'Non-members can join as drop-in guests':
+        'Non-members can join as drop-in guests',
     'Drop-in Price (€)': 'Drop-in Price (€)',
     'Save changes': 'Save changes',
     'Create': 'Create',
@@ -386,8 +403,10 @@ class AppLocalizations {
     'Confirm Booking': 'Confirm Booking',
     'force-reserved & checked in for': 'force-reserved & checked in for',
     'Force Reservation': 'Force Reservation',
-    'Bypasses offer requirements & capacity.': 'Bypasses offer requirements & capacity.',
-    'Member will be booked and checked in immediately.': 'Member will be booked and checked in immediately.',
+    'Bypasses offer requirements & capacity.':
+        'Bypasses offer requirements & capacity.',
+    'Member will be booked and checked in immediately.':
+        'Member will be booked and checked in immediately.',
     'Force Reserve & Check-In': 'Force Reserve & Check-In',
     'Copied': 'Copied',
     'Roles': 'Roles',
@@ -401,7 +420,8 @@ class AppLocalizations {
     'Copy Email': 'Copy Email',
     'Change Roles': 'Change Roles',
     'Upcoming schedule': 'Upcoming schedule',
-    'No upcoming classes assigned to \$name.': 'No upcoming classes assigned to \$name.',
+    'No upcoming classes assigned to \$name.':
+        'No upcoming classes assigned to \$name.',
     'Add Drop-in': 'Add Drop-in',
     'Pending payment': 'Pending payment',
     'Confirmed revenue': 'Confirmed revenue',
@@ -420,11 +440,13 @@ class AppLocalizations {
     'Drop-in bookings will appear here.': 'Drop-in bookings will appear here.',
     'Please select a class.': 'Please select a class.',
     'Please enter the guest name.': 'Please enter the guest name.',
-    'Please enter a valid email address.': 'Please enter a valid email address.',
+    'Please enter a valid email address.':
+        'Please enter a valid email address.',
     'added as guest drop-in for': 'added as guest drop-in for',
     'Non-member': 'Non-member',
     'Class': 'Class',
-    'No classes have drop-ins enabled. Enable drop-ins in the Classes tab first.': 'No classes have drop-ins enabled. Enable drop-ins in the Classes tab first.',
+    'No classes have drop-ins enabled. Enable drop-ins in the Classes tab first.':
+        'No classes have drop-ins enabled. Enable drop-ins in the Classes tab first.',
     'Select a class': 'Select a class',
     'Guest Name': 'Guest Name',
     'Email Address': 'Email Address',
@@ -438,7 +460,8 @@ class AppLocalizations {
     'paused.': 'paused.',
     'Delete member?': 'Delete member?',
     'This will permanently remove': 'This will permanently remove',
-    'from the system. This action cannot be undone.': 'from the system. This action cannot be undone.',
+    'from the system. This action cannot be undone.':
+        'from the system. This action cannot be undone.',
     'deleted.': 'deleted.',
     'All assigned offers': 'All assigned offers',
     'no plan': 'no plan',
@@ -462,11 +485,14 @@ class AppLocalizations {
     'Owner': 'Owner',
     'Staff': 'Staff',
     'Limited: single sessions': 'Limited: single sessions',
-    'Fixed check-in pack used one session at a time.': 'Fixed check-in pack used one session at a time.',
+    'Fixed check-in pack used one session at a time.':
+        'Fixed check-in pack used one session at a time.',
     'Weekly recurrence': 'Weekly recurrence',
-    'Number of check-ins allowed each week.': 'Number of check-ins allowed each week.',
+    'Number of check-ins allowed each week.':
+        'Number of check-ins allowed each week.',
     'Monthly recurrence': 'Monthly recurrence',
-    'Number of check-ins allowed each month.': 'Number of check-ins allowed each month.',
+    'Number of check-ins allowed each month.':
+        'Number of check-ins allowed each month.',
     'Days': 'Days',
     'Weeks': 'Weeks',
     'Months': 'Months',
@@ -477,7 +503,8 @@ class AppLocalizations {
     '1 year': '1 year',
     '3 years': '3 years',
     'Delete offer?': 'Delete offer?',
-    'Are you sure you want to permanently delete': 'Are you sure you want to permanently delete',
+    'Are you sure you want to permanently delete':
+        'Are you sure you want to permanently delete',
     'duplicated as inactive copy.': 'duplicated as inactive copy.',
     'Total': 'Total',
     'Inactive': 'Inactive',
@@ -485,14 +512,18 @@ class AppLocalizations {
     'New Offer': 'New Offer',
     'No offers yet': 'No offers yet',
     'No results found': 'No results found',
-    'Create your first membership offer to get started.': 'Create your first membership offer to get started.',
-    'Try adjusting your search or filter.': 'Try adjusting your search or filter.',
+    'Create your first membership offer to get started.':
+        'Create your first membership offer to get started.',
+    'Try adjusting your search or filter.':
+        'Try adjusting your search or filter.',
     'Edit offer': 'Edit offer',
     'Duplicate offer': 'Duplicate offer',
     'Delete offer': 'Delete offer',
     'Offer name is required': 'Offer name is required',
-    'Enter a positive number of sessions': 'Enter a positive number of sessions',
-    'Duration must be a positive number of days': 'Duration must be a positive number of days',
+    'Enter a positive number of sessions':
+        'Enter a positive number of sessions',
+    'Duration must be a positive number of days':
+        'Duration must be a positive number of days',
     'Enter a valid price (e.g. 29.99)': 'Enter a valid price (e.g. 29.99)',
     'Check-ins / week': 'Check-ins / week',
     'Check-ins / month': 'Check-ins / month',
@@ -506,7 +537,8 @@ class AppLocalizations {
     'Basic Info': 'Basic Info',
     'Offer name *': 'Offer name *',
     'e.g. Monthly Unlimited': 'e.g. Monthly Unlimited',
-    'Short description shown to members…': 'Short description shown to members…',
+    'Short description shown to members…':
+        'Short description shown to members…',
     'Sessions': 'Sessions',
     'Custom value': 'Custom value',
     'Unit': 'Unit',
@@ -525,7 +557,8 @@ class AppLocalizations {
     'Past Sessions': 'Past Sessions',
     'Delete session?': 'Delete session?',
     'at': 'at',
-    'The members assigned to this session will no longer see it.': 'The members assigned to this session will no longer see it.',
+    'The members assigned to this session will no longer see it.':
+        'The members assigned to this session will no longer see it.',
     'My PT Sessions': 'My PT Sessions',
     'Private Coaching': 'Private Coaching',
     'Private': 'Private',
@@ -551,11 +584,14 @@ class AppLocalizations {
     'No members found for': 'No members found for',
     'Add': 'Add',
     'Session Notes (optional)': 'Session Notes (optional)',
-    'Goals, focus areas, equipment needed…': 'Goals, focus areas, equipment needed…',
+    'Goals, focus areas, equipment needed…':
+        'Goals, focus areas, equipment needed…',
     'Create Session': 'Create Session',
     'No private sessions yet': 'No private sessions yet',
-    'Create a one-on-one or small group session.': 'Create a one-on-one or small group session.',
-    'Assigned members will see it in their schedule.': 'Assigned members will see it in their schedule.',
+    'Create a one-on-one or small group session.':
+        'Create a one-on-one or small group session.',
+    'Assigned members will see it in their schedule.':
+        'Assigned members will see it in their schedule.',
     'Create First Session': 'Create First Session',
     'Monday': 'Monday',
     'Tuesday': 'Tuesday',
@@ -564,17 +600,22 @@ class AppLocalizations {
     'Friday': 'Friday',
     'Saturday': 'Saturday',
     'Sunday': 'Sunday',
-    'All classes already exist for this week.': 'All classes already exist for this week.',
+    'All classes already exist for this week.':
+        'All classes already exist for this week.',
     'class(es) generated ✓': 'class(es) generated ✓',
     'Delete template?': 'Delete template?',
-    'This will not remove already-generated classes.': 'This will not remove already-generated classes.',
+    'This will not remove already-generated classes.':
+        'This will not remove already-generated classes.',
     'Weekly Templates': 'Weekly Templates',
     'Generate Week': 'Generate Week',
     'No templates yet': 'No templates yet',
-    'Tap + to create a weekly recurring class.': 'Tap + to create a weekly recurring class.',
+    'Tap + to create a weekly recurring class.':
+        'Tap + to create a weekly recurring class.',
     'New Template': 'New Template',
-    'Classes will be created for all active templates for the week of:': 'Classes will be created for all active templates for the week of:',
-    'Existing classes are skipped automatically.': 'Existing classes are skipped automatically.',
+    'Classes will be created for all active templates for the week of:':
+        'Classes will be created for all active templates for the week of:',
+    'Existing classes are skipped automatically.':
+        'Existing classes are skipped automatically.',
     'Generate': 'Generate',
     'Please assign at least one coach': 'Please assign at least one coach',
     'Edit Template': 'Edit Template',
@@ -582,11 +623,13 @@ class AppLocalizations {
     'Class title is required': 'Class title is required',
     'Start Time': 'Start Time',
     'Duration (min)': 'Duration (min)',
-    'Duration must be a positive number of minutes': 'Duration must be a positive number of minutes',
+    'Duration must be a positive number of minutes':
+        'Duration must be a positive number of minutes',
     'Capacity must be at least 1': 'Capacity must be at least 1',
     'Select coaches': 'Select coaches',
     'Required Offers': 'Required Offers',
-    'Only active templates are included when generating a week': 'Only active templates are included when generating a week',
+    'Only active templates are included when generating a week':
+        'Only active templates are included when generating a week',
     'Part': 'Part',
     'INTERMEDIATE': 'INTERMEDIATE',
     'SCALED': 'SCALED',
@@ -609,7 +652,8 @@ class AppLocalizations {
     'scale': 'scale',
     'exercise': 'exercise',
     'A': 'A',
-    'workout already exists for this date.': 'workout already exists for this date.',
+    'workout already exists for this date.':
+        'workout already exists for this date.',
     'Class Type': 'Class Type',
     'Select class type': 'Select class type',
     'Edit Workout': 'Edit Workout',
@@ -617,14 +661,18 @@ class AppLocalizations {
     'Workout title is required': 'Workout title is required',
     'Description / Instructions': 'Description / Instructions',
     'Member Notes · Stimulus': 'Member Notes · Stimulus',
-    '— visible to members in the workout view': '— visible to members in the workout view',
-    'STIMULUS, pacing goals, strategy, movement intent…': 'STIMULUS, pacing goals, strategy, movement intent…',
+    '— visible to members in the workout view':
+        '— visible to members in the workout view',
+    'STIMULUS, pacing goals, strategy, movement intent…':
+        'STIMULUS, pacing goals, strategy, movement intent…',
     'Coach Note (private)': 'Coach Note (private)',
     '— visible only to coaches & admins': '— visible only to coaches & admins',
-    'Cues, scaling notes, things to watch for…': 'Cues, scaling notes, things to watch for…',
+    'Cues, scaling notes, things to watch for…':
+        'Cues, scaling notes, things to watch for…',
     'Workout Parts': 'Workout Parts',
     'Add Part': 'Add Part',
-    'Tap "Add Part" to structure your workout': 'Tap "Add Part" to structure your workout',
+    'Tap "Add Part" to structure your workout':
+        'Tap "Add Part" to structure your workout',
     'Post': 'Post',
     'Exercise name': 'Exercise name',
     'Sets': 'Sets',
@@ -636,8 +684,10 @@ class AppLocalizations {
     'Time Cap (optional)': 'Time Cap (optional)',
     'e.g. 20 min': 'e.g. 20 min',
     'Scaling Levels': 'Scaling Levels',
-    'Each level can have its own description and exercises.': 'Each level can have its own description and exercises.',
-    'Use one shared exercise list for this part.': 'Use one shared exercise list for this part.',
+    'Each level can have its own description and exercises.':
+        'Each level can have its own description and exercises.',
+    'Use one shared exercise list for this part.':
+        'Use one shared exercise list for this part.',
     'Exercises': 'Exercises',
     'No exercises — optional': 'No exercises — optional',
     'Add Level': 'Add Level',
@@ -647,7 +697,8 @@ class AppLocalizations {
     'No exercises yet for this level': 'No exercises yet for this level',
     'Measure Type': 'Measure Type',
     'Workout Format': 'Workout Format',
-    'Password must be at least 6 characters.': 'Password must be at least 6 characters.',
+    'Password must be at least 6 characters.':
+        'Password must be at least 6 characters.',
     'Passwords do not match.': 'Passwords do not match.',
     'Could not update password.': 'Could not update password.',
     'Set user password': 'Set user password',
@@ -675,6 +726,24 @@ class AppLocalizations {
     'Next class': 'Next class',
     'Roster': 'Roster',
     'Check-in': 'Check-in',
+    'Stats': 'Stats',
+    'All time': 'All time',
+    'Hours': 'Hours',
+    'Avg fill rate': 'Avg fill rate',
+    'Last 6 months': 'Last 6 months',
+    'Class note': 'Class note',
+    'Add WOD, warmup notes, or class details…':
+        'Add WOD, warmup notes, or class details…',
+    'Edit note': 'Edit note',
+    'Notify members': 'Notify members',
+    'Message': 'Message',
+    'Send': 'Send',
+    'members notified': 'members notified',
+    'Promote': 'Promote',
+    'No one on the waitlist.': 'No one on the waitlist.',
+    'promoted to booked': 'promoted to booked',
+    'Absent': 'Absent',
+    'Mark absent': 'Mark absent',
     'No bookings yet.': 'No bookings yet.',
     'No bookings.': 'No bookings.',
     'No upcoming sessions': 'No upcoming sessions',
@@ -684,7 +753,8 @@ class AppLocalizations {
     'Schedule First Session': 'Schedule First Session',
     'Class booked successfully!': 'Class booked successfully!',
     'Drop-in Booking': 'Drop-in Booking',
-    'Are you sure you want to cancel this booking?': 'Are you sure you want to cancel this booking?',
+    'Are you sure you want to cancel this booking?':
+        'Are you sure you want to cancel this booking?',
     'Leave Waitlist': 'Leave Waitlist',
     'Join Waitlist': 'Join Waitlist',
     'Book This Class': 'Book This Class',
@@ -707,7 +777,8 @@ class AppLocalizations {
     'Claim Super Admin': 'Claim Super Admin',
     'Home': 'Home',
     'Delete score?': 'Delete score?',
-    'This will permanently remove your logged score.': 'This will permanently remove your logged score.',
+    'This will permanently remove your logged score.':
+        'This will permanently remove your logged score.',
     'Delete score': 'Delete score',
     'Workout Details': 'Workout Details',
     'No exercise details.': 'No exercise details.',
@@ -773,7 +844,8 @@ class AppLocalizations {
     'Gym ID': 'Gym ID',
     'e.g. F8WMn2jjEY89l5YgoiqZ': 'e.g. F8WMn2jjEY89l5YgoiqZ',
     'Run Migration': 'Run Migration',
-    'Running migration… this may take a minute': 'Running migration… this may take a minute',
+    'Running migration… this may take a minute':
+        'Running migration… this may take a minute',
     'Migration complete ✅': 'Migration complete ✅',
     'OK': 'OK',
     'Assign': 'Assign',
@@ -901,7 +973,6 @@ class AppLocalizations {
     'For Time': 'For Time',
     'SUBSCRIPTION PERIOD': 'SUBSCRIPTION PERIOD',
     'Temporary Password': 'Temporary Password',
-
   };
 
   static const _fr = <String, String>{
@@ -1058,12 +1129,14 @@ class AppLocalizations {
     'Please select a member': 'Veuillez sélectionner un membre',
     'Please select an offer': 'Veuillez sélectionner une offre',
     'Enter a valid amount': 'Entrez un montant valide',
-    'Amount cannot exceed total price': 'Le montant ne peut pas dépasser le prix total',
+    'Amount cannot exceed total price':
+        'Le montant ne peut pas dépasser le prix total',
     'Assign failed': 'Échec de l\'attribution',
     'Could not load offers': 'Impossible de charger les offres',
     'Search member or plan…': 'Rechercher un membre ou une offre…',
     'Delete recurring class?': 'Supprimer le cours récurrent ?',
-    'Which occurrences do you want to delete?': 'Quelles occurrences souhaitez-vous supprimer ?',
+    'Which occurrences do you want to delete?':
+        'Quelles occurrences souhaitez-vous supprimer ?',
     'This only': 'Seulement celle-ci',
     'This & following': 'Celle-ci et les suivantes',
     'Entire series': 'Série entière',
@@ -1093,7 +1166,8 @@ class AppLocalizations {
     'Yes, Cancel': 'Oui, annuler',
     'Drop-in': 'Drop-in',
     'Mark Paid': 'Marquer comme payé',
-    'Create a copy with a new schedule': 'Créer une copie avec un nouveau planning',
+    'Create a copy with a new schedule':
+        'Créer une copie avec un nouveau planning',
     'Date Range': 'Plage de dates',
     'Tap to select date range': 'Appuyez pour sélectionner une plage de dates',
     'Time Slot': 'Plage horaire',
@@ -1102,7 +1176,8 @@ class AppLocalizations {
     'Good': 'Bon',
     'Strong': 'Fort',
     'Date of Birth': 'Date de naissance',
-    'Creates a Firebase Auth account and member profile.': 'Crée un compte Firebase Auth et un profil de membre.',
+    'Creates a Firebase Auth account and member profile.':
+        'Crée un compte Firebase Auth et un profil de membre.',
     'Add Member': 'Ajouter un membre',
     'Create a new gym account': 'Créer un nouveau compte de salle de sport',
     'New Member': 'Nouveau membre',
@@ -1111,13 +1186,15 @@ class AppLocalizations {
     'Full name is required': 'Le nom complet est requis',
     'Email *': 'E-mail *',
     'Email is required': 'L\'e-mail est requis',
-    'Enter a valid email (e.g. name@gym.com)': 'Entrez une adresse e-mail valide (par exemple nom@gym.com)',
+    'Enter a valid email (e.g. name@gym.com)':
+        'Entrez une adresse e-mail valide (par exemple nom@gym.com)',
     'Phone number': 'Numéro de téléphone',
     '+1 555 000 0000': '+1 555 000 0000',
     'Password *': 'Mot de passe *',
     'Password is required': 'Le mot de passe est requis',
     'Minimum 6 characters': 'Minimum 6 caractères',
-    'Use 8+ chars with uppercase, numbers & symbols.': 'Utilisez plus de 8 caractères avec des majuscules, des chiffres et des symboles.',
+    'Use 8+ chars with uppercase, numbers & symbols.':
+        'Utilisez plus de 8 caractères avec des majuscules, des chiffres et des symboles.',
     'Confirm password *': 'Confirmez le mot de passe *',
     'Passwords do not match': 'Les mots de passe ne correspondent pas',
     'Gender': 'Genre',
@@ -1135,16 +1212,19 @@ class AppLocalizations {
     'Allergies, injuries, conditions…': 'Allergies, blessures, affections…',
     'Roles & Permissions': 'Rôles et autorisations',
     'selected': 'sélectionné',
-    'A member can hold multiple roles simultaneously.': 'Un membre peut occuper plusieurs rôles simultanément.',
+    'A member can hold multiple roles simultaneously.':
+        'Un membre peut occuper plusieurs rôles simultanément.',
     'Creating account…': 'Création d\'un compte…',
     'Create Member': 'Créer un membre',
     'Class Types': 'Types de cours',
-    'No class types yet. Add one below.': 'Aucun type de cours pour l’instant. Ajoutez-en un ci-dessous.',
+    'No class types yet. Add one below.':
+        'Aucun type de cours pour l’instant. Ajoutez-en un ci-dessous.',
     'Edit': 'Modifier',
     'Delete class type?': 'Supprimer le type de cours ?',
     'This cannot be undone.': 'Cela ne peut pas être annulé.',
     'Add Class Type': 'Ajouter un type de classe',
-    'Please enter a class type name.': 'Veuillez saisir un nom de type de classe.',
+    'Please enter a class type name.':
+        'Veuillez saisir un nom de type de classe.',
     'Save failed': 'Échec de l\'enregistrement',
     'e.g. Indoor Rowing': 'par ex. Aviron en salle',
     'Card color': 'Couleur de la carte',
@@ -1172,7 +1252,8 @@ class AppLocalizations {
     'Emergency': 'Urgence',
     'Clear': 'Effacer',
     'Save Note': 'Enregistrer la note',
-    'No assigned offers found for this member.': 'Aucune offre attribuée trouvée pour ce membre.',
+    'No assigned offers found for this member.':
+        'Aucune offre attribuée trouvée pour ce membre.',
     'Select Coaches': 'Sélectionnez les entraîneurs',
     'Tap a coach to assign them': 'Appuyez sur un coach pour lui attribuer',
     'Skip': 'Sauter',
@@ -1191,24 +1272,32 @@ class AppLocalizations {
     'Joined': 'Inscrit',
     'Promote to booked': 'Passer en réservé',
     'promoted.': 'promu.',
-    'No upcoming classes. Create some first.': 'Aucun cours à venir. Créez-en d’abord.',
+    'No upcoming classes. Create some first.':
+        'Aucun cours à venir. Créez-en d’abord.',
     'Failed to generate QR': 'Échec de la génération du QR',
     'Regenerate QR Code?': 'Régénérer le QR Code ?',
     'Regenerate': 'Régénérer',
     'Gym Check-in QR': 'QR de check-in de la salle',
-    'One QR code for all classes.\nMembers scan it to check in.': 'Un code QR pour tous les cours.\nLes membres le scannent pour faire le check-in.',
+    'One QR code for all classes.\nMembers scan it to check in.':
+        'Un code QR pour tous les cours.\nLes membres le scannent pour faire le check-in.',
     'No QR code yet': 'Pas encore de code QR',
-    'Generate your gym QR code once and display it\nat the entrance for members to scan.': 'Générez une fois le QR de votre salle et affichez-le\nà l’entrée pour que les membres puissent le scanner.',
+    'Generate your gym QR code once and display it\nat the entrance for members to scan.':
+        'Générez une fois le QR de votre salle et affichez-le\nà l’entrée pour que les membres puissent le scanner.',
     'Generate QR Code': 'Générer un code QR',
-    'Print this QR code and post it at the entrance': 'Imprimez ce QR code et affichez-le à l\'entrée',
-    'Members open their app and tap "Scan" to check in': 'Les membres ouvrent leur appli et appuient sur "Scanner" pour faire le check-in',
-    'Check-in window: 30 min before → 30 min after class': 'Fenêtre d\'enregistrement : 30 min avant → 30 min après le cours',
+    'Print this QR code and post it at the entrance':
+        'Imprimez ce QR code et affichez-le à l\'entrée',
+    'Members open their app and tap "Scan" to check in':
+        'Les membres ouvrent leur appli et appuient sur "Scanner" pour faire le check-in',
+    'Check-in window: 30 min before → 30 min after class':
+        'Fenêtre d\'enregistrement : 30 min avant → 30 min après le cours',
     'Regenerate QR Code': 'Régénérer le code QR',
-    'Only regenerate if the QR is compromised.': 'Régénérez uniquement si le QR est compromis.',
+    'Only regenerate if the QR is compromised.':
+        'Régénérez uniquement si le QR est compromis.',
     'Tomorrow': 'Demain',
     'No classes yet': 'Pas encore de cours',
     'No matching classes': 'Aucun cours correspondant',
-    'Try a different search or filter.': 'Essayez une autre recherche ou un autre filtre.',
+    'Try a different search or filter.':
+        'Essayez une autre recherche ou un autre filtre.',
     'Clear filters': 'Effacer les filtres',
     'Manage class types': 'Gérer les types de cours',
     'Create Class': 'Créer un cours',
@@ -1243,10 +1332,14 @@ class AppLocalizations {
     'Please select a class type': 'Veuillez sélectionner un type de cours',
     'Capacity must be a number': 'La capacité doit être un nombre',
     'Capacity must be greater than 0': 'La capacité doit être supérieure à 0',
-    'End time must be after start time': 'L\'heure de fin doit être postérieure à l\'heure de début',
-    'Select at least one day of the week for repeat': 'Sélectionnez au moins un jour de la semaine pour répéter',
-    'Please set a repeat end date': 'Veuillez définir une date de fin de répétition',
-    'Repeat end date must be after the class date': 'La date de fin de répétition doit être postérieure à la date du cours',
+    'End time must be after start time':
+        'L\'heure de fin doit être postérieure à l\'heure de début',
+    'Select at least one day of the week for repeat':
+        'Sélectionnez au moins un jour de la semaine pour répéter',
+    'Please set a repeat end date':
+        'Veuillez définir une date de fin de répétition',
+    'Repeat end date must be after the class date':
+        'La date de fin de répétition doit être postérieure à la date du cours',
     'All in series': 'Tout en série',
     'SCHEDULE': 'CALENDRIER',
     'Date': 'Date',
@@ -1254,7 +1347,8 @@ class AppLocalizations {
     'End': 'Fin',
     'RECURRENCE': 'RÉCURRENCE',
     'Repeat weekly': 'Répéter chaque semaine',
-    'Create recurring classes on selected weekdays': 'Créer des cours récurrents certains jours de la semaine',
+    'Create recurring classes on selected weekdays':
+        'Créer des cours récurrents certains jours de la semaine',
     'Class duration': 'Durée du cours',
     'Select end date': 'Sélectionnez la date de fin',
     '4 weeks': '4 semaines',
@@ -1272,7 +1366,8 @@ class AppLocalizations {
     'Any offer can join': 'Toute offre permet de participer',
     'Select offers': 'Sélectionnez les offres',
     'Allow Drop-ins': 'Autoriser les visites sans rendez-vous',
-    'Non-members can join as drop-in guests': 'Les non-membres peuvent se joindre en tant qu\'invités sans rendez-vous',
+    'Non-members can join as drop-in guests':
+        'Les non-membres peuvent se joindre en tant qu\'invités sans rendez-vous',
     'Drop-in Price (€)': 'Prix du drop-in (€)',
     'Save changes': 'Enregistrer les modifications',
     'Create': 'Créer',
@@ -1288,8 +1383,10 @@ class AppLocalizations {
     'Confirm Booking': 'Confirmer la réservation',
     'force-reserved & checked in for': 'réservé de force et enregistré pour',
     'Force Reservation': 'Forcer la réservation',
-    'Bypasses offer requirements & capacity.': 'Ignore les exigences d’offre et la capacité.',
-    'Member will be booked and checked in immediately.': 'Le membre sera réservé et enregistré immédiatement.',
+    'Bypasses offer requirements & capacity.':
+        'Ignore les exigences d’offre et la capacité.',
+    'Member will be booked and checked in immediately.':
+        'Le membre sera réservé et enregistré immédiatement.',
     'Force Reserve & Check-In': 'Forcer la réservation et le check-in',
     'Copied': 'Copié',
     'Roles': 'Rôles',
@@ -1298,12 +1395,14 @@ class AppLocalizations {
     'coaches': 'entraîneurs',
     'staff': 'personnel',
     'admin': 'administrateur',
-    'Search coaches by name or email…': 'Rechercher un coach par nom ou e-mail…',
+    'Search coaches by name or email…':
+        'Rechercher un coach par nom ou e-mail…',
     'Upcoming Schedule': 'Calendrier à venir',
     'Copy Email': 'Copier l\'e-mail',
     'Change Roles': 'Changer les rôles',
     'Upcoming schedule': 'Calendrier à venir',
-    'No upcoming classes assigned to \$name.': 'Aucun cours à venir attribué à \$name.',
+    'No upcoming classes assigned to \$name.':
+        'Aucun cours à venir attribué à \$name.',
     'Add Drop-in': 'Ajouter un drop-in',
     'Pending payment': 'En attente de paiement',
     'Confirmed revenue': 'Chiffre d\'affaires confirmé',
@@ -1319,14 +1418,17 @@ class AppLocalizations {
     'No pending payments': 'Aucun paiement en attente',
     'No drop-in bookings yet': 'Aucune réservation drop-in pour l’instant',
     'All drop-ins have been paid.': 'Tous les rendez-vous ont été payés.',
-    'Drop-in bookings will appear here.': 'Les réservations sans rendez-vous apparaîtront ici.',
+    'Drop-in bookings will appear here.':
+        'Les réservations sans rendez-vous apparaîtront ici.',
     'Please select a class.': 'Veuillez sélectionner une classe.',
     'Please enter the guest name.': 'Veuillez entrer le nom de l\'invité.',
-    'Please enter a valid email address.': 'S\'il vous plaît, mettez une adresse email valide.',
+    'Please enter a valid email address.':
+        'S\'il vous plaît, mettez une adresse email valide.',
     'added as guest drop-in for': 'ajouté en tant qu\'invité pour',
     'Non-member': 'Non-membre',
     'Class': 'Cours',
-    'No classes have drop-ins enabled. Enable drop-ins in the Classes tab first.': 'Aucune classe n\'a activé les visites sans rendez-vous. Activez d\'abord les drop-ins dans l\'onglet Cours.',
+    'No classes have drop-ins enabled. Enable drop-ins in the Classes tab first.':
+        'Aucune classe n\'a activé les visites sans rendez-vous. Activez d\'abord les drop-ins dans l\'onglet Cours.',
     'Select a class': 'Sélectionnez un cours',
     'Guest Name': 'Nom de l\'invité',
     'Email Address': 'Adresse email',
@@ -1340,7 +1442,8 @@ class AppLocalizations {
     'paused.': 'fait une pause.',
     'Delete member?': 'Supprimer un membre ?',
     'This will permanently remove': 'Cela supprimera définitivement',
-    'from the system. This action cannot be undone.': 'du système. Cette action ne peut pas être annulée.',
+    'from the system. This action cannot be undone.':
+        'du système. Cette action ne peut pas être annulée.',
     'deleted.': 'supprimé.',
     'All assigned offers': 'Toutes les offres attribuées',
     'no plan': 'pas de plan',
@@ -1359,16 +1462,20 @@ class AppLocalizations {
     'Pause Membership': 'Suspendre l\'adhésion',
     'Activate Membership': 'Activer l\'adhésion',
     'Delete Member': 'Supprimer un membre',
-    'No members match your search.': 'Aucun membre ne correspond à votre recherche.',
+    'No members match your search.':
+        'Aucun membre ne correspond à votre recherche.',
     'No members yet.': 'Aucun membre pour l\'instant.',
     'Owner': 'Propriétaire',
     'Staff': 'Personnel',
     'Limited: single sessions': 'Limité : séances uniques',
-    'Fixed check-in pack used one session at a time.': 'Pack de check-ins fixe utilisé une séance à la fois.',
+    'Fixed check-in pack used one session at a time.':
+        'Pack de check-ins fixe utilisé une séance à la fois.',
     'Weekly recurrence': 'Récurrence hebdomadaire',
-    'Number of check-ins allowed each week.': 'Nombre d\'enregistrements autorisés chaque semaine.',
+    'Number of check-ins allowed each week.':
+        'Nombre d\'enregistrements autorisés chaque semaine.',
     'Monthly recurrence': 'Récurrence mensuelle',
-    'Number of check-ins allowed each month.': 'Nombre d\'enregistrements autorisés chaque mois.',
+    'Number of check-ins allowed each month.':
+        'Nombre d\'enregistrements autorisés chaque mois.',
     'Days': 'Jours',
     'Weeks': 'Semaines',
     'Months': 'Mois',
@@ -1379,7 +1486,8 @@ class AppLocalizations {
     '1 year': '1 an',
     '3 years': '3 ans',
     'Delete offer?': 'Supprimer l\'offre ?',
-    'Are you sure you want to permanently delete': 'Etes-vous sûr de vouloir supprimer définitivement',
+    'Are you sure you want to permanently delete':
+        'Etes-vous sûr de vouloir supprimer définitivement',
     'duplicated as inactive copy.': 'dupliqué comme copie inactive.',
     'Total': 'Total',
     'Inactive': 'Inactif',
@@ -1387,15 +1495,20 @@ class AppLocalizations {
     'New Offer': 'Nouvelle offre',
     'No offers yet': 'Aucune offre pour l\'instant',
     'No results found': 'Aucun résultat trouvé',
-    'Create your first membership offer to get started.': 'Créez votre première offre d\'adhésion pour commencer.',
-    'Try adjusting your search or filter.': 'Essayez d\'ajuster votre recherche ou votre filtre.',
+    'Create your first membership offer to get started.':
+        'Créez votre première offre d\'adhésion pour commencer.',
+    'Try adjusting your search or filter.':
+        'Essayez d\'ajuster votre recherche ou votre filtre.',
     'Edit offer': 'Modifier l\'offre',
     'Duplicate offer': 'Offre en double',
     'Delete offer': 'Supprimer l\'offre',
     'Offer name is required': 'Le nom de l\'offre est obligatoire',
-    'Enter a positive number of sessions': 'Saisissez un nombre de séances positif',
-    'Duration must be a positive number of days': 'La durée doit être un nombre de jours positif',
-    'Enter a valid price (e.g. 29.99)': 'Entrez un prix valide (par exemple 29,99)',
+    'Enter a positive number of sessions':
+        'Saisissez un nombre de séances positif',
+    'Duration must be a positive number of days':
+        'La durée doit être un nombre de jours positif',
+    'Enter a valid price (e.g. 29.99)':
+        'Entrez un prix valide (par exemple 29,99)',
     'Check-ins / week': 'Check-ins / semaine',
     'Check-ins / month': 'Check-ins / mois',
     'Total check-ins': 'Total des check-ins',
@@ -1403,19 +1516,22 @@ class AppLocalizations {
     'One-time payment': 'Paiement unique',
     'Edit Offer': 'Modifier l\'offre',
     'New Membership Offer': 'Nouvelle offre d\'adhésion',
-    'Configure type, sessions & pricing': 'Configurer le type, les sessions et les tarifs',
+    'Configure type, sessions & pricing':
+        'Configurer le type, les sessions et les tarifs',
     'Offer Type': 'Type d\'offre',
     'Basic Info': 'Informations de base',
     'Offer name *': 'Nom de l\'offre *',
     'e.g. Monthly Unlimited': 'par ex. Mensuel Illimité',
-    'Short description shown to members…': 'Brève description présentée aux membres…',
+    'Short description shown to members…':
+        'Brève description présentée aux membres…',
     'Sessions': 'Séances',
     'Custom value': 'Valeur personnalisée',
     'Unit': 'Unité',
     'Pricing': 'Tarifs',
     'Price *': 'Prix ​​*',
     'Billing: ': 'Facturation:',
-    '  ·  auto-set from offer type': '· réglage automatique à partir du type d\'offre',
+    '  ·  auto-set from offer type':
+        '· réglage automatique à partir du type d\'offre',
     'Saving…': 'Enregistrement…',
     'Creating…': 'Création…',
     'Save Changes': 'Enregistrer les modifications',
@@ -1427,7 +1543,8 @@ class AppLocalizations {
     'Past Sessions': 'Séances passées',
     'Delete session?': 'Supprimer la séance ?',
     'at': 'à',
-    'The members assigned to this session will no longer see it.': 'Les membres affectés à cette session ne le verront plus.',
+    'The members assigned to this session will no longer see it.':
+        'Les membres affectés à cette session ne le verront plus.',
     'My PT Sessions': 'Mes séances PT',
     'Private Coaching': 'Coaching privé',
     'Private': 'Privé',
@@ -1435,11 +1552,13 @@ class AppLocalizations {
     'Please enter a session title.': 'Veuillez saisir un titre de session.',
     'Please select a coach.': 'Veuillez sélectionner un entraîneur.',
     'Select at least one member.': 'Sélectionnez au moins un membre.',
-    'End time must be after start time.': 'L\'heure de fin doit être postérieure à l\'heure de début.',
+    'End time must be after start time.':
+        'L\'heure de fin doit être postérieure à l\'heure de début.',
     'Select Coach': 'Sélectionner un entraîneur',
     'Edit Session': 'Modifier la session',
     'New Private Session': 'Nouvelle séance privée',
-    'Visible only to assigned members': 'Visible uniquement par les membres assignés',
+    'Visible only to assigned members':
+        'Visible uniquement par les membres assignés',
     'Session Title': 'Titre de la séance',
     'e.g. Strength & Conditioning': 'par ex. Force et conditionnement',
     'No coaches found': 'Aucun entraîneur trouvé',
@@ -1449,15 +1568,19 @@ class AppLocalizations {
     'Location (optional)': 'Emplacement (facultatif)',
     'e.g. Main floor, Room B…': 'par ex. Rez-de-chaussée, salle B…',
     'Members': 'Membres',
-    'Search member by name or email…': 'Rechercher un membre par nom ou par e-mail…',
+    'Search member by name or email…':
+        'Rechercher un membre par nom ou par e-mail…',
     'No members found for': 'Aucun membre trouvé pour',
     'Add': 'Ajouter',
     'Session Notes (optional)': 'Notes de session (facultatif)',
-    'Goals, focus areas, equipment needed…': 'Objectifs, domaines d’intervention, équipement nécessaire…',
+    'Goals, focus areas, equipment needed…':
+        'Objectifs, domaines d’intervention, équipement nécessaire…',
     'Create Session': 'Créer une séance',
     'No private sessions yet': 'Pas encore de séances privées',
-    'Create a one-on-one or small group session.': 'Créez une séance individuelle ou en petit groupe.',
-    'Assigned members will see it in their schedule.': 'Les membres assignés le verront dans leur emploi du temps.',
+    'Create a one-on-one or small group session.':
+        'Créez une séance individuelle ou en petit groupe.',
+    'Assigned members will see it in their schedule.':
+        'Les membres assignés le verront dans leur emploi du temps.',
     'Create First Session': 'Créer la première session',
     'Monday': 'Lundi',
     'Tuesday': 'Mardi',
@@ -1466,17 +1589,22 @@ class AppLocalizations {
     'Friday': 'Vendredi',
     'Saturday': 'Samedi',
     'Sunday': 'Dimanche',
-    'All classes already exist for this week.': 'Tous les cours existent déjà pour cette semaine.',
+    'All classes already exist for this week.':
+        'Tous les cours existent déjà pour cette semaine.',
     'class(es) generated ✓': 'classe(s) générée(s) ✓',
     'Delete template?': 'Supprimer le modèle ?',
-    'This will not remove already-generated classes.': 'Cela ne supprimera pas les classes déjà générées.',
+    'This will not remove already-generated classes.':
+        'Cela ne supprimera pas les classes déjà générées.',
     'Weekly Templates': 'Modèles hebdomadaires',
     'Generate Week': 'Générer une semaine',
     'No templates yet': 'Aucun modèle pour l\'instant',
-    'Tap + to create a weekly recurring class.': 'Appuyez sur + pour créer un cours récurrent hebdomadaire.',
+    'Tap + to create a weekly recurring class.':
+        'Appuyez sur + pour créer un cours récurrent hebdomadaire.',
     'New Template': 'Nouveau modèle',
-    'Classes will be created for all active templates for the week of:': 'Des classes seront créées pour tous les modèles actifs pour la semaine :',
-    'Existing classes are skipped automatically.': 'Les cours existants sont automatiquement ignorés.',
+    'Classes will be created for all active templates for the week of:':
+        'Des classes seront créées pour tous les modèles actifs pour la semaine :',
+    'Existing classes are skipped automatically.':
+        'Les cours existants sont automatiquement ignorés.',
     'Generate': 'Générer',
     'Please assign at least one coach': 'Veuillez désigner au moins un coach',
     'Edit Template': 'Modifier le modèle',
@@ -1484,11 +1612,13 @@ class AppLocalizations {
     'Class title is required': 'Le titre du cours est obligatoire',
     'Start Time': 'Heure de début',
     'Duration (min)': 'Durée (min)',
-    'Duration must be a positive number of minutes': 'La durée doit être un nombre positif de minutes',
+    'Duration must be a positive number of minutes':
+        'La durée doit être un nombre positif de minutes',
     'Capacity must be at least 1': 'La capacité doit être d\'au moins 1',
     'Select coaches': 'Sélectionnez les entraîneurs',
     'Required Offers': 'Offres requises',
-    'Only active templates are included when generating a week': 'Seuls les modèles actifs sont inclus lors de la génération d\'une semaine',
+    'Only active templates are included when generating a week':
+        'Seuls les modèles actifs sont inclus lors de la génération d\'une semaine',
     'Part': 'Partie',
     'INTERMEDIATE': 'INTERMÉDIAIRE',
     'SCALED': 'ADAPTÉ',
@@ -1500,18 +1630,22 @@ class AppLocalizations {
     'Workout editor': 'Éditeur d\'entraînement',
     'Delete workout?': 'Supprimer l\'entraînement ?',
     'for': 'pour',
-    'Add at least one workout part': 'Ajouter au moins une partie d\'entraînement',
+    'Add at least one workout part':
+        'Ajouter au moins une partie d\'entraînement',
     'needs a title': 'il faut un titre',
-    'needs at least one scaling level': 'nécessite au moins un niveau de mise à l\'échelle',
+    'needs at least one scaling level':
+        'nécessite au moins un niveau de mise à l\'échelle',
     'Scale': 'Niveau',
     'in part': 'en partie',
     'needs a label': 'a besoin d\'une étiquette',
-    'Exercise name cannot be empty': 'Le nom de l\'exercice ne peut pas être vide',
+    'Exercise name cannot be empty':
+        'Le nom de l\'exercice ne peut pas être vide',
     'part': 'partie',
     'scale': 'échelle',
     'exercise': 'exercice',
     'A': 'UN',
-    'workout already exists for this date.': 'un entraînement existe déjà pour cette date.',
+    'workout already exists for this date.':
+        'un entraînement existe déjà pour cette date.',
     'Class Type': 'Type de cours',
     'Select class type': 'Sélectionnez le type de cours',
     'Edit Workout': 'Modifier l\'entraînement',
@@ -1519,14 +1653,19 @@ class AppLocalizations {
     'Workout title is required': 'Le titre de l\'entraînement est requis',
     'Description / Instructions': 'Descriptif/Instructions',
     'Member Notes · Stimulus': 'Notes aux membres · Stimulus',
-    '— visible to members in the workout view': '- visible pour les membres dans la vue entraînement',
-    'STIMULUS, pacing goals, strategy, movement intent…': 'STIMULUS, objectifs de rythme, stratégie, intention de mouvement…',
+    '— visible to members in the workout view':
+        '- visible pour les membres dans la vue entraînement',
+    'STIMULUS, pacing goals, strategy, movement intent…':
+        'STIMULUS, objectifs de rythme, stratégie, intention de mouvement…',
     'Coach Note (private)': 'Note de l\'entraîneur (privé)',
-    '— visible only to coaches & admins': '— visible uniquement pour les coachs et les administrateurs',
-    'Cues, scaling notes, things to watch for…': 'Indices, notes de mise à l\'échelle, éléments à surveiller…',
+    '— visible only to coaches & admins':
+        '— visible uniquement pour les coachs et les administrateurs',
+    'Cues, scaling notes, things to watch for…':
+        'Indices, notes de mise à l\'échelle, éléments à surveiller…',
     'Workout Parts': 'Parties de l’entraînement',
     'Add Part': 'Ajouter une partie',
-    'Tap "Add Part" to structure your workout': 'Appuyez sur « Ajouter une partie » pour structurer votre entraînement',
+    'Tap "Add Part" to structure your workout':
+        'Appuyez sur « Ajouter une partie » pour structurer votre entraînement',
     'Post': 'Publier',
     'Exercise name': 'Nom de l\'exercice',
     'Sets': 'Séries',
@@ -1538,8 +1677,10 @@ class AppLocalizations {
     'Time Cap (optional)': 'Limite de temps (facultatif)',
     'e.g. 20 min': 'par ex. 20 minutes',
     'Scaling Levels': 'Niveaux de mise à l\'échelle',
-    'Each level can have its own description and exercises.': 'Chaque niveau peut avoir sa propre description et ses propres exercices.',
-    'Use one shared exercise list for this part.': 'Utilisez une liste d’exercices partagée pour cette partie.',
+    'Each level can have its own description and exercises.':
+        'Chaque niveau peut avoir sa propre description et ses propres exercices.',
+    'Use one shared exercise list for this part.':
+        'Utilisez une liste d’exercices partagée pour cette partie.',
     'Exercises': 'Exercices',
     'No exercises — optional': 'Aucun exercice – facultatif',
     'Add Level': 'Ajouter un niveau',
@@ -1549,9 +1690,11 @@ class AppLocalizations {
     'No exercises yet for this level': 'Pas encore d\'exercices pour ce niveau',
     'Measure Type': 'Type de mesure',
     'Workout Format': 'Format d\'entraînement',
-    'Password must be at least 6 characters.': 'Le mot de passe doit comporter au moins 6 caractères.',
+    'Password must be at least 6 characters.':
+        'Le mot de passe doit comporter au moins 6 caractères.',
     'Passwords do not match.': 'Les mots de passe ne correspondent pas.',
-    'Could not update password.': 'Impossible de mettre à jour le mot de passe.',
+    'Could not update password.':
+        'Impossible de mettre à jour le mot de passe.',
     'Set user password': 'Définir le mot de passe utilisateur',
     'New password': 'Nouveau mot de passe',
     'Confirm password': 'Confirmez le mot de passe',
@@ -1577,6 +1720,24 @@ class AppLocalizations {
     'Next class': 'Cours suivant',
     'Roster': 'Liste',
     'Check-in': 'Enregistrement',
+    'Stats': 'Stats',
+    'All time': 'Tout le temps',
+    'Hours': 'Heures',
+    'Avg fill rate': 'Taux de remplissage',
+    'Last 6 months': 'Les 6 derniers mois',
+    'Class note': 'Note de cours',
+    'Add WOD, warmup notes, or class details…':
+        'Ajouter WOD, notes d\'échauffement ou détails du cours…',
+    'Edit note': 'Modifier la note',
+    'Notify members': 'Notifier les membres',
+    'Message': 'Message',
+    'Send': 'Envoyer',
+    'members notified': 'membres notifiés',
+    'Promote': 'Promouvoir',
+    'No one on the waitlist.': 'Personne sur la liste d\'attente.',
+    'promoted to booked': 'promu vers réservé',
+    'Absent': 'Absent',
+    'Mark absent': 'Marquer absent',
     'No bookings yet.': 'Aucune réservation pour l\'instant.',
     'No bookings.': 'Aucune réservation.',
     'No upcoming sessions': 'Aucune séance à venir',
@@ -1586,7 +1747,8 @@ class AppLocalizations {
     'Schedule First Session': 'Programmer la première séance',
     'Class booked successfully!': 'Cours réservé avec succès !',
     'Drop-in Booking': 'Réservation drop-in',
-    'Are you sure you want to cancel this booking?': 'Êtes-vous sûr de vouloir annuler cette réservation ?',
+    'Are you sure you want to cancel this booking?':
+        'Êtes-vous sûr de vouloir annuler cette réservation ?',
     'Leave Waitlist': 'Quitter la liste d\'attente',
     'Join Waitlist': 'Rejoindre la liste d\'attente',
     'Book This Class': 'Réserver ce cours',
@@ -1595,7 +1757,8 @@ class AppLocalizations {
     'Expired on': 'Expiré le',
     'Eligible with \$planName': 'Éligible avec \$planName',
     'Valid until': 'Valable jusqu\'au',
-    'No bookings yet. Be the first!': 'Aucune réservation pour l\'instant. Soyez le premier !',
+    'No bookings yet. Be the first!':
+        'Aucune réservation pour l\'instant. Soyez le premier !',
     'You': 'Vous',
     'Your Score': 'Votre score',
     'Log Your Score': 'Enregistrez votre score',
@@ -1609,7 +1772,8 @@ class AppLocalizations {
     'Claim Super Admin': 'Réclamer le rôle de super admin',
     'Home': 'Accueil',
     'Delete score?': 'Supprimer le score ?',
-    'This will permanently remove your logged score.': 'Cela supprimera définitivement votre score enregistré.',
+    'This will permanently remove your logged score.':
+        'Cela supprimera définitivement votre score enregistré.',
     'Delete score': 'Supprimer le score',
     'Workout Details': 'Détails de l\'entraînement',
     'No exercise details.': 'Aucun détail sur l\'exercice.',
@@ -1669,21 +1833,25 @@ class AppLocalizations {
     'Delete gym': 'Supprimer la salle',
     'Statistics': 'Statistiques',
     'Dashboard': 'Tableau de bord',
-    'Migrate all data to gym': 'Migrer toutes les données vers la salle de sport',
+    'Migrate all data to gym':
+        'Migrer toutes les données vers la salle de sport',
     'Overview': 'Aperçu',
     'Recent Gyms': 'Salles récentes',
     'Gym ID': 'ID de la salle',
     'e.g. F8WMn2jjEY89l5YgoiqZ': 'par ex. F8WMn2jjEY89l5YgoiqZ',
     'Run Migration': 'Exécuter la migration',
-    'Running migration… this may take a minute': 'Exécution de la migration… cela peut prendre une minute',
+    'Running migration… this may take a minute':
+        'Exécution de la migration… cela peut prendre une minute',
     'Migration complete ✅': 'Migration terminée ✅',
     'OK': 'D\'ACCORD',
     'Assign': 'Attribuer',
-    'Are you sure you want to sign out?': 'Êtes-vous sûr de vouloir vous déconnecter ?',
+    'Are you sure you want to sign out?':
+        'Êtes-vous sûr de vouloir vous déconnecter ?',
     'Super Admins': 'Super administrateurs',
     'New Super Admin': 'Nouveau super administrateur',
     'No super admins found.': 'Aucun super administrateur trouvé.',
-    'Super admin created successfully!': 'Super administrateur créé avec succès !',
+    'Super admin created successfully!':
+        'Super administrateur créé avec succès !',
     'Full Name *': 'Nom et prénom *',
     'Unassigned Members': 'Membres non attribués',
     'All members are assigned!': 'Tous les membres sont assignés !',
@@ -1803,7 +1971,6 @@ class AppLocalizations {
     'For Time': 'Pour temps',
     'SUBSCRIPTION PERIOD': 'PÉRIODE D ABONNEMENT',
     'Temporary Password': 'Mot de passe temporaire',
-
   };
 
   static AppLocalizations of(BuildContext context) {

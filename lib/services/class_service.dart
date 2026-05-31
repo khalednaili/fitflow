@@ -115,7 +115,11 @@ class ClassService {
 
   /// Live stream of a single class document (e.g. for capacity changes).
   Stream<GymClass?> streamClass(String classId) {
-    return _firestore.collection('classes').doc(classId).snapshots().map((snap) {
+    return _firestore
+        .collection('classes')
+        .doc(classId)
+        .snapshots()
+        .map((snap) {
       if (!snap.exists) {
         return null;
       }
@@ -365,6 +369,85 @@ class ClassService {
 
   Future<void> deleteClass(String classId) async {
     await _firestore.collection('classes').doc(classId).delete();
+  }
+
+  /// Streams all upcoming classes for the gym (regardless of coach assignment).
+  /// Used by the Cover tab so a coach can see classes they could cover.
+  Stream<List<GymClass>> streamUpcomingClassesForGym() {
+    return _classesQuery.snapshots().map((query) {
+      final now = DateTime.now(); // recompute on every emission
+      final list = query.docs
+          .map((doc) => GymClass.fromSnapshot(doc))
+          .where((c) => _matchesGymId(c.gymId) && !c.startTime.isBefore(now))
+          .toList()
+        ..sort((a, b) => a.startTime.compareTo(b.startTime));
+      return list;
+    });
+  }
+
+  /// Adds [coachId]/[coachName] as a covering coach for a single class occurrence.
+  /// Uses a transaction to keep coachIds, coachNames and coachName in sync.
+  Future<void> coverClass({
+    required String classId,
+    required String coachId,
+    required String coachName,
+  }) async {
+    final docRef = _firestore.collection('classes').doc(classId);
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(docRef);
+      if (!snap.exists) throw Exception('Class not found');
+
+      final data = snap.data()!;
+      final ids = List<String>.from(
+          (data['coachIds'] as List<dynamic>? ?? []).map((e) => e.toString()));
+      final names = List<String>.from(
+          (data['coachNames'] as List<dynamic>? ?? [])
+              .map((e) => e.toString()));
+
+      if (!ids.contains(coachId)) {
+        ids.add(coachId);
+        names.add(coachName);
+      }
+
+      tx.update(docRef, <String, dynamic>{
+        'coachIds': ids,
+        'coachNames': names,
+        'coachName': names.join(', '),
+        'updatedAt': Timestamp.now(),
+      });
+    });
+  }
+
+  /// Removes [coachId] from a class (undo cover / resign from covering).
+  Future<void> uncoverClass({
+    required String classId,
+    required String coachId,
+  }) async {
+    final docRef = _firestore.collection('classes').doc(classId);
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(docRef);
+      if (!snap.exists) throw Exception('Class not found');
+
+      final data = snap.data()!;
+      final ids = List<String>.from(
+          (data['coachIds'] as List<dynamic>? ?? []).map((e) => e.toString()));
+      final names = List<String>.from(
+          (data['coachNames'] as List<dynamic>? ?? [])
+              .map((e) => e.toString()));
+
+      final idx = ids.indexOf(coachId);
+      if (idx >= 0) {
+        ids.removeAt(idx);
+        if (idx < names.length) names.removeAt(idx);
+      }
+
+      tx.update(docRef, <String, dynamic>{
+        'coachIds': ids,
+        'coachNames': names,
+        'coachName': names.join(', '),
+        'updatedAt': Timestamp.now(),
+      });
+    });
   }
 
   /// Streams upcoming classes that match any of the given [classIds].
@@ -680,5 +763,18 @@ class ClassService {
       dropInEnabled: source.dropInEnabled,
       dropInPrice: source.dropInPrice,
     );
+  }
+
+  Future<void> updateCoachNote({
+    required String classId,
+    required String note,
+  }) async {
+    await _firestore
+        .collection('classes')
+        .doc(classId)
+        .update(<String, dynamic>{
+      'coachNote': note,
+      'updatedAt': Timestamp.now(),
+    });
   }
 }

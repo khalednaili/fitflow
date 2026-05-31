@@ -49,7 +49,6 @@ class BookingService {
     return query;
   }
 
-
   Stream<List<Booking>> streamBookingsForUser(String userId) {
     return _bookingsQuery.where('userId', isEqualTo: userId).snapshots().map(
       (query) {
@@ -1379,5 +1378,131 @@ class BookingService {
       list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return list;
     });
+  }
+
+  /// Stream user IDs explicitly marked absent for [classId].
+  Stream<Set<String>> streamAbsentUserIds(String classId) {
+    return _firestore
+        .collection('absences')
+        .where('classId', isEqualTo: classId)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => (d.data()['userId'] ?? '') as String)
+            .where((id) => id.isNotEmpty)
+            .toSet());
+  }
+
+  /// Mark a member as absent for [classId].
+  Future<void> markAbsent({
+    required String classId,
+    required String userId,
+    required String markedBy,
+  }) async {
+    final existing = await _firestore
+        .collection('absences')
+        .where('userId', isEqualTo: userId)
+        .where('classId', isEqualTo: classId)
+        .limit(1)
+        .get();
+    if (existing.docs.isEmpty) {
+      await _firestore.collection('absences').add(<String, dynamic>{
+        'classId': classId,
+        'userId': userId,
+        'gymId': gymId,
+        'markedBy': markedBy,
+        'markedAt': Timestamp.now(),
+      });
+    }
+  }
+
+  /// Remove an absent mark for [classId].
+  Future<void> undoAbsent({
+    required String classId,
+    required String userId,
+  }) async {
+    final snap = await _firestore
+        .collection('absences')
+        .where('userId', isEqualTo: userId)
+        .where('classId', isEqualTo: classId)
+        .limit(1)
+        .get();
+    for (final doc in snap.docs) {
+      await doc.reference.delete();
+    }
+  }
+
+  /// Promote a specific waitlist entry (by [entryId]) to a booking.
+  /// Sends an in-app notification to the promoted user.
+  Future<void> promoteWaitlistedEntry({
+    required String classId,
+    required String entryId,
+    required String userId,
+    required String memberName,
+  }) async {
+    final classRef = _firestore.collection('classes').doc(classId);
+    final entryRef = _firestore.collection('waitlists').doc(entryId);
+    String? promotedClassTitle;
+
+    await _firestore.runTransaction((tx) async {
+      final entrySnap = await tx.get(entryRef);
+      if (!entrySnap.exists) {
+        throw Exception('Waitlist entry no longer exists.');
+      }
+      final classSnap = await tx.get(classRef);
+      if (!classSnap.exists) throw Exception('Class not found.');
+      final data = classSnap.data() ?? <String, dynamic>{};
+      final capacity = (data['capacity'] ?? 0) as int;
+      final bookedCount = (data['bookedCount'] ?? 0) as int;
+      final waitlistCount = (data['waitlistCount'] ?? 0) as int;
+
+      if (capacity > 0 && bookedCount >= capacity) {
+        throw Exception('Class is still full. Free a spot first.');
+      }
+
+      tx.delete(entryRef);
+      tx.update(classRef, <String, dynamic>{
+        'bookedCount': bookedCount + 1,
+        'waitlistCount': waitlistCount > 0 ? waitlistCount - 1 : 0,
+        'updatedAt': Timestamp.now(),
+      });
+      tx.set(_firestore.collection('bookings').doc(), <String, dynamic>{
+        'userId': userId,
+        'classId': classId,
+        'gymId': gymId,
+        'memberName': memberName,
+        'createdAt': Timestamp.now(),
+      });
+      promotedClassTitle = (data['title'] ?? 'the class') as String;
+    });
+
+    try {
+      await _notificationService.create(
+        userId: userId,
+        title: "You're in! 🎉",
+        body:
+            'A spot opened in "$promotedClassTitle". You moved from the waitlist to the class.',
+        type: NotificationType.waitlistPromoted,
+        classId: classId,
+      );
+    } catch (_) {}
+  }
+
+  /// Create in-app notifications for all booked members of [classId].
+  Future<void> notifyClassMembers({
+    required List<Booking> bookings,
+    required String title,
+    required String body,
+    required String classId,
+  }) async {
+    for (final b in bookings) {
+      if (b.userId.isEmpty) continue;
+      await _notificationService.create(
+        userId: b.userId,
+        title: title,
+        body: body,
+        type: NotificationType.general,
+        classId: classId,
+      );
+    }
   }
 }

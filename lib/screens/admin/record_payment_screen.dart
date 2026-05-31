@@ -37,7 +37,6 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
   void initState() {
     super.initState();
     _selectedSubscriptionId = widget.initialSubscriptionId;
-    _amountController.addListener(() => setState(() {}));
   }
 
   @override
@@ -214,13 +213,20 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
                           const SizedBox(height: 16),
 
                           // ── Amount input ─────────────────────────
-                          _AmountInput(
-                            controller: _amountController,
-                            subscription: subscription,
-                            enteredAmount: _enteredAmount,
-                            onFillRemaining: () {
-                              _amountController.text =
-                                  '${subscription!.remainingAmount}';
+                          ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _amountController,
+                            builder: (context, value, _) {
+                              final entered =
+                                  int.tryParse(value.text.trim()) ?? 0;
+                              return _AmountInput(
+                                controller: _amountController,
+                                subscription: subscription!,
+                                enteredAmount: entered,
+                                onFillRemaining: () {
+                                  _amountController.text =
+                                      '${subscription!.remainingAmount}';
+                                },
+                              );
                             },
                           ),
                           const SizedBox(height: 16),
@@ -238,12 +244,19 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
                           const SizedBox(height: 24),
 
                           // ── Submit ───────────────────────────────
-                          _SubmitButton(
-                            isProcessing: _isProcessing,
-                            canSubmit: _enteredAmount > 0,
-                            onPressed: _recordPayment,
-                            amount: _enteredAmount,
-                            currency: subscription.currency,
+                          ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _amountController,
+                            builder: (context, value, _) {
+                              final entered =
+                                  int.tryParse(value.text.trim()) ?? 0;
+                              return _SubmitButton(
+                                isProcessing: _isProcessing,
+                                canSubmit: entered > 0,
+                                onPressed: _recordPayment,
+                                amount: entered,
+                                currency: subscription!.currency,
+                              );
+                            },
                           ),
 
                           // ── Payment history ───────────────────────

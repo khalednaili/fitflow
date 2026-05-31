@@ -345,7 +345,59 @@ exports.superAdminDeleteGym = functions
 
 
 // ---------------------------------------------------------------------------
-// TEMPORARY migration: assign all documents across all collections to a gymId.
+// sendAnnouncementNotification — fan-out a push notification to all active
+// members of a gym. Called by admin when publishing an announcement.
+// ---------------------------------------------------------------------------
+exports.sendAnnouncementNotification = functions.https.onCall(async (data, context) => {
+  await assertRole(context, 'admin', 'super_admin');
+
+  const gymId = (data.gymId || '').trim();
+  const title = (data.title || '').trim();
+  const body = (data.body || '').trim();
+
+  if (!gymId) throw new functions.https.HttpsError('invalid-argument', 'gymId is required.');
+  if (!title) throw new functions.https.HttpsError('invalid-argument', 'title is required.');
+  if (!body) throw new functions.https.HttpsError('invalid-argument', 'body is required.');
+
+  const db = admin.firestore();
+  const messaging = admin.messaging();
+
+  // Collect all FCM tokens for members of this gym.
+  const usersSnap = await db.collection('users')
+    .where('gymId', '==', gymId)
+    .get();
+
+  const tokens = [];
+  for (const doc of usersSnap.docs) {
+    const fcmTokens = doc.data().fcmTokens;
+    if (Array.isArray(fcmTokens)) tokens.push(...fcmTokens);
+  }
+
+  if (tokens.length === 0) {
+    return {success: true, sent: 0, message: 'No registered devices found.'};
+  }
+
+  // FCM multicast is capped at 500 tokens per request.
+  let sent = 0;
+  for (let i = 0; i < tokens.length; i += 500) {
+    const chunk = tokens.slice(i, i + 500);
+    const response = await messaging.sendEachForMulticast({
+      tokens: chunk,
+      notification: {title, body},
+      webpush: {
+        notification: {
+          title,
+          body,
+          icon: '/icons/Icon-192.png',
+        },
+      },
+    });
+    sent += response.successCount;
+  }
+
+  return {success: true, sent, total: tokens.length};
+});
+
 // Skips documents that already have a gymId set.
 // Skips super_admin user docs.
 // Call once as super_admin, then this function will be removed.

@@ -22,6 +22,7 @@ class GymClass {
     this.qrToken = '',
     this.dropInEnabled = false,
     this.dropInPrice = 0.0,
+    this.coachNote = '',
     this.recurrenceGroupId,
     this.recurrenceEndDate,
   });
@@ -46,6 +47,7 @@ class GymClass {
   final String qrToken;
   final bool dropInEnabled;
   final double dropInPrice;
+  final String coachNote;
   final String? recurrenceGroupId;
   final DateTime? recurrenceEndDate;
 
@@ -106,6 +108,7 @@ class GymClass {
       qrToken: (data['qrToken'] ?? '') as String,
       dropInEnabled: (data['dropInEnabled'] ?? false) as bool,
       dropInPrice: ((data['dropInPrice'] ?? 0.0) as num).toDouble(),
+      coachNote: (data['coachNote'] ?? '') as String,
       recurrenceGroupId: data['recurrenceGroupId'] as String?,
       recurrenceEndDate: (data['recurrenceEndDate'] as Timestamp?)?.toDate(),
     );
@@ -131,6 +134,7 @@ class GymClass {
       'qrToken': qrToken,
       'dropInEnabled': dropInEnabled,
       'dropInPrice': dropInPrice,
+      'coachNote': coachNote,
       'recurrenceGroupId': recurrenceGroupId,
       'recurrenceEndDate': recurrenceEndDate != null
           ? Timestamp.fromDate(recurrenceEndDate!)

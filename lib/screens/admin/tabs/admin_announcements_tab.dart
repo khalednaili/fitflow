@@ -1,3 +1,4 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -466,6 +467,7 @@ class _AnnouncementFormState extends State<_AnnouncementForm> {
   late AnnouncementPriority _priority;
   DateTime? _expiresAt;
   bool _saving = false;
+  bool _sendPush = true; // only applies when creating a new announcement
 
   bool get _isEditing => widget.existing != null;
 
@@ -511,6 +513,28 @@ class _AnnouncementFormState extends State<_AnnouncementForm> {
           createdBy: FirebaseAuth.instance.currentUser?.uid ?? '',
           expiresAt: _expiresAt,
         );
+
+        if (_sendPush) {
+          try {
+            await FirebaseFunctions.instance
+                .httpsCallable('sendAnnouncementNotification')
+                .call(<String, dynamic>{
+              'gymId': widget.gymId,
+              'title': _titleCtrl.text.trim(),
+              'body': _bodyCtrl.text.trim(),
+            });
+          } catch (e, s) {
+            await CrashLogger.log(e, s,
+                reason: 'AnnouncementForm.sendPush');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                    content: Text(
+                        'Announcement saved, but push notification failed.')),
+              );
+            }
+          }
+        }
       }
       widget.onSaved();
     } catch (e, s) {
@@ -681,6 +705,51 @@ class _AnnouncementFormState extends State<_AnnouncementForm> {
                     type: _type,
                     priority: _priority),
                 const SizedBox(height: 24),
+              ],
+
+              // ── Push notification toggle (new announcements only) ───────
+              if (!_isEditing) ...[
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: SwitchListTile(
+                    value: _sendPush,
+                    onChanged: (v) => setState(() => _sendPush = v),
+                    activeColor: const Color(0xFF0F766E),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    title: const Text(
+                      'Send push notification',
+                      style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      'Notify all gym members on their devices right now.',
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade500),
+                    ),
+                    secondary: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: _sendPush
+                            ? const Color(0xFF0F766E).withValues(alpha: 0.1)
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.notifications_active_outlined,
+                        size: 18,
+                        color: _sendPush
+                            ? const Color(0xFF0F766E)
+                            : Colors.grey.shade400,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
               ],
 
               // ── Save button ─────────────────────────────────────────────

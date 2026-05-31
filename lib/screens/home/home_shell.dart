@@ -40,6 +40,7 @@ class _NavItem {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  bool _initialIndexSet = false;
   final _memberService = MemberService();
   final _notificationService = NotificationService();
   String? _streamUserId;
@@ -245,6 +246,13 @@ class _HomeShellState extends State<HomeShell> {
         final screens =
             _buildScreens(false, showCoachTab, appUser?.gymId ?? '');
         final navItems = _buildNavItems(false, showCoachTab, l10n);
+
+        // On first load, coaches should land on the Coach portal tab, not the member dashboard.
+        if (!_initialIndexSet) {
+          _initialIndexSet = true;
+          if (showCoachTab) _index = screens.length - 1;
+        }
+
         final selectedIndex = _index.clamp(0, screens.length - 1);
 
         return _buildScaffold(
