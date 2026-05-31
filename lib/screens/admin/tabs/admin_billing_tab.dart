@@ -1967,7 +1967,8 @@ class _InvoicePanelHeader extends StatelessWidget {
                     decoration: InputDecoration(
                       isDense: true,
                       prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                      hintText: 'Search member, invoice #, plan…',
+                      hintText:
+                          context.l10n.tr('Search member, invoice #, plan…'),
                       hintStyle: const TextStyle(fontSize: 13),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -2198,7 +2199,7 @@ class _InvoiceTable extends StatelessWidget {
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(
                                 maxWidth: 32, maxHeight: 32),
-                            tooltip: 'Delete',
+                            tooltip: context.l10n.tr('Delete'),
                           ),
                         ),
                       ],

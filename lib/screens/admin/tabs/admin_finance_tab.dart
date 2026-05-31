@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../l10n/app_localizations.dart';
 import '../../../models/app_user.dart';
 import '../../../models/invoice.dart';
 import '../../../models/membership_plan.dart';
@@ -435,7 +436,7 @@ class _KpiRow extends StatelessWidget {
                 value: loading || s == null ? null : '${s.totalOutstanding} $currency',
                 icon: Icons.pending_actions_rounded,
                 color: const Color(0xFFDC2626),
-                subtitle: 'Balance due',
+                subtitle: context.l10n.tr('Balance due'),
                 valueColor: s != null && s.totalOutstanding > 0 ? const Color(0xFFDC2626) : null,
               ),
               _KpiCard(
@@ -447,7 +448,7 @@ class _KpiRow extends StatelessWidget {
                     : collectionRate >= 50
                         ? const Color(0xFFF97316)
                         : const Color(0xFFDC2626),
-                subtitle: 'Paid / Total due',
+                subtitle: context.l10n.tr('Paid / Total due'),
                 valueColor: collectionRate >= 80
                     ? const Color(0xFF059669)
                     : collectionRate >= 50
@@ -549,7 +550,7 @@ class _KpiCard extends StatelessWidget {
                 ),
           const SizedBox(height: 2),
           Text(
-            label,
+            context.l10n.tr(label),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: cs.onSurface.withValues(alpha: 0.55),
                   fontWeight: FontWeight.w500,

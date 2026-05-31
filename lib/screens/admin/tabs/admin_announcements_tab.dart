@@ -37,16 +37,16 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Delete announcement?'),
+        title: Text(context.l10n.tr('Delete announcement?')),
         content: Text('"${a.title}" will be permanently deleted.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+              child: Text(context.l10n.tr('Cancel'))),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: Text(context.l10n.tr('Delete')),
           ),
         ],
       ),
@@ -132,7 +132,7 @@ class _AdminAnnouncementsTabState extends State<AdminAnnouncementsTab> {
         onPressed: () => _openFormSheet(context, null),
         backgroundColor: const Color(0xFF0F766E),
         icon: const Icon(Icons.add_rounded),
-        label: const Text('New'),
+        label: Text(context.l10n.tr('New')),
       ),
       body: _AnnouncementList(
         service: _service,
@@ -186,8 +186,8 @@ class _ListHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
       child: Row(
         children: [
-          const Text('Announcements',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+          Text(context.l10n.tr('Announcements'),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
           const Spacer(),
           FilledButton.icon(
             onPressed: onNew,
@@ -199,8 +199,8 @@ class _ListHeader extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8)),
             ),
             icon: const Icon(Icons.add_rounded, size: 16),
-            label:
-                const Text('New', style: TextStyle(fontSize: 13)),
+            label: Text(context.l10n.tr('New'),
+                style: const TextStyle(fontSize: 13)),
           ),
         ],
       ),
@@ -240,7 +240,7 @@ class _AnnouncementList extends StatelessWidget {
                 Icon(Icons.campaign_outlined,
                     size: 48, color: Colors.grey.shade300),
                 const SizedBox(height: 12),
-                Text('No announcements yet',
+                Text(context.l10n.tr('No announcements yet'),
                     style: TextStyle(color: Colors.grey.shade400)),
               ],
             ),
@@ -687,7 +687,7 @@ class _AnnouncementFormState extends State<_AnnouncementForm> {
                     IconButton(
                       icon: const Icon(Icons.close_rounded, size: 18),
                       onPressed: () => setState(() => _expiresAt = null),
-                      tooltip: 'Clear expiry',
+                      tooltip: context.l10n.tr('Clear expiry'),
                     ),
                   ],
                 ],
@@ -1073,9 +1073,9 @@ class _PreviewCard extends StatelessWidget {
               height: 36,
               decoration: BoxDecoration(
                   color: fg, borderRadius: BorderRadius.circular(8)),
-              child: const Center(
-                  child: Text('Got it',
-                      style: TextStyle(
+              child: Center(
+                  child: Text(context.l10n.tr('Got it'),
+                      style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
                           fontSize: 13))),

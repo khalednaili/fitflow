@@ -185,7 +185,7 @@ class _MemberDetailViewState extends State<_MemberDetailView>
 
                   // ── Personal Info ────────────────────────────────
                   _SectionCard(
-                    title: 'Personal Info',
+                    title: context.l10n.tr('Personal Info'),
                     icon: Icons.person_outline,
                     children: [
                       _DetailRow(
@@ -320,7 +320,7 @@ class _MemberDetailViewState extends State<_MemberDetailView>
                   if (member.fitnessLevel.isNotEmpty ||
                       member.healthNotes.isNotEmpty)
                     _SectionCard(
-                      title: 'Fitness Profile',
+                      title: context.l10n.tr('Fitness Profile'),
                       icon: Icons.fitness_center_outlined,
                       children: [
                         if (member.fitnessLevel.isNotEmpty)
@@ -346,7 +346,7 @@ class _MemberDetailViewState extends State<_MemberDetailView>
                   // ── Emergency Contact ────────────────────────────
                   if (member.emergencyContactName.isNotEmpty)
                     _SectionCard(
-                      title: 'Emergency Contact',
+                      title: context.l10n.tr('Emergency Contact'),
                       icon: Icons.contact_emergency_outlined,
                       children: [
                         _DetailRow(
@@ -399,7 +399,7 @@ class _MemberDetailViewState extends State<_MemberDetailView>
         leading: widget.asDialog
             ? IconButton(
                 icon: const Icon(Icons.close_rounded),
-                tooltip: 'Close',
+                tooltip: context.l10n.tr('Close'),
                 onPressed: () => Navigator.of(context).pop(),
               )
             : null,
@@ -1086,7 +1086,7 @@ class _ActionButton extends StatelessWidget {
               Icon(icon, color: color, size: 22),
               const SizedBox(height: 6),
               Text(
-                label,
+                context.l10n.tr(label),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11,
@@ -1569,7 +1569,7 @@ class _SubStat extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          '$label: ',
+          '${context.l10n.tr(label)}: ',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -1725,7 +1725,7 @@ class _InfoPill extends StatelessWidget {
           Icon(icon, size: 12, color: cs.onSurfaceVariant),
           const SizedBox(width: 4),
           Text(
-            label,
+            context.l10n.tr(label),
             style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -1818,7 +1818,7 @@ class _StatCard extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            label,
+            context.l10n.tr(label),
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 9,
@@ -1853,7 +1853,7 @@ class _RecentActivitySectionState extends State<_RecentActivitySection> {
         final bookings = (snap.data ?? <Booking>[]).take(6).toList();
 
         return _SectionCard(
-          title: 'Recent Activity',
+          title: context.l10n.tr('Recent Activity'),
           icon: Icons.history_outlined,
           children: [
             if (bookings.isEmpty)
@@ -2352,7 +2352,7 @@ class _QuickActionTile extends StatelessWidget {
               child: Icon(icon, size: 16, color: color),
             ),
             const SizedBox(width: 12),
-            Text(label,
+            Text(context.l10n.tr(label),
                 style:
                     const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             const Spacer(),
@@ -2384,7 +2384,7 @@ class _WebProfileTab extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _SectionCard(
-                  title: 'Personal Info',
+                  title: context.l10n.tr('Personal Info'),
                   icon: Icons.person_outline,
                   children: [
                     _DetailRow(
@@ -2523,7 +2523,7 @@ class _WebProfileTab extends StatelessWidget {
                 if (member.fitnessLevel.isNotEmpty ||
                     member.healthNotes.isNotEmpty) ...[
                   _SectionCard(
-                    title: 'Fitness & Health',
+                    title: context.l10n.tr('Fitness & Health'),
                     icon: Icons.fitness_center_outlined,
                     children: [
                       if (member.fitnessLevel.isNotEmpty)
@@ -2546,7 +2546,7 @@ class _WebProfileTab extends StatelessWidget {
                 ],
                 if (member.emergencyContactName.isNotEmpty) ...[
                   _SectionCard(
-                    title: 'Emergency Contact',
+                    title: context.l10n.tr('Emergency Contact'),
                     icon: Icons.contact_emergency_outlined,
                     children: [
                       _DetailRow(
@@ -2566,7 +2566,7 @@ class _WebProfileTab extends StatelessWidget {
                 ],
                 // Membership info card
                 _SectionCard(
-                  title: 'Membership',
+                  title: context.l10n.tr('Membership'),
                   icon: Icons.card_membership_outlined,
                   children: [
                     _DetailRow(
@@ -3209,7 +3209,7 @@ class _EditLabel extends StatelessWidget {
         Icon(icon, size: 13, color: cs.onSurfaceVariant),
         const SizedBox(width: 5),
         Text(
-          label,
+          context.l10n.tr(label),
           style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,

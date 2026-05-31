@@ -6,6 +6,9 @@ build/
 *.g.dart
 *.freezed.dart
 doc/api/
+coverage/
+.flutter-plugins
+.flutter-plugins-dependencies
 
 # Firebase — secrets (never commit these)
 android/app/google-services.json
@@ -15,6 +18,13 @@ lib/firebase_options.dart
 firebase-debug.log
 firebase-debug.*.log
 .firebaserc
+
+# Firebase Functions
+functions/.env
+functions/.env.*
+functions/.secret.*
+serviceAccountKey*.json
+**/serviceAccountKey*.json
 
 # IDE
 .idea/
@@ -37,8 +47,9 @@ ios/.symlinks/
 ios/Flutter/Flutter.framework
 ios/Flutter/Flutter.podspec
 
-# Web
-web/firebase-messaging-sw.js
+# Logs
+*.log
+*.log.*
 
 # Environment / secrets
 .env

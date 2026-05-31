@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/gym_class.dart';
 
 /// Shows a class-specific QR code for member check-in.
@@ -110,7 +111,8 @@ class ClassQrCodeDialog extends StatelessWidget {
                     Icon(Icons.info_outline, size: 14, color: cs.primary),
                     const SizedBox(width: 6),
                     Text(
-                      'Opens 30 min before class · valid until end',
+                      context.l10n.tr(
+                          'Opens 30 min before class · valid until end'),
                       style: TextStyle(
                           fontSize: 11,
                           color: cs.primary,
@@ -127,7 +129,7 @@ class ClassQrCodeDialog extends StatelessWidget {
                   Clipboard.setData(ClipboardData(text: qrData));
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: const Text('QR code data copied'),
+                      content: Text(context.l10n.tr('QR code data copied')),
                       behavior: SnackBarBehavior.floating,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10)),
@@ -136,8 +138,8 @@ class ClassQrCodeDialog extends StatelessWidget {
                   );
                 },
                 icon: const Icon(Icons.copy, size: 15),
-                label:
-                    const Text('Copy QR data', style: TextStyle(fontSize: 12)),
+                label: Text(context.l10n.tr('Copy QR data'),
+                    style: const TextStyle(fontSize: 12)),
               ),
             ],
           ),
@@ -185,14 +187,15 @@ class GymQrCodeWidget extends StatelessWidget {
             color: const Color(0xFF00BCD4).withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.qr_code_scanner, size: 18, color: Color(0xFF00BCD4)),
-              SizedBox(width: 8),
+              const Icon(Icons.qr_code_scanner,
+                  size: 18, color: Color(0xFF00BCD4)),
+              const SizedBox(width: 8),
               Text(
-                'Members scan this to check in',
-                style: TextStyle(
+                context.l10n.tr('Members scan this to check in'),
+                style: const TextStyle(
                     color: Color(0xFF00BCD4),
                     fontWeight: FontWeight.w600,
                     fontSize: 13),
@@ -202,7 +205,7 @@ class GymQrCodeWidget extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Display this at the gym entrance',
+          context.l10n.tr('Display this at the gym entrance'),
           style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
         ),
       ],

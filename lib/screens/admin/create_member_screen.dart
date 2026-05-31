@@ -1282,7 +1282,7 @@ class _OfferPlanGrid extends StatelessWidget {
           return Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Text(
-              'No active plans found. Create one in Offers first.',
+              context.l10n.tr('No active plans found. Create one in Offers first.'),
               style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
             ),
           );

@@ -149,7 +149,7 @@ class _InvoiceHeader extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'INVOICE',
+                context.l10n.tr('INVOICE'),
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w900,
@@ -164,12 +164,12 @@ class _InvoiceHeader extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            _MetaRow('Invoice #', invoice.invoiceNumber),
+            _MetaRow(context.l10n.tr('Invoice #'), invoice.invoiceNumber),
             const SizedBox(height: 4),
-            _MetaRow('Issued', dateFmt.format(invoice.issuedAt)),
+            _MetaRow(context.l10n.tr('Issued'), dateFmt.format(invoice.issuedAt)),
             if (invoice.dueDate != null) ...[
               const SizedBox(height: 4),
-              _MetaRow('Due', dateFmt.format(invoice.dueDate!)),
+              _MetaRow(context.l10n.tr('Due'), dateFmt.format(invoice.dueDate!)),
             ],
           ],
         ),
@@ -227,16 +227,16 @@ class _ItemsTable extends StatelessWidget {
               ),
             ),
             child: Row(
-              children: const [
+              children: [
                 Expanded(
-                  child: Text('Description',
-                      style: TextStyle(
+                  child: Text(context.l10n.tr('Description'),
+                      style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 12)),
                 ),
-                Text('Amount',
-                    style: TextStyle(
+                Text(context.l10n.tr('Amount'),
+                    style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 12)),

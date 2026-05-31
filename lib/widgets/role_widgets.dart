@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
+
 // ── Role definitions ──────────────────────────────────────────────────────────
 
 class RoleDef {
@@ -140,7 +142,7 @@ class RoleToggleCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(role.label,
+                      Text(context.l10n.tr(role.label),
                           style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
@@ -154,7 +156,7 @@ class RoleToggleCard extends StatelessWidget {
                             color: cs.surfaceContainerHighest,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Text('Always on',
+                          child: Text(context.l10n.tr('Always on'),
                               style: TextStyle(
                                   fontSize: 9,
                                   color: cs.onSurfaceVariant,
@@ -164,7 +166,7 @@ class RoleToggleCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(role.description,
+                  Text(context.l10n.tr(role.description),
                       style: TextStyle(
                           fontSize: 12,
                           color: cs.onSurfaceVariant,

@@ -1162,7 +1162,7 @@ class _HeaderAction extends StatelessWidget {
       ),
       onPressed: onPressed,
       icon: Icon(icon, size: 15),
-      label: Text(label, style: const TextStyle(fontSize: 13)),
+      label: Text(context.l10n.tr(label), style: const TextStyle(fontSize: 13)),
     );
   }
 }
@@ -1250,7 +1250,7 @@ class _StatCell extends StatelessWidget {
               style: TextStyle(
                   fontSize: 18, fontWeight: FontWeight.w800, color: color)),
           const SizedBox(height: 2),
-          Text(label,
+          Text(context.l10n.tr(label),
               style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w500,

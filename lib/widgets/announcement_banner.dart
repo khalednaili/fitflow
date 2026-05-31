@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../l10n/app_localizations.dart';
 import '../models/gym_announcement.dart';
 import '../services/announcement_service.dart';
 
@@ -248,8 +249,8 @@ class _AnnouncementPopup extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Got it',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  child: Text(context.l10n.tr('Got it'),
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
             ],
