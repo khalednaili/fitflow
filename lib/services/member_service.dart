@@ -55,6 +55,18 @@ class MemberService {
     });
   }
 
+  /// One-time fetch of all members — avoids opening a persistent listener.
+  Future<List<AppUser>> fetchMembers() async {
+    final snap = await _usersQuery.get();
+    final users = snap.docs.map((doc) => AppUser.fromSnapshot(doc)).toList();
+    users.sort((a, b) {
+      final aName = a.displayName.trim().isEmpty ? a.email : a.displayName;
+      final bName = b.displayName.trim().isEmpty ? b.email : b.displayName;
+      return aName.toLowerCase().compareTo(bName.toLowerCase());
+    });
+    return List<AppUser>.unmodifiable(users);
+  }
+
   Stream<List<AppUser>> streamCoaches() {
     // Filter all users to those with coach or staff in their effective roles.
     // This handles both legacy (role string) and multi-role (roles array) users.

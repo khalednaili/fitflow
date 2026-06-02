@@ -72,6 +72,15 @@ class BillingService {
     });
   }
 
+  /// Streams a single invoice document in real-time.
+  Stream<Invoice?> streamInvoice(String invoiceId) {
+    return _firestore
+        .collection('invoices')
+        .doc(invoiceId)
+        .snapshots()
+        .map((snap) => snap.exists ? Invoice.fromSnapshot(snap) : null);
+  }
+
   Future<Invoice?> getInvoice(String invoiceId) async {
     final doc =
         await _firestore.collection('invoices').doc(invoiceId).get();
@@ -116,73 +125,108 @@ class BillingService {
 
   // ── Create invoice ────────────────────────────────────────────────────────
 
+  /// Returns what the next auto-generated invoice number would be, WITHOUT
+  /// consuming or incrementing the counter.  Use this to pre-fill the invoice
+  /// number field in the UI so the admin can optionally override it.
+  Future<String> previewNextInvoiceNumber() async {
+    final snap = await _settingsRef.get();
+    final sData = snap.data() ?? {};
+    final rawPrefix = (sData['prefix'] as String? ?? 'INV').trim();
+    final effectivePrefix = rawPrefix.isEmpty ? 'INV' : rawPrefix;
+    final startNumber = (sData['startNumber'] as int? ?? 1);
+    final nextSeq =
+        snap.exists ? (sData['nextSequence'] as int? ?? startNumber) : startNumber;
+    final year = DateTime.now().year;
+    return '$effectivePrefix-$year-${nextSeq.toString().padLeft(4, '0')}';
+  }
+
   /// Creates an invoice document.
   ///
-  /// The invoice number is assigned atomically via a Firestore transaction,
-  /// using the sequential counter stored in the gym's invoice settings doc.
-  /// Format: `{prefix}-{YYYY}-{sequence:04d}` e.g. `INV-2025-0001`.
+  /// [subscriptions] must contain at least one entry; all must share the same
+  /// currency (enforced by the caller before reaching this point).
+  /// [planLabels] must have the same length as [subscriptions]; each entry is
+  /// the human-readable plan name for the corresponding subscription.
+  ///
+  /// When [customInvoiceNumber] is provided (non-empty), it is used directly
+  /// and the sequential counter is NOT incremented.  Otherwise a number is
+  /// auto-generated atomically via a Firestore transaction.
+  ///
+  /// Format (auto): `{prefix}-{YYYY}-{sequence:04d}` e.g. `INV-2025-0001`.
   Future<Invoice> createInvoice({
     required String userId,
     required String memberName,
     required String memberEmail,
     String memberPhone = '',
-    required UserSubscription subscription,
-    required String planName,
+    required List<UserSubscription> subscriptions,
+    required List<String> planLabels,
     String notes = '',
     DateTime? dueDate,
+    List<InvoiceItem> extraItems = const [],
+    String? customInvoiceNumber,
   }) async {
+    assert(subscriptions.isNotEmpty, 'At least one subscription required');
+    assert(planLabels.length == subscriptions.length, 'planLabels length must match subscriptions');
+
     final now = DateTime.now();
 
-    final payments = subscription.paymentHistory
-        .map((p) => InvoicePayment(
-              amount: p.amount,
-              date: p.date,
-              method: p.method,
-              notes: p.notes,
-            ))
-        .toList();
+    // Invoice always starts fresh — payments are recorded separately.
+    const status = 'unpaid';
 
-    final status = subscription.amountPaid >= subscription.totalAmount
-        ? 'paid'
-        : subscription.amountPaid > 0
-            ? 'partial'
-            : 'unpaid';
+    final currency = subscriptions.first.currency;
 
-    final items = [
-      InvoiceItem(
-        description: planName,
-        amount: subscription.totalAmount,
-        currency: subscription.currency,
+    // One base item per subscription.
+    final baseItems = List<InvoiceItem>.generate(
+      subscriptions.length,
+      (i) => InvoiceItem(
+        description: planLabels[i],
+        amount: subscriptions[i].totalAmount,
+        currency: subscriptions[i].currency,
       ),
-    ];
+    );
+    final items = [...baseItems, ...extraItems];
+    final totalAmount = items.fold<int>(0, (acc, item) => acc + item.amount);
+
+    // Legacy fields — keep first subscription for backward compatibility.
+    final subscriptionId = subscriptions.first.id;
+    final planName = planLabels.length == 1
+        ? planLabels.first
+        : '${planLabels.first} + ${planLabels.length - 1} more';
 
     // Pre-allocate a document reference so we can set it inside the transaction.
     final invoiceRef = _firestore.collection('invoices').doc();
     String invoiceNumber = '';
 
+    final useCustom =
+        customInvoiceNumber != null && customInvoiceNumber.trim().isNotEmpty;
+
     await _firestore.runTransaction((tx) async {
-      final settingsSnap = await tx.get(_settingsRef);
-      final sData = settingsSnap.data() ?? {};
-      final rawPrefix = (sData['prefix'] as String? ?? 'INV').trim();
-      final effectivePrefix = rawPrefix.isEmpty ? 'INV' : rawPrefix;
-      final startNumber = (sData['startNumber'] as int? ?? 1);
-      final nextSeq = settingsSnap.exists
-          ? (sData['nextSequence'] as int? ?? startNumber)
-          : startNumber;
+      if (useCustom) {
+        // Custom invoice number — use it directly, skip counter.
+        invoiceNumber = customInvoiceNumber.trim();
+      } else {
+        // Auto-generate and atomically increment the counter.
+        final settingsSnap = await tx.get(_settingsRef);
+        final sData = settingsSnap.data() ?? {};
+        final rawPrefix = (sData['prefix'] as String? ?? 'INV').trim();
+        final effectivePrefix = rawPrefix.isEmpty ? 'INV' : rawPrefix;
+        final startNumber = (sData['startNumber'] as int? ?? 1);
+        final nextSeq = settingsSnap.exists
+            ? (sData['nextSequence'] as int? ?? startNumber)
+            : startNumber;
 
-      invoiceNumber =
-          '$effectivePrefix-${now.year}-${nextSeq.toString().padLeft(4, '0')}';
+        invoiceNumber =
+            '$effectivePrefix-${now.year}-${nextSeq.toString().padLeft(4, '0')}';
 
-      // Increment the counter atomically.
-      tx.set(
-        _settingsRef,
-        <String, dynamic>{
-          'prefix': rawPrefix,
-          'startNumber': startNumber,
-          'nextSequence': nextSeq + 1,
-          if (gymId.isNotEmpty) 'gymId': gymId,
-        },
-      );
+        tx.set(
+          _settingsRef,
+          <String, dynamic>{
+            'prefix': rawPrefix,
+            'startNumber': startNumber,
+            'nextSequence': nextSeq + 1,
+            if (gymId.isNotEmpty) 'gymId': gymId,
+          },
+        );
+      }
 
       tx.set(invoiceRef, <String, dynamic>{
         'invoiceNumber': invoiceNumber,
@@ -191,17 +235,17 @@ class BillingService {
         'memberName': memberName,
         'memberEmail': memberEmail,
         'memberPhone': memberPhone,
-        'subscriptionId': subscription.id,
+        'subscriptionId': subscriptionId,
         'planName': planName,
-        'currency': subscription.currency,
-        'totalAmount': subscription.totalAmount,
-        'amountPaid': subscription.amountPaid,
+        'currency': currency,
+        'totalAmount': totalAmount,
+        'amountPaid': 0,
         'status': status,
         'issuedAt': Timestamp.fromDate(now),
         if (dueDate != null) 'dueDate': Timestamp.fromDate(dueDate),
         'notes': notes,
         'items': items.map((i) => i.toMap()).toList(),
-        'payments': payments.map((p) => p.toMap()).toList(),
+        'payments': const <dynamic>[],
         'createdAt': Timestamp.fromDate(now),
         'updatedAt': Timestamp.fromDate(now),
       });
@@ -215,20 +259,80 @@ class BillingService {
       memberName: memberName,
       memberEmail: memberEmail,
       memberPhone: memberPhone,
-      subscriptionId: subscription.id,
+      subscriptionId: subscriptionId,
       planName: planName,
-      currency: subscription.currency,
-      totalAmount: subscription.totalAmount,
-      amountPaid: subscription.amountPaid,
+      currency: currency,
+      totalAmount: totalAmount,
+      amountPaid: 0,
       status: status,
       issuedAt: now,
       dueDate: dueDate,
       notes: notes,
       items: items,
-      payments: payments,
+      payments: const [],
       createdAt: now,
       updatedAt: now,
     );
+  }
+
+  /// Replaces all line-items on an invoice and recalculates [totalAmount] and
+  /// [status] atomically.  Existing [amountPaid] and [payments] are preserved.
+  Future<Invoice> updateInvoiceItems({
+    required String invoiceId,
+    required List<InvoiceItem> items,
+    String? notes,
+  }) async {
+    final invoiceRef = _firestore.collection('invoices').doc(invoiceId);
+    final now = DateTime.now();
+    late Invoice updated;
+
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(invoiceRef);
+      if (!snap.exists) throw Exception('Invoice $invoiceId not found');
+
+      final current = Invoice.fromSnapshot(snap);
+      final newTotal = items.fold<int>(0, (acc, item) => acc + item.amount);
+      final amountPaid = current.amountPaid;
+      final newStatus = amountPaid >= newTotal
+          ? 'paid'
+          : amountPaid > 0
+              ? 'partial'
+              : 'unpaid';
+      final updatedNotes = notes ?? current.notes;
+
+      tx.update(invoiceRef, <String, dynamic>{
+        'items': items.map((i) => i.toMap()).toList(),
+        'totalAmount': newTotal,
+        'status': newStatus,
+        'notes': updatedNotes,
+        'updatedAt': Timestamp.fromDate(now),
+      });
+
+      updated = Invoice(
+        id: current.id,
+        invoiceNumber: current.invoiceNumber,
+        gymId: current.gymId,
+        userId: current.userId,
+        memberName: current.memberName,
+        memberEmail: current.memberEmail,
+        memberPhone: current.memberPhone,
+        subscriptionId: current.subscriptionId,
+        planName: current.planName,
+        currency: current.currency,
+        totalAmount: newTotal,
+        amountPaid: amountPaid,
+        status: newStatus,
+        issuedAt: current.issuedAt,
+        dueDate: current.dueDate,
+        notes: updatedNotes,
+        items: items,
+        payments: current.payments,
+        createdAt: current.createdAt,
+        updatedAt: now,
+      );
+    });
+
+    return updated;
   }
 
   Future<void> deleteInvoice(String invoiceId) async {

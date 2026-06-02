@@ -3,12 +3,62 @@ import 'package:intl/intl.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../models/invoice.dart';
+import '../../services/billing_service.dart';
+import '../../utils/crash_logger.dart';
 
 /// Full-screen invoice view — looks like a printed invoice.
-class InvoiceDetailScreen extends StatelessWidget {
+/// Supports adding / editing line-items after creation.
+class InvoiceDetailScreen extends StatefulWidget {
   const InvoiceDetailScreen({super.key, required this.invoice});
 
   final Invoice invoice;
+
+  @override
+  State<InvoiceDetailScreen> createState() => _InvoiceDetailScreenState();
+}
+
+class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
+  late final BillingService _billing;
+
+  @override
+  void initState() {
+    super.initState();
+    _billing = BillingService(gymId: widget.invoice.gymId);
+  }
+
+  void _openEditItems(Invoice invoice) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _EditItemsSheet(
+        invoice: invoice,
+        billingService: _billing,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<Invoice?>(
+      stream: _billing.streamInvoice(widget.invoice.id),
+      builder: (context, snap) {
+        final invoice = snap.data ?? widget.invoice;
+        return _InvoiceView(
+          invoice: invoice,
+          onEditItems: () => _openEditItems(invoice),
+        );
+      },
+    );
+  }
+}
+
+// ── Stateless view ─────────────────────────────────────────────────────────────
+
+class _InvoiceView extends StatelessWidget {
+  const _InvoiceView({required this.invoice, required this.onEditItems});
+  final Invoice invoice;
+  final VoidCallback onEditItems;
 
   @override
   Widget build(BuildContext context) {
@@ -24,6 +74,13 @@ class InvoiceDetailScreen extends StatelessWidget {
         backgroundColor: const Color(0xFF0F4C45),
         foregroundColor: Colors.white,
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: l10n.tr('Edit Items'),
+            icon: const Icon(Icons.edit_note_outlined),
+            onPressed: onEditItems,
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -99,8 +156,7 @@ class InvoiceDetailScreen extends StatelessWidget {
                       const SizedBox(height: 20),
                     ],
 
-                    // ── Status badge ───────────────────────────────────────
-                    Center(child: _StatusBadge(status: invoice.status, l10n: l10n)),
+                    // (status badge removed — invoice total is shown in the items section)
                     const SizedBox(height: 8),
                   ],
                 ),
@@ -109,6 +165,305 @@ class InvoiceDetailScreen extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Edit items bottom sheet ────────────────────────────────────────────────────
+
+class _EditItemsSheet extends StatefulWidget {
+  const _EditItemsSheet({
+    required this.invoice,
+    required this.billingService,
+  });
+  final Invoice invoice;
+  final BillingService billingService;
+
+  @override
+  State<_EditItemsSheet> createState() => _EditItemsSheetState();
+}
+
+class _EditItemsSheetState extends State<_EditItemsSheet> {
+  /// Mutable copy of current items (description, amount, currency).
+  late List<({TextEditingController desc, TextEditingController amount, String currency})> _rows;
+  bool _saving = false;
+  String _error = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _rows = widget.invoice.items.map((item) {
+      final desc = TextEditingController(text: item.description);
+      final amount = TextEditingController(text: item.amount.toString());
+      amount.addListener(() => setState(() {}));
+      return (desc: desc, amount: amount, currency: item.currency);
+    }).toList();
+  }
+
+  @override
+  void dispose() {
+    for (final r in _rows) {
+      r.desc.dispose();
+      r.amount.dispose();
+    }
+    super.dispose();
+  }
+
+  void _addRow() {
+    final currency = widget.invoice.currency;
+    final desc = TextEditingController();
+    final amount = TextEditingController();
+    amount.addListener(() => setState(() {}));
+    setState(() => _rows.add((desc: desc, amount: amount, currency: currency)));
+  }
+
+  void _removeRow(int index) {
+    setState(() {
+      final r = _rows.removeAt(index);
+      r.desc.dispose();
+      r.amount.dispose();
+    });
+  }
+
+  int _total() => _rows.fold(
+        0,
+        (sum, r) => sum + (int.tryParse(r.amount.text.trim()) ?? 0),
+      );
+
+  Future<void> _save() async {
+    final items = <InvoiceItem>[];
+    for (final r in _rows) {
+      final desc = r.desc.text.trim();
+      final amt = int.tryParse(r.amount.text.trim()) ?? 0;
+      if (desc.isEmpty) {
+        setState(() => _error = context.l10n.tr('All items need a description.'));
+        return;
+      }
+      if (amt <= 0) {
+        setState(() => _error = context.l10n.tr('All items need an amount > 0.'));
+        return;
+      }
+      items.add(InvoiceItem(description: desc, amount: amt, currency: r.currency));
+    }
+    if (items.isEmpty) {
+      setState(() => _error = context.l10n.tr('Invoice must have at least one item.'));
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _error = '';
+    });
+    try {
+      await widget.billingService.updateInvoiceItems(
+        invoiceId: widget.invoice.id,
+        items: items,
+      );
+      if (mounted) Navigator.of(context).pop();
+    } catch (e, s) {
+      await CrashLogger.log(e, s, reason: 'EditItemsSheet._save');
+      if (mounted) setState(() { _saving = false; _error = e.toString(); });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final mq = MediaQuery.of(context);
+    final currency = widget.invoice.currency;
+    final total = _total();
+
+    return Container(
+      height: mq.size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 10),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade300,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.tr('Edit Invoice Items'),
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 16),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              children: [
+                for (int i = 0; i < _rows.length; i++) ...[
+                  _EditItemRow(
+                    key: ValueKey(i),
+                    descController: _rows[i].desc,
+                    amountController: _rows[i].amount,
+                    currency: currency,
+                    onRemove: _rows.length > 1 ? () => _removeRow(i) : null,
+                    l10n: l10n,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                TextButton.icon(
+                  onPressed: _addRow,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(l10n.tr('Add Item')),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF0F766E),
+                    alignment: Alignment.centerLeft,
+                    padding: EdgeInsets.zero,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Total summary
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F4C45).withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: const Color(0xFF0F4C45).withValues(alpha: 0.15)),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(l10n.tr('New Total'),
+                          style: const TextStyle(fontWeight: FontWeight.w700)),
+                      const Spacer(),
+                      Text(
+                        '$currency $total',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            color: Color(0xFF0F4C45)),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_error.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Text(_error,
+                        style: TextStyle(color: Colors.red.shade700)),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : _save,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F766E),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.save_outlined),
+                    label: Text(
+                      _saving ? l10n.tr('Saving…') : l10n.tr('Save Changes'),
+                      style: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EditItemRow extends StatelessWidget {
+  const _EditItemRow({
+    super.key,
+    required this.descController,
+    required this.amountController,
+    required this.currency,
+    required this.onRemove,
+    required this.l10n,
+  });
+  final TextEditingController descController;
+  final TextEditingController amountController;
+  final String currency;
+  final VoidCallback? onRemove;
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: TextField(
+            controller: descController,
+            decoration: InputDecoration(
+              hintText: l10n.tr('Description'),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              isDense: true,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 2,
+          child: TextField(
+            controller: amountController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              hintText: l10n.tr('Amount'),
+              prefixText: '$currency ',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              isDense: true,
+            ),
+          ),
+        ),
+        if (onRemove != null)
+          IconButton(
+            onPressed: onRemove,
+            icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+            padding: const EdgeInsets.only(left: 4),
+            constraints: const BoxConstraints(),
+          )
+        else
+          const SizedBox(width: 36),
+      ],
     );
   }
 }
@@ -291,45 +646,26 @@ class _TotalsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.centerRight,
-      child: SizedBox(
-        width: 260,
-        child: Column(
-          children: [
-            _TotalRow(l10n.tr('Total'), '${invoice.currency} ${invoice.totalAmount}',
-                bold: false),
-            _TotalRow(l10n.tr('Amount Paid'),
-                '${invoice.currency} ${invoice.amountPaid}',
-                color: Colors.green.shade700, bold: false),
-            const Divider(height: 16, thickness: 1),
-            _TotalRow(
-              l10n.tr('Balance Due'),
-              '${invoice.currency} ${invoice.remainingAmount}',
-              bold: true,
-              color: invoice.remainingAmount > 0
-                  ? Colors.red.shade700
-                  : Colors.green.shade700,
-            ),
-          ],
-        ),
+      child: _TotalRow(
+        l10n.tr('Total'),
+        '${invoice.currency} ${invoice.totalAmount}',
+        bold: true,
       ),
     );
   }
 }
 
 class _TotalRow extends StatelessWidget {
-  const _TotalRow(this.label, this.value,
-      {this.bold = false, this.color});
+  const _TotalRow(this.label, this.value, {this.bold = false});
   final String label;
   final String value;
   final bool bold;
-  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final style = TextStyle(
       fontWeight: bold ? FontWeight.w800 : FontWeight.normal,
       fontSize: bold ? 15 : 13,
-      color: color,
     );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -431,45 +767,6 @@ class _PaymentRow extends StatelessWidget {
       default:
         return Icons.payments_outlined;
     }
-  }
-}
-
-// ── Status badge ──────────────────────────────────────────────────────────────
-
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status, required this.l10n});
-  final String status;
-  final AppLocalizations l10n;
-
-  @override
-  Widget build(BuildContext context) {
-    Color bg;
-    Color fg;
-    switch (status) {
-      case 'paid':
-        bg = Colors.green.shade100;
-        fg = Colors.green.shade800;
-        break;
-      case 'partial':
-        bg = Colors.orange.shade100;
-        fg = Colors.orange.shade800;
-        break;
-      default:
-        bg = Colors.red.shade100;
-        fg = Colors.red.shade800;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        status.toUpperCase(),
-        style: TextStyle(
-            color: fg, fontWeight: FontWeight.w800, letterSpacing: 1.5),
-      ),
-    );
   }
 }
 

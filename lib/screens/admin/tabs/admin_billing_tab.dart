@@ -1044,13 +1044,24 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
   AppUser? _selectedMember;
   List<UserSubscription> _memberSubs = [];
   List<MembershipPlan> _plans = [];
-  UserSubscription? _selectedSub;
-  MembershipPlan? _selectedPlan;
+  List<UserSubscription> _selectedSubs = [];
+  String _invoiceNumberHint = '';
 
   bool _loadingMembers = true;
   bool _loadingSubs = false;
   bool _saving = false;
   String _error = '';
+
+  List<MembershipPlan?> get _selectedPlans => _selectedSubs
+      .map((s) => _plans.cast<MembershipPlan?>().firstWhere(
+            (p) => p?.id == s.planId,
+            orElse: () => null,
+          ))
+      .toList();
+
+  List<String> get _selectedPlanLabels => _selectedSubs.asMap().entries
+      .map((e) => _selectedPlans[e.key]?.name ?? e.value.planId)
+      .toList();
 
   @override
   void initState() {
@@ -1075,15 +1086,17 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
 
   Future<void> _loadMembersAndPlans() async {
     try {
-      // Always load plans (needed for offer name lookup)
-      final plans = await widget.subscriptionService.streamAllOffers().first;
+      // Always load plans (needed for offer name lookup).
+      // Use fetchAllOffers() (one-time get) to avoid a persistent Firestore
+      // listener being created and immediately cancelled via .first — that
+      // pattern triggers an "Unexpected state" assertion in the Firestore
+      // Web SDK when the watch-stream is mid-cycle.
+      final plans = await widget.subscriptionService.fetchAllOffers();
       if (mounted) setState(() => _plans = plans);
 
       if (widget.preselectedMember != null) {
-        // Skip loading all members; load this member's subscriptions directly
         final subs = await widget.subscriptionService
-            .streamUserSubscriptions(widget.preselectedMember!.id)
-            .first;
+            .fetchUserSubscriptions(widget.preselectedMember!.id);
         if (mounted) {
           setState(() {
             _memberSubs = subs;
@@ -1091,7 +1104,7 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
           });
         }
       } else {
-        final members = await widget.memberService.streamMembers().first;
+        final members = await widget.memberService.fetchMembers();
         if (mounted) {
           setState(() {
             _members = members;
@@ -1128,15 +1141,13 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
     setState(() {
       _selectedMember = member;
       _memberSubs = [];
-      _selectedSub = null;
-      _selectedPlan = null;
+      _selectedSubs = [];
       _loadingSubs = true;
       _step = _InvoiceStep.offer;
     });
     try {
       final subs = await widget.subscriptionService
-          .streamUserSubscriptions(member.id)
-          .first;
+          .fetchUserSubscriptions(member.id);
       if (mounted) {
         setState(() {
           _memberSubs = subs;
@@ -1149,34 +1160,61 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
     }
   }
 
-  void _selectOffer(UserSubscription sub) {
-    final plan = _plans.cast<MembershipPlan?>().firstWhere(
-          (p) => p?.id == sub.planId,
-          orElse: () => null,
-        );
+  void _toggleOffer(UserSubscription sub) {
     setState(() {
-      _selectedSub = sub;
-      _selectedPlan = plan;
-      _step = _InvoiceStep.confirm;
+      final idx = _selectedSubs.indexWhere((s) => s.id == sub.id);
+      if (idx >= 0) {
+        _selectedSubs.removeAt(idx);
+      } else {
+        _selectedSubs.add(sub);
+      }
+      _error = '';
     });
   }
 
-  Future<void> _createInvoice() async {
-    if (_selectedMember == null || _selectedSub == null) return;
+  Future<void> _confirmOfferSelection() async {
+    if (_selectedSubs.isEmpty) return;
+    // Validate all selected offers share the same currency.
+    final currencies = _selectedSubs.map((s) => s.currency).toSet();
+    if (currencies.length > 1) {
+      setState(() => _error =
+          'All selected offers must use the same currency (${currencies.join(', ')} found).');
+      return;
+    }
+    // Pre-load the invoice number hint without consuming the counter.
+    try {
+      final hint = await widget.billingService.previewNextInvoiceNumber();
+      if (mounted) {
+        setState(() {
+          _invoiceNumberHint = hint;
+          _error = '';
+          _step = _InvoiceStep.confirm;
+        });
+      }
+    } catch (e, s) {
+      await CrashLogger.log(e, s, reason: 'CreateInvoiceSheet._confirmOffer');
+      if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  Future<void> _createInvoice(
+      List<InvoiceItem> extraItems, String? customInvoiceNumber) async {
+    if (_selectedMember == null || _selectedSubs.isEmpty) return;
     setState(() {
       _saving = true;
       _error = '';
     });
     try {
-      final planName = _selectedPlan?.name ?? _selectedSub!.planId;
       final invoice = await widget.billingService.createInvoice(
         userId: _selectedMember!.id,
         memberName: _selectedMember!.displayName,
         memberEmail: _selectedMember!.email,
         memberPhone: _selectedMember!.phoneNumber,
-        subscription: _selectedSub!,
-        planName: planName,
+        subscriptions: _selectedSubs,
+        planLabels: _selectedPlanLabels,
         notes: _notesController.text.trim(),
+        extraItems: extraItems,
+        customInvoiceNumber: customInvoiceNumber,
       );
       widget.onCreated(invoice);
     } catch (e, s) {
@@ -1195,8 +1233,7 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
       setState(() {
         _error = '';
         _step = _InvoiceStep.offer;
-        _selectedSub = null;
-        _selectedPlan = null;
+        // Keep _selectedSubs so user sees their previous selection.
       });
     } else if (_step == _InvoiceStep.offer) {
       if (widget.preselectedMember != null) {
@@ -1301,13 +1338,18 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
                             subs: _memberSubs,
                             plans: _plans,
                             loading: _loadingSubs,
-                            onSelect: _selectOffer,
+                            selectedIds:
+                                _selectedSubs.map((s) => s.id).toSet(),
+                            onToggle: _toggleOffer,
+                            onConfirm: _confirmOfferSelection,
+                            error: _error,
                             l10n: l10n,
                           )
                         : _ConfirmStep(
                             member: _selectedMember!,
-                            sub: _selectedSub!,
-                            plan: _selectedPlan,
+                            subs: _selectedSubs,
+                            plans: _selectedPlans,
+                            invoiceNumberHint: _invoiceNumberHint,
                             notesController: _notesController,
                             error: _error,
                             saving: _saving,
@@ -1433,14 +1475,20 @@ class _OfferPicker extends StatelessWidget {
     required this.subs,
     required this.plans,
     required this.loading,
-    required this.onSelect,
+    required this.selectedIds,
+    required this.onToggle,
+    required this.onConfirm,
+    required this.error,
     required this.l10n,
   });
   final AppUser member;
   final List<UserSubscription> subs;
   final List<MembershipPlan> plans;
   final bool loading;
-  final void Function(UserSubscription) onSelect;
+  final Set<String> selectedIds;
+  final void Function(UserSubscription) onToggle;
+  final VoidCallback onConfirm;
+  final String error;
   final AppLocalizations l10n;
 
   MembershipPlan? _planFor(UserSubscription sub) =>
@@ -1482,19 +1530,71 @@ class _OfferPicker extends StatelessWidget {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-      itemCount: subs.length,
-      itemBuilder: (_, i) {
-        final sub = subs[i];
-        final plan = _planFor(sub);
-        return _OfferCard(
-          sub: sub,
-          plan: plan,
-          l10n: l10n,
-          onTap: () => onSelect(sub),
-        );
-      },
+    final count = selectedIds.length;
+
+    return Column(
+      children: [
+        // Offer list
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            itemCount: subs.length,
+            itemBuilder: (_, i) {
+              final sub = subs[i];
+              final plan = _planFor(sub);
+              final isSelected = selectedIds.contains(sub.id);
+              return _OfferCard(
+                sub: sub,
+                plan: plan,
+                isSelected: isSelected,
+                l10n: l10n,
+                onTap: () => onToggle(sub),
+              );
+            },
+          ),
+        ),
+        // Error banner
+        if (error.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child:
+                  Text(error, style: TextStyle(color: Colors.red.shade700)),
+            ),
+          ),
+        // Continue button
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+          child: SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: count > 0 ? onConfirm : null,
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF0F766E),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.arrow_forward),
+              label: Text(
+                count == 0
+                    ? l10n.tr('Select at least one offer')
+                    : count == 1
+                        ? l10n.tr('Continue with 1 offer')
+                        : l10n.tr('Continue with $count offers'),
+                style:
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1503,11 +1603,13 @@ class _OfferCard extends StatelessWidget {
   const _OfferCard({
     required this.sub,
     required this.plan,
+    required this.isSelected,
     required this.l10n,
     required this.onTap,
   });
   final UserSubscription sub;
   final MembershipPlan? plan;
+  final bool isSelected;
   final AppLocalizations l10n;
   final VoidCallback onTap;
 
@@ -1537,7 +1639,12 @@ class _OfferCard extends StatelessWidget {
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: statusColor.withValues(alpha: 0.3)),
+        side: BorderSide(
+          color: isSelected
+              ? const Color(0xFF0F766E)
+              : statusColor.withValues(alpha: 0.3),
+          width: isSelected ? 2 : 1,
+        ),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -1547,17 +1654,24 @@ class _OfferCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Plan name + status chip
+              // Plan name + selected check + status chip
               Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0F766E).withValues(alpha: 0.1),
+                      color: isSelected
+                          ? const Color(0xFF0F766E).withValues(alpha: 0.15)
+                          : const Color(0xFF0F766E).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.card_membership,
-                        size: 18, color: Color(0xFF0F766E)),
+                    child: Icon(
+                      isSelected
+                          ? Icons.check_circle_rounded
+                          : Icons.card_membership,
+                      size: 18,
+                      color: const Color(0xFF0F766E),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -1665,22 +1779,37 @@ class _OfferCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
-              // Select button
+              // Toggle button
               Align(
                 alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                  onPressed: onTap,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F766E),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                  ),
-                  icon: const Icon(Icons.receipt_long_outlined, size: 16),
-                  label: Text(l10n.tr('Select this offer'),
-                      style: const TextStyle(fontSize: 13)),
-                ),
+                child: isSelected
+                    ? OutlinedButton.icon(
+                        onPressed: onTap,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.red.shade600,
+                          side: BorderSide(color: Colors.red.shade300),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.remove_circle_outline, size: 16),
+                        label: Text(l10n.tr('Remove'),
+                            style: const TextStyle(fontSize: 13)),
+                      )
+                    : FilledButton.icon(
+                        onPressed: onTap,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F766E),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.add_circle_outline, size: 16),
+                        label: Text(l10n.tr('Select this offer'),
+                            style: const TextStyle(fontSize: 13)),
+                      ),
               ),
             ],
           ),
@@ -1715,11 +1844,78 @@ class _AmountCell extends StatelessWidget {
 // Step 3 — Confirm & generate
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _ConfirmStep extends StatelessWidget {
-  const _ConfirmStep({
-    required this.member,
+/// Read-only summary of one subscription inside the confirm step.
+class _OfferSummaryRow extends StatelessWidget {
+  const _OfferSummaryRow({
     required this.sub,
     required this.plan,
+    required this.currency,
+    required this.dateFmt,
+    required this.l10n,
+  });
+  final UserSubscription sub;
+  final MembershipPlan? plan;
+  final String currency;
+  final DateFormat dateFmt;
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          plan?.name ?? sub.planId,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+        ),
+        if (plan != null)
+          Text(plan!.offerTypeLabel,
+              style: const TextStyle(fontSize: 11, color: Colors.grey)),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Icon(Icons.calendar_today_outlined,
+                size: 11, color: Colors.grey.shade400),
+            const SizedBox(width: 4),
+            Text(
+              '${sub.startDate != null ? dateFmt.format(sub.startDate!) : '—'}  →  '
+              '${sub.endDate != null ? dateFmt.format(sub.endDate!) : l10n.tr('Open-ended')}',
+              style: const TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '$currency ${sub.totalAmount}',
+          style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              color: Colors.grey.shade800),
+        ),
+      ],
+    );
+  }
+}
+
+/// A pair of text controllers for one extra line-item row.
+class _ItemRowControllers {
+  _ItemRowControllers()
+      : desc = TextEditingController(),
+        amount = TextEditingController();
+  final TextEditingController desc;
+  final TextEditingController amount;
+  void dispose() {
+    desc.dispose();
+    amount.dispose();
+  }
+}
+
+class _ConfirmStep extends StatefulWidget {
+  const _ConfirmStep({
+    required this.member,
+    required this.subs,
+    required this.plans,
+    required this.invoiceNumberHint,
     required this.notesController,
     required this.error,
     required this.saving,
@@ -1727,26 +1923,112 @@ class _ConfirmStep extends StatelessWidget {
     required this.onSubmit,
   });
   final AppUser member;
-  final UserSubscription sub;
-  final MembershipPlan? plan;
+  final List<UserSubscription> subs;
+  final List<MembershipPlan?> plans;
+  final String invoiceNumberHint;
   final TextEditingController notesController;
   final String error;
   final bool saving;
   final AppLocalizations l10n;
-  final VoidCallback onSubmit;
+  /// Called with extra items and an optional custom invoice number.
+  /// Pass null for invoice number to use auto-generated numbering.
+  final void Function(List<InvoiceItem>, String?) onSubmit;
+
+  @override
+  State<_ConfirmStep> createState() => _ConfirmStepState();
+}
+
+class _ConfirmStepState extends State<_ConfirmStep> {
+  final List<_ItemRowControllers> _extraRows = [];
+  late final TextEditingController _invoiceNumberController;
+
+  @override
+  void initState() {
+    super.initState();
+    _invoiceNumberController =
+        TextEditingController(text: widget.invoiceNumberHint);
+  }
+
+  @override
+  void dispose() {
+    for (final row in _extraRows) {
+      row.dispose();
+    }
+    _invoiceNumberController.dispose();
+    super.dispose();
+  }
+
+  void _addRow() {
+    final row = _ItemRowControllers();
+    // Rebuild on amount changes so the live total stays accurate.
+    row.amount.addListener(() => setState(() {}));
+    setState(() => _extraRows.add(row));
+  }
+
+  void _removeRow(int index) {
+    setState(() {
+      _extraRows.removeAt(index).dispose();
+    });
+  }
+
+  int _extraTotal() {
+    return _extraRows.fold(
+      0,
+      (sum, row) => sum + (int.tryParse(row.amount.text.trim()) ?? 0),
+    );
+  }
+
+  List<InvoiceItem> _buildExtraItems() {
+    final currency = widget.subs.first.currency;
+    final result = <InvoiceItem>[];
+    for (final row in _extraRows) {
+      final desc = row.desc.text.trim();
+      final amt = int.tryParse(row.amount.text.trim()) ?? 0;
+      if (desc.isNotEmpty && amt > 0) {
+        result.add(InvoiceItem(description: desc, amount: amt, currency: currency));
+      }
+    }
+    return result;
+  }
+
+  /// Returns the custom invoice number if the admin changed it from the hint,
+  /// or null to use auto-generated numbering.
+  String? _customInvoiceNumber() {
+    final text = _invoiceNumberController.text.trim();
+    return (text.isNotEmpty && text != widget.invoiceNumberHint) ? text : null;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = widget.l10n;
     final dateFmt = DateFormat('d MMM yyyy');
-    final paid = sub.amountPaid;
-    final total = sub.totalAmount;
-    final remaining = total - paid;
+    final currency = widget.subs.first.currency;
+    final baseTotal =
+        widget.subs.fold<int>(0, (acc, s) => acc + s.totalAmount);
+    final total = baseTotal + _extraTotal();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Invoice Number ───────────────────────────────────────────────
+          _PreviewSection(
+            icon: Icons.tag,
+            title: l10n.tr('Invoice Number'),
+            child: TextField(
+              controller: _invoiceNumberController,
+              decoration: InputDecoration(
+                hintText: widget.invoiceNumberHint,
+                helperText:
+                    l10n.tr('Edit to override the auto-generated number'),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                contentPadding: const EdgeInsets.all(10),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           // ── Member ──────────────────────────────────────────────────────
           _PreviewSection(
             icon: Icons.person_outline,
@@ -1754,71 +2036,99 @@ class _ConfirmStep extends StatelessWidget {
             child: ListTile(
               contentPadding: EdgeInsets.zero,
               leading: CircleAvatar(
-                backgroundColor: const Color(0xFF0F766E).withValues(alpha: 0.1),
+                backgroundColor:
+                    const Color(0xFF0F766E).withValues(alpha: 0.1),
                 child: Text(
-                  member.displayName.isNotEmpty
-                      ? member.displayName[0].toUpperCase()
+                  widget.member.displayName.isNotEmpty
+                      ? widget.member.displayName[0].toUpperCase()
                       : '?',
                   style: const TextStyle(
                       color: Color(0xFF0F766E), fontWeight: FontWeight.w700),
                 ),
               ),
-              title: Text(member.displayName,
+              title: Text(widget.member.displayName,
                   style: const TextStyle(fontWeight: FontWeight.w700)),
-              subtitle:
-                  Text(member.email, style: const TextStyle(fontSize: 12)),
+              subtitle: Text(widget.member.email,
+                  style: const TextStyle(fontSize: 12)),
             ),
           ),
           const SizedBox(height: 12),
-          // ── Offer ────────────────────────────────────────────────────────
+          // ── Selected Offers ──────────────────────────────────────────────
           _PreviewSection(
             icon: Icons.card_membership_outlined,
-            title: l10n.tr('Offer'),
+            title: l10n.tr(widget.subs.length == 1
+                ? 'Offer'
+                : 'Offers (${widget.subs.length})'),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(plan?.name ?? sub.planId,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 15)),
-                if (plan != null)
-                  Text(plan!.offerTypeLabel,
-                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                        child: _AmountCell(
-                            label: l10n.tr('Total'),
-                            value: '${sub.currency} $total',
-                            color: Colors.grey.shade700)),
-                    Expanded(
-                        child: _AmountCell(
-                            label: l10n.tr('Paid'),
-                            value: '${sub.currency} $paid',
-                            color: Colors.green.shade700)),
-                    Expanded(
-                        child: _AmountCell(
-                            label: l10n.tr('Balance Due'),
-                            value: '${sub.currency} $remaining',
-                            color: remaining > 0
-                                ? Colors.red.shade700
-                                : Colors.green.shade700)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.calendar_today_outlined,
-                        size: 12, color: Colors.grey.shade400),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${sub.startDate != null ? dateFmt.format(sub.startDate!) : '—'}  →  '
-                      '${sub.endDate != null ? dateFmt.format(sub.endDate!) : l10n.tr('Open-ended')}',
-                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                for (int i = 0; i < widget.subs.length; i++) ...[
+                  if (i > 0) const Divider(height: 14),
+                  _OfferSummaryRow(
+                    sub: widget.subs[i],
+                    plan: i < widget.plans.length ? widget.plans[i] : null,
+                    currency: currency,
+                    dateFmt: dateFmt,
+                    l10n: l10n,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // ── Extra items ──────────────────────────────────────────────────
+          _PreviewSection(
+            icon: Icons.add_shopping_cart_outlined,
+            title: l10n.tr('Additional Items'),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (_extraRows.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      l10n.tr('No additional items'),
+                      style:
+                          const TextStyle(fontSize: 13, color: Colors.grey),
                     ),
-                  ],
+                  ),
+                for (int i = 0; i < _extraRows.length; i++) ...[
+                  _ExtraItemRow(
+                    key: ValueKey(i),
+                    row: _extraRows[i],
+                    currency: currency,
+                    onRemove: () => _removeRow(i),
+                    l10n: l10n,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                TextButton.icon(
+                  onPressed: _addRow,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(l10n.tr('Add Item')),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF0F766E),
+                    padding: const EdgeInsets.symmetric(horizontal: 0),
+                  ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // ── Invoice total preview ────────────────────────────────────────
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F4C45).withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                  color: const Color(0xFF0F4C45).withValues(alpha: 0.15)),
+            ),
+            child: _TotalPreviewRow(
+              label: l10n.tr('Invoice Total'),
+              value: '$currency $total',
+              bold: true,
             ),
           ),
           const SizedBox(height: 12),
@@ -1827,19 +2137,19 @@ class _ConfirmStep extends StatelessWidget {
             icon: Icons.notes_outlined,
             title: l10n.tr('Notes (optional)'),
             child: TextField(
-              controller: notesController,
+              controller: widget.notesController,
               maxLines: 3,
               decoration: InputDecoration(
                 hintText: l10n.tr('Add a note to this invoice…'),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8)),
                 contentPadding: const EdgeInsets.all(10),
               ),
             ),
           ),
           const SizedBox(height: 16),
           // ── Error ────────────────────────────────────────────────────────
-          if (error.isNotEmpty)
+          if (widget.error.isNotEmpty)
             Container(
               padding: const EdgeInsets.all(10),
               margin: const EdgeInsets.only(bottom: 12),
@@ -1848,20 +2158,24 @@ class _ConfirmStep extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.red.shade200),
               ),
-              child: Text(error, style: TextStyle(color: Colors.red.shade700)),
+              child: Text(widget.error,
+                  style: TextStyle(color: Colors.red.shade700)),
             ),
           // ── Generate button ──────────────────────────────────────────────
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: saving ? null : onSubmit,
+              onPressed: widget.saving
+                  ? null
+                  : () => widget.onSubmit(
+                      _buildExtraItems(), _customInvoiceNumber()),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF0F766E),
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10)),
               ),
-              icon: saving
+              icon: widget.saving
                   ? const SizedBox(
                       width: 18,
                       height: 18,
@@ -1870,12 +2184,97 @@ class _ConfirmStep extends StatelessWidget {
                     )
                   : const Icon(Icons.receipt_long_outlined),
               label: Text(
-                saving ? l10n.tr('Generating…') : l10n.tr('Generate Invoice'),
-                style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                widget.saving
+                    ? l10n.tr('Generating…')
+                    : l10n.tr('Generate Invoice'),
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w800),
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One row in the extra-items editor.
+class _ExtraItemRow extends StatelessWidget {
+  const _ExtraItemRow({
+    super.key,
+    required this.row,
+    required this.currency,
+    required this.onRemove,
+    required this.l10n,
+  });
+  final _ItemRowControllers row;
+  final String currency;
+  final VoidCallback onRemove;
+  final AppLocalizations l10n;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 3,
+          child: TextField(
+            controller: row.desc,
+            decoration: InputDecoration(
+              hintText: l10n.tr('Description'),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              isDense: true,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 2,
+          child: TextField(
+            controller: row.amount,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              hintText: l10n.tr('Amount'),
+              prefixText: '$currency ',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              isDense: true,
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: onRemove,
+          icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+          padding: const EdgeInsets.only(left: 4),
+          constraints: const BoxConstraints(),
+        ),
+      ],
+    );
+  }
+}
+
+class _TotalPreviewRow extends StatelessWidget {
+  const _TotalPreviewRow(
+      {required this.label, required this.value, this.bold = false});
+  final String label;
+  final String value;
+  final bool bold;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
+      fontSize: bold ? 14 : 13,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: style)),
+          Text(value, style: style),
         ],
       ),
     );

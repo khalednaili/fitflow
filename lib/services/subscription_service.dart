@@ -56,6 +56,17 @@ class SubscriptionService {
     });
   }
 
+  /// One-time fetch of all offers — avoids opening a persistent listener.
+  Future<List<MembershipPlan>> fetchAllOffers() async {
+    final snap = await _plansQuery.get();
+    final list = snap.docs
+        .map((doc) => MembershipPlan.fromSnapshot(doc))
+        .where((plan) => _matchesGymId(plan.gymId))
+        .toList();
+    list.sort((a, b) => a.name.compareTo(b.name));
+    return List<MembershipPlan>.unmodifiable(list);
+  }
+
   Future<void> createCheckinOffer({
     required String name,
     required String description,
@@ -223,6 +234,23 @@ class SubscriptionService {
 
       return filtered;
     });
+  }
+
+  /// One-time fetch of subscriptions for a specific user — avoids a persistent listener.
+  Future<List<UserSubscription>> fetchUserSubscriptions(String userId) async {
+    final snap = await _userSubscriptionsQuery
+        .where('userId', isEqualTo: userId)
+        .get();
+    final list = snap.docs
+        .map((doc) => UserSubscription.fromSnapshot(doc))
+        .where((s) => _matchesGymId(s.gymId))
+        .toList(growable: false);
+    list.sort((a, b) {
+      final aUpdated = a.endDate ?? DateTime(2100);
+      final bUpdated = b.endDate ?? DateTime(2100);
+      return bUpdated.compareTo(aUpdated);
+    });
+    return list;
   }
 
   Stream<UserSubscription?> streamUserSubscription(String userId) {
