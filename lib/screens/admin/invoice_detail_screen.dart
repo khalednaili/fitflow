@@ -38,6 +38,50 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
     );
   }
 
+  Future<void> _openEditInvoiceNumber(Invoice invoice) async {
+    final l10n = context.l10n;
+    final controller =
+        TextEditingController(text: invoice.invoiceNumber);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.tr('Edit Invoice Number')),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: l10n.tr('Invoice Number'),
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.tr('Cancel')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.tr('Save')),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (confirmed != true) return;
+    final newNumber = controller.text.trim();
+    if (newNumber.isEmpty || newNumber == invoice.invoiceNumber) return;
+    try {
+      await _billing.updateInvoiceNumber(invoice.id, newNumber);
+    } catch (e, s) {
+      await CrashLogger.log(e, s, reason: 'InvoiceDetailScreen._editInvoiceNumber');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<Invoice?>(
@@ -47,6 +91,7 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
         return _InvoiceView(
           invoice: invoice,
           onEditItems: () => _openEditItems(invoice),
+          onEditInvoiceNumber: () => _openEditInvoiceNumber(invoice),
         );
       },
     );
@@ -56,9 +101,14 @@ class _InvoiceDetailScreenState extends State<InvoiceDetailScreen> {
 // ── Stateless view ─────────────────────────────────────────────────────────────
 
 class _InvoiceView extends StatelessWidget {
-  const _InvoiceView({required this.invoice, required this.onEditItems});
+  const _InvoiceView({
+    required this.invoice,
+    required this.onEditItems,
+    required this.onEditInvoiceNumber,
+  });
   final Invoice invoice;
   final VoidCallback onEditItems;
+  final VoidCallback onEditInvoiceNumber;
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +125,11 @@ class _InvoiceView extends StatelessWidget {
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
+          IconButton(
+            tooltip: l10n.tr('Edit Invoice Number'),
+            icon: const Icon(Icons.tag),
+            onPressed: onEditInvoiceNumber,
+          ),
           IconButton(
             tooltip: l10n.tr('Edit Items'),
             icon: const Icon(Icons.edit_note_outlined),

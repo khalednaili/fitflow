@@ -16,6 +16,8 @@ import '../../services/booking_service.dart';
 import '../../services/class_service.dart';
 import '../../services/member_service.dart';
 import '../../services/personal_training_service.dart';
+import '../../models/coach_unavailability.dart';
+import '../../services/coach_availability_service.dart';
 import '../../services/subscription_service.dart';
 import '../../widgets/user_avatar.dart';
 import '../admin/admin_calendar_screen.dart';
@@ -69,7 +71,7 @@ class _CoachPortalBody extends StatefulWidget {
 
 class _CoachPortalBodyState extends State<_CoachPortalBody>
     with SingleTickerProviderStateMixin {
-  late final TabController _tc = TabController(length: 7, vsync: this);
+  late final TabController _tc = TabController(length: 8, vsync: this);
   late final _classService = ClassService(gymId: widget.coach.gymId);
 
   @override
@@ -152,6 +154,13 @@ class _CoachPortalBodyState extends State<_CoachPortalBody>
                     Text(context.l10n.tr('Cover')),
                   ]),
                 ),
+                Tab(
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.event_busy_outlined, size: 15),
+                    SizedBox(width: 6),
+                    Text(context.l10n.tr('Availability')),
+                  ]),
+                ),
               ],
             ),
           ),
@@ -176,6 +185,10 @@ class _CoachPortalBodyState extends State<_CoachPortalBody>
                 _CoverTab(
                   coach: coach,
                   classService: _classService,
+                ),
+                _AvailabilityTab(
+                  coachId: coach.id,
+                  gymId: coach.gymId,
                 ),
               ],
             ),
@@ -5556,6 +5569,474 @@ class _CapacityStat extends StatelessWidget {
           Text(label,
               style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant)),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Availability Tab — coaches block off unavailable slots
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AvailabilityTab extends StatefulWidget {
+  const _AvailabilityTab({required this.coachId, required this.gymId});
+  final String coachId;
+  final String gymId;
+
+  @override
+  State<_AvailabilityTab> createState() => _AvailabilityTabState();
+}
+
+class _AvailabilityTabState extends State<_AvailabilityTab> {
+  late final CoachAvailabilityService _svc =
+      CoachAvailabilityService(gymId: widget.gymId);
+
+  Future<void> _openAddSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _AddUnavailabilitySheet(
+        coachId: widget.coachId,
+        service: _svc,
+      ),
+    );
+  }
+
+  Future<void> _delete(CoachUnavailability entry) async {
+    final l10n = context.l10n;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.tr('Remove Block')),
+        content: Text(l10n.tr('Remove this unavailability block?')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.tr('Cancel')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(l10n.tr('Remove')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _svc.delete(entry.id);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Scaffold(
+      backgroundColor: const Color(0xFFF1F5F9),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _openAddSheet,
+        backgroundColor: const Color(0xFF0F766E),
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.block_outlined),
+        label: Text(l10n.tr('Block Time')),
+      ),
+      body: StreamBuilder<List<CoachUnavailability>>(
+        stream: _svc.streamUpcoming(widget.coachId),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final items = snap.data ?? [];
+          if (items.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.event_available_outlined,
+                      size: 56, color: Colors.grey.shade400),
+                  const SizedBox(height: 12),
+                  Text(
+                    l10n.tr('No blocked slots'),
+                    style: TextStyle(
+                        color: Colors.grey.shade600, fontSize: 16),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    l10n.tr('Tap "Block Time" to mark yourself unavailable.'),
+                    style: TextStyle(
+                        color: Colors.grey.shade400, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            );
+          }
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, i) =>
+                _UnavailabilityCard(entry: items[i], onDelete: _delete),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Unavailability card
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _UnavailabilityCard extends StatelessWidget {
+  const _UnavailabilityCard(
+      {required this.entry, required this.onDelete});
+  final CoachUnavailability entry;
+  final void Function(CoachUnavailability) onDelete;
+
+  static const _reasonIcons = <String, IconData>{
+    'Sick': Icons.sick_outlined,
+    'Vacation': Icons.beach_access_outlined,
+    'Personal': Icons.person_outline,
+    'Other': Icons.event_busy_outlined,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final dateFmt = DateFormat('EEE d MMM yyyy');
+    final timeFmt = DateFormat('HH:mm');
+    final isSameDay = entry.startTime.year == entry.endTime.year &&
+        entry.startTime.month == entry.endTime.month &&
+        entry.startTime.day == entry.endTime.day;
+
+    final timeLabel = entry.allDay
+        ? context.l10n.tr('All day')
+        : isSameDay
+            ? '${timeFmt.format(entry.startTime)} – ${timeFmt.format(entry.endTime)}'
+            : '${dateFmt.format(entry.startTime)}  →  ${dateFmt.format(entry.endTime)}';
+
+    final dateLabel = isSameDay || entry.allDay
+        ? dateFmt.format(entry.startTime)
+        : null;
+
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor:
+              const Color(0xFFDC2626).withValues(alpha: 0.1),
+          child: Icon(
+            _reasonIcons[entry.reason] ?? Icons.event_busy_outlined,
+            color: const Color(0xFFDC2626),
+            size: 20,
+          ),
+        ),
+        title: Text(
+          entry.reason.isNotEmpty
+              ? entry.reason
+              : context.l10n.tr('Unavailable'),
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (dateLabel != null) Text(dateLabel),
+            Text(timeLabel,
+                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+          ],
+        ),
+        trailing: IconButton(
+          icon: const Icon(Icons.delete_outline, color: Color(0xFFDC2626)),
+          tooltip: context.l10n.tr('Remove'),
+          onPressed: () => onDelete(entry),
+        ),
+        isThreeLine: dateLabel != null,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Add unavailability bottom sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AddUnavailabilitySheet extends StatefulWidget {
+  const _AddUnavailabilitySheet(
+      {required this.coachId, required this.service});
+  final String coachId;
+  final CoachAvailabilityService service;
+
+  @override
+  State<_AddUnavailabilitySheet> createState() =>
+      _AddUnavailabilitySheetState();
+}
+
+class _AddUnavailabilitySheetState extends State<_AddUnavailabilitySheet> {
+  static const _reasons = ['Sick', 'Vacation', 'Personal', 'Other'];
+
+  DateTime _startDate = DateTime.now();
+  DateTime _endDate = DateTime.now();
+  TimeOfDay _startTime = TimeOfDay.now();
+  TimeOfDay _endTime =
+      TimeOfDay.fromDateTime(DateTime.now().add(const Duration(hours: 1)));
+  bool _allDay = false;
+  String _reason = 'Personal';
+  bool _saving = false;
+  String _error = '';
+
+  DateTime get _startDateTime => _allDay
+      ? DateTime(_startDate.year, _startDate.month, _startDate.day)
+      : DateTime(_startDate.year, _startDate.month, _startDate.day,
+          _startTime.hour, _startTime.minute);
+
+  DateTime get _endDateTime => _allDay
+      ? DateTime(
+          _endDate.year, _endDate.month, _endDate.day, 23, 59, 59)
+      : DateTime(_endDate.year, _endDate.month, _endDate.day,
+          _endTime.hour, _endTime.minute);
+
+  Future<void> _pickDate({required bool isStart}) async {
+    final initial = isStart ? _startDate : _endDate;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _startDate = picked;
+        if (_endDate.isBefore(_startDate)) _endDate = _startDate;
+      } else {
+        _endDate = picked;
+      }
+    });
+  }
+
+  Future<void> _pickTime({required bool isStart}) async {
+    final initial = isStart ? _startTime : _endTime;
+    final picked =
+        await showTimePicker(context: context, initialTime: initial);
+    if (picked == null) return;
+    setState(() {
+      if (isStart) {
+        _startTime = picked;
+      } else {
+        _endTime = picked;
+      }
+    });
+  }
+
+  Future<void> _save() async {
+    final start = _startDateTime;
+    final end = _endDateTime;
+    if (!end.isAfter(start)) {
+      setState(() => _error = context.l10n.tr('End must be after start.'));
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = '';
+    });
+    try {
+      await widget.service.add(
+        coachId: widget.coachId,
+        startTime: start,
+        endTime: end,
+        allDay: _allDay,
+        reason: _reason,
+      );
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = e.toString();
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final dateFmt = DateFormat('EEE d MMM yyyy');
+    final timeFmt = DateFormat('HH:mm');
+
+    return Padding(
+      padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              l10n.tr('Block Unavailable Time'),
+              style: const TextStyle(
+                  fontSize: 17, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Reason ──────────────────────────────────────────────
+            Text(l10n.tr('Reason'),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 13)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: _reasons
+                  .map((r) => ChoiceChip(
+                        label: Text(l10n.tr(r)),
+                        selected: _reason == r,
+                        selectedColor: const Color(0xFF0F766E)
+                            .withValues(alpha: 0.15),
+                        onSelected: (_) => setState(() => _reason = r),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 20),
+
+            // ── All day toggle ───────────────────────────────────────
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.tr('All day')),
+              value: _allDay,
+              activeColor: const Color(0xFF0F766E),
+              onChanged: (v) => setState(() => _allDay = v),
+            ),
+            const SizedBox(height: 8),
+
+            // ── Date / time pickers ──────────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: _PickerTile(
+                    label: l10n.tr('Start'),
+                    value: _allDay
+                        ? dateFmt.format(_startDate)
+                        : '${dateFmt.format(_startDate)}\n${timeFmt.format(_startDateTime)}',
+                    icon: Icons.calendar_today_outlined,
+                    onTap: () async {
+                      await _pickDate(isStart: true);
+                      if (!_allDay && mounted) {
+                        await _pickTime(isStart: true);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _PickerTile(
+                    label: l10n.tr('End'),
+                    value: _allDay
+                        ? dateFmt.format(_endDate)
+                        : '${dateFmt.format(_endDate)}\n${timeFmt.format(_endDateTime)}',
+                    icon: Icons.calendar_today_outlined,
+                    onTap: () async {
+                      await _pickDate(isStart: false);
+                      if (!_allDay && mounted) {
+                        await _pickTime(isStart: false);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            if (_error.isNotEmpty) ...[
+              Text(_error,
+                  style: const TextStyle(color: Colors.red, fontSize: 13)),
+              const SizedBox(height: 12),
+            ],
+
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _saving ? null : _save,
+                style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F766E),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : Text(l10n.tr('Save Block'),
+                        style: const TextStyle(fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PickerTile extends StatelessWidget {
+  const _PickerTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.onTap,
+  });
+  final String label;
+  final String value;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(icon, size: 15, color: const Color(0xFF0F766E)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(value,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600)),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

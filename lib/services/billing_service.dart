@@ -335,6 +335,14 @@ class BillingService {
     return updated;
   }
 
+  Future<void> updateInvoiceNumber(
+      String invoiceId, String newNumber) async {
+    await _firestore.collection('invoices').doc(invoiceId).update(<String, dynamic>{
+      'invoiceNumber': newNumber.trim(),
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    });
+  }
+
   Future<void> deleteInvoice(String invoiceId) async {
     await _firestore.collection('invoices').doc(invoiceId).delete();
   }

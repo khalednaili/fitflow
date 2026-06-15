@@ -4,8 +4,10 @@ import 'package:intl/intl.dart';
 
 import '../../../l10n/app_localizations.dart';
 import '../../../models/app_user.dart';
+import '../../../models/coach_unavailability.dart';
 import '../../../models/gym_class.dart';
 import '../../../services/class_service.dart';
+import '../../../services/coach_availability_service.dart';
 import '../../../services/member_service.dart';
 import '../../../widgets/role_widgets.dart';
 import '../member_detail_screen.dart';
@@ -26,6 +28,8 @@ class AdminCoachesTab extends StatefulWidget {
 class _AdminCoachesTabState extends State<AdminCoachesTab> {
   late final _memberService = MemberService(gymId: widget.gymId);
   late final _classService = ClassService(gymId: widget.gymId);
+  late final _availabilityService =
+      CoachAvailabilityService(gymId: widget.gymId);
   final _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -152,47 +156,68 @@ class _AdminCoachesTabState extends State<AdminCoachesTab> {
             return StreamBuilder<List<GymClass>>(
               stream: _classService.streamUpcomingClasses(),
               builder: (context, classSnap) {
-                final coaches = coachSnap.data ?? <AppUser>[];
-                final upcomingClasses = classSnap.data ?? <GymClass>[];
-                final filtered = _filter(coaches);
-                final isLoading =
-                    coachSnap.connectionState == ConnectionState.waiting;
+                return StreamBuilder<List<CoachUnavailability>>(
+                  stream: _availabilityService.streamGymUpcoming(),
+                  builder: (context, unavailSnap) {
+                    final coaches = coachSnap.data ?? <AppUser>[];
+                    final upcomingClasses = classSnap.data ?? <GymClass>[];
+                    final filtered = _filter(coaches);
+                    final isLoading =
+                        coachSnap.connectionState == ConnectionState.waiting;
 
-                return Column(
-                  children: [
-                    _CoachesHeader(
-                      coaches: coaches,
-                      searchController: _searchController,
-                      searchQuery: _searchQuery,
-                      onSearchChanged: (v) => setState(() => _searchQuery = v),
-                      isWide: isWide,
-                    ),
-                    Expanded(
-                      child: isLoading
-                          ? const Center(child: CircularProgressIndicator())
-                          : filtered.isEmpty
-                              ? _EmptyState(hasSearch: _searchQuery.isNotEmpty)
-                              : isWide
-                                  ? _CoachesTable(
-                                      coaches: filtered,
-                                      upcomingClasses: upcomingClasses,
-                                      onProfile: _openProfile,
-                                      onSchedule: (c) =>
-                                          _openSchedule(c, upcomingClasses),
-                                      onCopyEmail: _copyEmail,
-                                      onChangeRole: _showChangeRoleDialog,
-                                    )
-                                  : _CoachesList(
-                                      coaches: filtered,
-                                      upcomingClasses: upcomingClasses,
-                                      onProfile: _openProfile,
-                                      onSchedule: (c) =>
-                                          _openSchedule(c, upcomingClasses),
-                                      onCopyEmail: _copyEmail,
-                                      onChangeRole: _showChangeRoleDialog,
-                                    ),
-                    ),
-                  ],
+                    // Coaches who are currently in a blocked slot right now.
+                    final now = DateTime.now();
+                    final currentlyBlockedIds = (unavailSnap.data ?? [])
+                        .where((u) =>
+                            u.startTime.isBefore(now) &&
+                            u.endTime.isAfter(now))
+                        .map((u) => u.coachId)
+                        .toSet();
+
+                    return Column(
+                      children: [
+                        _CoachesHeader(
+                          coaches: coaches,
+                          searchController: _searchController,
+                          searchQuery: _searchQuery,
+                          onSearchChanged: (v) =>
+                              setState(() => _searchQuery = v),
+                          isWide: isWide,
+                        ),
+                        Expanded(
+                          child: isLoading
+                              ? const Center(
+                                  child: CircularProgressIndicator())
+                              : filtered.isEmpty
+                                  ? _EmptyState(
+                                      hasSearch: _searchQuery.isNotEmpty)
+                                  : isWide
+                                      ? _CoachesTable(
+                                          coaches: filtered,
+                                          upcomingClasses: upcomingClasses,
+                                          currentlyBlockedIds:
+                                              currentlyBlockedIds,
+                                          onProfile: _openProfile,
+                                          onSchedule: (c) =>
+                                              _openSchedule(c, upcomingClasses),
+                                          onCopyEmail: _copyEmail,
+                                          onChangeRole: _showChangeRoleDialog,
+                                        )
+                                      : _CoachesList(
+                                          coaches: filtered,
+                                          upcomingClasses: upcomingClasses,
+                                          currentlyBlockedIds:
+                                              currentlyBlockedIds,
+                                          onProfile: _openProfile,
+                                          onSchedule: (c) =>
+                                              _openSchedule(c, upcomingClasses),
+                                          onCopyEmail: _copyEmail,
+                                          onChangeRole: _showChangeRoleDialog,
+                                        ),
+                        ),
+                      ],
+                    );
+                  },
                 );
               },
             );
@@ -316,6 +341,7 @@ class _CoachesList extends StatelessWidget {
   const _CoachesList({
     required this.coaches,
     required this.upcomingClasses,
+    required this.currentlyBlockedIds,
     required this.onProfile,
     required this.onSchedule,
     required this.onCopyEmail,
@@ -324,6 +350,7 @@ class _CoachesList extends StatelessWidget {
 
   final List<AppUser> coaches;
   final List<GymClass> upcomingClasses;
+  final Set<String> currentlyBlockedIds;
   final ValueChanged<AppUser> onProfile;
   final ValueChanged<AppUser> onSchedule;
   final ValueChanged<AppUser> onCopyEmail;
@@ -340,6 +367,7 @@ class _CoachesList extends StatelessWidget {
         upcomingCount: upcomingClasses
             .where((c) => c.coachIds.contains(coaches[i].id))
             .length,
+        isCurrentlyBlocked: currentlyBlockedIds.contains(coaches[i].id),
         onProfile: onProfile,
         onSchedule: onSchedule,
         onCopyEmail: onCopyEmail,
@@ -353,6 +381,7 @@ class _CoachCard extends StatelessWidget {
   const _CoachCard({
     required this.coach,
     required this.upcomingCount,
+    required this.isCurrentlyBlocked,
     required this.onProfile,
     required this.onSchedule,
     required this.onCopyEmail,
@@ -361,6 +390,7 @@ class _CoachCard extends StatelessWidget {
 
   final AppUser coach;
   final int upcomingCount;
+  final bool isCurrentlyBlocked;
   final ValueChanged<AppUser> onProfile;
   final ValueChanged<AppUser> onSchedule;
   final ValueChanged<AppUser> onCopyEmail;
@@ -438,6 +468,34 @@ class _CoachCard extends StatelessWidget {
                           const SizedBox(width: 8),
                           _ClassCountBadge(count: upcomingCount),
                         ],
+                        if (isCurrentlyBlocked) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDC2626)
+                                  .withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.event_busy_outlined,
+                                    size: 11, color: Color(0xFFDC2626)),
+                                const SizedBox(width: 3),
+                                Text(
+                                  context.l10n.tr('Unavailable'),
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: Color(0xFFDC2626),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ],
@@ -511,6 +569,7 @@ class _CoachesTable extends StatelessWidget {
   const _CoachesTable({
     required this.coaches,
     required this.upcomingClasses,
+    required this.currentlyBlockedIds,
     required this.onProfile,
     required this.onSchedule,
     required this.onCopyEmail,
@@ -519,6 +578,7 @@ class _CoachesTable extends StatelessWidget {
 
   final List<AppUser> coaches;
   final List<GymClass> upcomingClasses;
+  final Set<String> currentlyBlockedIds;
   final ValueChanged<AppUser> onProfile;
   final ValueChanged<AppUser> onSchedule;
   final ValueChanged<AppUser> onCopyEmail;
@@ -561,6 +621,7 @@ class _CoachesTable extends StatelessWidget {
               return _TableRow(
                 coach: coach,
                 upcomingCount: classCount,
+                isCurrentlyBlocked: currentlyBlockedIds.contains(coach.id),
                 onProfile: onProfile,
                 onSchedule: onSchedule,
                 onCopyEmail: onCopyEmail,
@@ -596,6 +657,7 @@ class _TableRow extends StatelessWidget {
   const _TableRow({
     required this.coach,
     required this.upcomingCount,
+    required this.isCurrentlyBlocked,
     required this.onProfile,
     required this.onSchedule,
     required this.onCopyEmail,
@@ -604,6 +666,7 @@ class _TableRow extends StatelessWidget {
 
   final AppUser coach;
   final int upcomingCount;
+  final bool isCurrentlyBlocked;
   final ValueChanged<AppUser> onProfile;
   final ValueChanged<AppUser> onSchedule;
   final ValueChanged<AppUser> onCopyEmail;
@@ -671,13 +734,44 @@ class _TableRow extends StatelessWidget {
             ),
             SizedBox(
               width: 110,
-              child: upcomingCount > 0
-                  ? _ClassCountBadge(count: upcomingCount)
-                  : Text(
-                      '—',
-                      style:
-                          TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (upcomingCount > 0) _ClassCountBadge(count: upcomingCount),
+                  if (upcomingCount == 0)
+                    Text('—',
+                        style: TextStyle(
+                            color: cs.onSurfaceVariant, fontSize: 13)),
+                  if (isCurrentlyBlocked) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDC2626).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.event_busy_outlined,
+                              size: 10, color: Color(0xFFDC2626)),
+                          const SizedBox(width: 3),
+                          Text(
+                            context.l10n.tr('Unavailable'),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Color(0xFFDC2626),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                  ],
+                ],
+              ),
             ),
             SizedBox(
               width: 48,
