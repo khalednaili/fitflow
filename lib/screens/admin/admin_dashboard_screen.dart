@@ -16,6 +16,7 @@ import 'tabs/admin_offers_tab.dart';
 import 'tabs/admin_templates_tab.dart';
 import 'tabs/admin_personal_training_tab.dart';
 import 'tabs/admin_coaches_tab.dart';
+import 'tabs/admin_wod_calendar_tab.dart';
 import 'tabs/admin_wod_tab.dart';
 import 'tabs/admin_billing_tab.dart';
 import 'tabs/admin_finance_tab.dart';
@@ -36,6 +37,9 @@ class _AdminTab {
   final Color color;
 }
 
+// ⚠️  DUAL-FILE NAV: When adding a new tab here, you MUST also update
+//    admin_shell.dart (_adminSections + _buildContent) for the web sidebar,
+//    otherwise the new tab will be invisible on Chrome/web.
 const _tabs = <_AdminTab>[
   _AdminTab(
     label: 'Calendar',
@@ -59,6 +63,12 @@ const _tabs = <_AdminTab>[
     label: 'Workouts',
     icon: Icons.local_fire_department_outlined,
     activeIcon: Icons.local_fire_department,
+    color: Color(0xFFF97316),
+  ),
+  _AdminTab(
+    label: 'WOD Calendar',
+    icon: Icons.calendar_today_outlined,
+    activeIcon: Icons.calendar_today,
     color: Color(0xFFF97316),
   ),
   _AdminTab(
@@ -152,20 +162,44 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   }
 
   List<Widget> _buildTabChildren(String gymId, String? uid) => [
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminCalendarScreen(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminClassesTab(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminTemplatesTab(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminWodTab(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminMembersTab(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminOffersTab(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminAttendanceTab(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminCheckinTab(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminDropInsTab(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminPersonalTrainingTab(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminCoachesTab(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminBillingTab(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminFinanceTab(gymId: gymId)),
-        _WithAdminBanner(gymId: gymId, userId: uid, child: AdminAnnouncementsTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId,
+            userId: uid,
+            child: AdminCalendarScreen(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminClassesTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminTemplatesTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminWodTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId,
+            userId: uid,
+            child: AdminWodCalendarTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminMembersTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminOffersTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminAttendanceTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminCheckinTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminDropInsTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId,
+            userId: uid,
+            child: AdminPersonalTrainingTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminCoachesTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminBillingTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminFinanceTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId,
+            userId: uid,
+            child: AdminAnnouncementsTab(gymId: gymId)),
       ];
 
   @override
@@ -200,16 +234,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
                         ? Stream<AppUser?>.empty()
                         : _memberService.streamUser(uid),
                     builder: (context, userSnap) {
-                      if (userSnap.connectionState ==
-                          ConnectionState.waiting) {
-                        return const Center(
-                            child: CircularProgressIndicator());
+                      if (userSnap.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
                       }
                       final gymId = userSnap.data?.gymId ?? '';
                       if (gymId.isEmpty) {
                         return Center(
-                            child:
-                                Text(context.l10n.tr('No gym assigned')));
+                            child: Text(context.l10n.tr('No gym assigned')));
                       }
                       return TabBarView(
                         controller: _tabController,
@@ -776,7 +807,8 @@ class _SidebarNav extends StatelessWidget {
           else
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 6),
-              child: Divider(color: Colors.white12, height: 1, indent: 12, endIndent: 12),
+              child: Divider(
+                  color: Colors.white12, height: 1, indent: 12, endIndent: 12),
             ),
           for (final idx in indices)
             _SidebarItem(
@@ -839,9 +871,8 @@ class _SidebarItem extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: selected
-              ? tab.color.withValues(alpha: 0.85)
-              : Colors.transparent,
+          color:
+              selected ? tab.color.withValues(alpha: 0.85) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
@@ -854,8 +885,7 @@ class _SidebarItem extends StatelessWidget {
                 style: TextStyle(
                   color: iconColor,
                   fontSize: 13,
-                  fontWeight:
-                      selected ? FontWeight.w600 : FontWeight.w400,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 ),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -970,8 +1000,7 @@ class _SidebarFooter extends StatelessWidget {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Icon(Icons.logout_rounded,
-                        color: Colors.white.withValues(alpha: 0.55),
-                        size: 15),
+                        color: Colors.white.withValues(alpha: 0.55), size: 15),
                   ),
                 ),
               ),

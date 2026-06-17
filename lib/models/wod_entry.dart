@@ -138,6 +138,8 @@ class WodEntry {
     this.timeCap = '',
     this.memberNote = '',
     this.coachNote = '',
+    this.warmUp = '',
+    this.coolDown = '',
     this.gymId = '',
     this.parts = const [],
   });
@@ -165,6 +167,8 @@ class WodEntry {
 
   /// Private note visible only to coaches and admins.
   final String coachNote;
+  final String warmUp;
+  final String coolDown;
   final String gymId;
 
   /// Multi-part structure. When non-empty this is the primary representation.
@@ -188,6 +192,8 @@ class WodEntry {
       timeCap: (d['timeCap'] ?? '') as String,
       memberNote: (d['memberNote'] ?? '') as String,
       coachNote: (d['coachNote'] ?? '') as String,
+      warmUp: (d['warmUp'] ?? '') as String,
+      coolDown: (d['coolDown'] ?? '') as String,
       gymId: (d['gymId'] ?? '') as String,
       parts: ((d['parts'] as List<dynamic>?) ?? [])
           .map((p) => WodPart.fromMap(Map<String, dynamic>.from(p as Map)))
@@ -210,6 +216,8 @@ class WodEntry {
         'timeCap': timeCap,
         'memberNote': memberNote,
         'coachNote': coachNote,
+        'warmUp': warmUp,
+        'coolDown': coolDown,
         'gymId': gymId,
         'parts': parts.map((p) => p.toMap()).toList(),
       };

@@ -49,6 +49,43 @@ class WodService {
     });
   }
 
+  /// Stream all WODs in [month] (first day inclusive, next month exclusive).
+  Stream<List<WodEntry>> streamForMonth(DateTime month) {
+    final start = Timestamp.fromDate(DateTime(month.year, month.month, 1));
+    final end = Timestamp.fromDate(DateTime(month.year, month.month + 1, 1));
+    return _wodQuery
+        .where('date', isGreaterThanOrEqualTo: start)
+        .where('date', isLessThan: end)
+        .snapshots()
+        .map((s) {
+      final list = s.docs
+          .map(WodEntry.fromSnapshot)
+          .where((entry) => _matchesGymId(entry.gymId))
+          .toList();
+      list.sort((a, b) => a.date.compareTo(b.date));
+      return List<WodEntry>.unmodifiable(list);
+    });
+  }
+
+  /// Streams WODs whose date falls in [start, end] (both inclusive).
+  Stream<List<WodEntry>> streamForRange(DateTime start, DateTime end) {
+    final s = Timestamp.fromDate(DateTime(start.year, start.month, start.day));
+    final e = Timestamp.fromDate(
+        DateTime(end.year, end.month, end.day).add(const Duration(days: 1)));
+    return _wodQuery
+        .where('date', isGreaterThanOrEqualTo: s)
+        .where('date', isLessThan: e)
+        .snapshots()
+        .map((snap) {
+      final list = snap.docs
+          .map(WodEntry.fromSnapshot)
+          .where((entry) => _matchesGymId(entry.gymId))
+          .toList();
+      list.sort((a, b) => a.date.compareTo(b.date));
+      return List<WodEntry>.unmodifiable(list);
+    });
+  }
+
   Stream<List<WodEntry>> streamRecent(int limit) => _wodQuery.snapshots().map((s) {
         final list = s.docs
             .map(WodEntry.fromSnapshot)

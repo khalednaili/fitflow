@@ -16,6 +16,7 @@ import 'tabs/admin_offers_tab.dart';
 import 'tabs/admin_personal_training_tab.dart';
 import 'tabs/admin_templates_tab.dart';
 import 'tabs/admin_coaches_tab.dart';
+import 'tabs/admin_wod_calendar_tab.dart';
 import 'tabs/admin_wod_tab.dart';
 import 'tabs/admin_billing_tab.dart';
 import 'tabs/admin_finance_tab.dart';
@@ -47,6 +48,9 @@ class _AdminItem {
   final Color color;
 }
 
+// ⚠️  DUAL-FILE NAV: When adding a new item here, you MUST also update
+//    admin_dashboard_screen.dart (_tabs + _buildTabChildren + _sidebarGroups)
+//    for the mobile sidebar, otherwise the new tab will be invisible on mobile.
 const _adminSections = <_AdminSection>[
   _AdminSection(title: 'SCHEDULING', items: [
     _AdminItem(
@@ -81,6 +85,13 @@ const _adminSections = <_AdminSection>[
     ),
     _AdminItem(
       index: 4,
+      label: 'WOD Calendar',
+      icon: Icons.calendar_today_outlined,
+      activeIcon: Icons.calendar_today,
+      color: Color(0xFFF97316),
+    ),
+    _AdminItem(
+      index: 14,
       label: 'Private PT',
       icon: Icons.person_pin_outlined,
       activeIcon: Icons.person_pin,
@@ -243,7 +254,8 @@ class _AdminShellState extends State<AdminShell> {
       1 => AdminClassesTab(gymId: gymId),
       2 => AdminTemplatesTab(gymId: gymId),
       3 => AdminWodTab(gymId: gymId),
-      4 => AdminPersonalTrainingTab(gymId: gymId),
+      4 => AdminWodCalendarTab(gymId: gymId),
+      14 => AdminPersonalTrainingTab(gymId: gymId),
       5 => AdminMembersTab(gymId: gymId),
       6 => AdminAttendanceTab(gymId: gymId),
       7 => AdminCheckinTab(gymId: gymId),

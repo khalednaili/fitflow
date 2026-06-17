@@ -12,15 +12,6 @@ import '../../../services/wod_service.dart';
 
 // ── Shared constants ──────────────────────────────────────────────────────────
 
-const _kPartAccents = [
-  Color(0xFF2563EB),
-  Color(0xFFF97316),
-  Color(0xFF7C3AED),
-  Color(0xFF059669),
-  Color(0xFFDC2626),
-  Color(0xFF0891B2),
-];
-
 class _FmtMeta {
   const _FmtMeta(this.color, this.icon);
   final Color color;
@@ -208,45 +199,55 @@ class AdminWodTab extends StatelessWidget {
   }
 
   void _showEditor(BuildContext context, WodService svc, {WodEntry? existing}) {
-    final isWide = MediaQuery.sizeOf(context).width >= 600;
-    final l10n = context.l10n;
-    final dialog = _WodEditorDialog(
-      existing: existing,
-      service: svc,
-      classTypeService: ClassTypeService(gymId: gymId),
-      fullscreen: !isWide,
-    );
-
-    if (isWide) {
-      showDialog<void>(
-        context: context,
-        builder: (_) => dialog,
-      );
-      return;
-    }
-
-    showGeneralDialog<void>(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: l10n.tr('Workout editor'),
-      barrierColor: Colors.black.withAlpha(120),
-      transitionDuration: const Duration(milliseconds: 280),
-      pageBuilder: (_, __, ___) => dialog,
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        final curved = CurvedAnimation(
-          parent: animation,
-          curve: Curves.easeOutCubic,
-        );
-        return SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 1),
-            end: Offset.zero,
-          ).animate(curved),
-          child: FadeTransition(opacity: curved, child: child),
-        );
-      },
-    );
+    showWodEditor(context, svc: svc, gymId: gymId, existing: existing);
   }
+}
+
+/// Shows the WOD editor dialog/sheet.
+/// Pass [existing] to edit, or [defaultDate] to pre-fill the date for a new WOD.
+void showWodEditor(
+  BuildContext context, {
+  required WodService svc,
+  required String gymId,
+  WodEntry? existing,
+  DateTime? defaultDate,
+}) {
+  final isWide = MediaQuery.sizeOf(context).width >= 600;
+  final l10n = context.l10n;
+  final dialog = WodEditorDialog(
+    existing: existing,
+    defaultDate: defaultDate,
+    service: svc,
+    classTypeService: ClassTypeService(gymId: gymId),
+    fullscreen: !isWide,
+  );
+
+  if (isWide) {
+    showDialog<void>(context: context, builder: (_) => dialog);
+    return;
+  }
+
+  showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: l10n.tr('Workout editor'),
+    barrierColor: Colors.black.withAlpha(120),
+    transitionDuration: const Duration(milliseconds: 280),
+    pageBuilder: (_, __, ___) => dialog,
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 1),
+          end: Offset.zero,
+        ).animate(curved),
+        child: FadeTransition(opacity: curved, child: child),
+      );
+    },
+  );
 }
 
 class _WodAdminCard extends StatelessWidget {
@@ -489,34 +490,40 @@ class _WodAdminCard extends StatelessWidget {
       a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
-class _WodEditorDialog extends StatefulWidget {
-  const _WodEditorDialog({
+class WodEditorDialog extends StatefulWidget {
+  const WodEditorDialog({
+    super.key,
     this.existing,
+    this.defaultDate,
     required this.service,
     required this.classTypeService,
     this.fullscreen = false,
   });
 
   final WodEntry? existing;
+  final DateTime? defaultDate;
   final WodService service;
   final ClassTypeService classTypeService;
   final bool fullscreen;
 
   @override
-  State<_WodEditorDialog> createState() => _WodEditorDialogState();
+  State<WodEditorDialog> createState() => _WodEditorDialogState();
 }
 
-class _WodEditorDialogState extends State<_WodEditorDialog> {
+class _WodEditorDialogState extends State<WodEditorDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleCtrl;
   late final TextEditingController _descCtrl;
   late DateTime _date;
   late List<_PartData> _parts;
+  final List<_BenchmarkData> _benchmarks = [];
   bool _saving = false;
   String _classTypeId = '';
   String _classTypeName = '';
   final _memberNoteCtrl = TextEditingController();
-  final _coachNoteCtrl = TextEditingController();
+  final _coachNoteCtrl  = TextEditingController();
+  final _warmUpCtrl     = TextEditingController();
+  final _coolDownCtrl   = TextEditingController();
 
   bool _didInit = false;
 
@@ -529,11 +536,13 @@ class _WodEditorDialogState extends State<_WodEditorDialog> {
     final w = widget.existing;
     _titleCtrl = TextEditingController(text: w?.title ?? '');
     _descCtrl = TextEditingController(text: w?.description ?? '');
-    _date = w?.date ?? DateTime.now();
+    _date = w?.date ?? widget.defaultDate ?? DateTime.now();
     _classTypeId = w?.classTypeId ?? '';
     _classTypeName = w?.classTypeName ?? '';
     _memberNoteCtrl.text = w?.memberNote ?? '';
-    _coachNoteCtrl.text = w?.coachNote ?? '';
+    _coachNoteCtrl.text  = w?.coachNote ?? '';
+    _warmUpCtrl.text     = w?.warmUp ?? '';
+    _coolDownCtrl.text   = w?.coolDown ?? '';
 
     if (w != null && w.parts.isNotEmpty) {
       _parts = w.parts.map(_PartData.fromPart).toList();
@@ -560,9 +569,10 @@ class _WodEditorDialogState extends State<_WodEditorDialog> {
     _descCtrl.dispose();
     _memberNoteCtrl.dispose();
     _coachNoteCtrl.dispose();
-    for (final p in _parts) {
-      p.dispose();
-    }
+    _warmUpCtrl.dispose();
+    _coolDownCtrl.dispose();
+    for (final p in _parts) { p.dispose(); }
+    for (final b in _benchmarks) { b.dispose(); }
     super.dispose();
   }
 
@@ -578,6 +588,32 @@ class _WodEditorDialogState extends State<_WodEditorDialog> {
 
   void _addPart() =>
       setState(() => _parts.add(_PartData.empty(_parts.length, context.l10n)));
+
+  void _addBenchmark() {
+    final index = _parts.length + _benchmarks.length;
+    setState(() => _benchmarks.add(_BenchmarkData.empty(index)));
+  }
+
+  void _removeBenchmark(int i) {
+    _benchmarks.removeAt(i).dispose();
+    setState(() {});
+  }
+
+  void _moveBenchmarkUp(int i) {
+    if (i == 0) return;
+    setState(() {
+      final b = _benchmarks.removeAt(i);
+      _benchmarks.insert(i - 1, b);
+    });
+  }
+
+  void _moveBenchmarkDown(int i) {
+    if (i >= _benchmarks.length - 1) return;
+    setState(() {
+      final b = _benchmarks.removeAt(i);
+      _benchmarks.insert(i + 1, b);
+    });
+  }
 
   void _removePart(int i) {
     final part = _parts.removeAt(i);
@@ -729,6 +765,23 @@ class _WodEditorDialogState extends State<_WodEditorDialog> {
         );
       }).toList();
 
+      // Append benchmark parts (stored as WodPart with format='Benchmark')
+      final benchmarkParts = _benchmarks.map((b) => WodPart(
+            title: b.partCtrl.text.trim().isNotEmpty
+                ? b.partCtrl.text.trim()
+                : 'Benchmark',
+            format: 'Benchmark',
+            measure: b.measure,
+            description: b.descCtrl.text.trim(),
+            exercises: b.benchmark.isNotEmpty
+                ? [
+                    WodExercise(
+                        name: b.benchmark, sets: '', reps: '', weight: '',
+                        notes: b.category)
+                  ]
+                : [],
+          )).toList();
+
       final w = WodEntry(
         id: widget.existing?.id ?? '',
         title: _titleCtrl.text.trim(),
@@ -742,7 +795,9 @@ class _WodEditorDialogState extends State<_WodEditorDialog> {
         classTypeName: _classTypeName,
         memberNote: _memberNoteCtrl.text.trim(),
         coachNote: _coachNoteCtrl.text.trim(),
-        parts: parts,
+        warmUp: _warmUpCtrl.text.trim(),
+        coolDown: _coolDownCtrl.text.trim(),
+        parts: [...parts, ...benchmarkParts],
       );
 
       if (widget.existing == null) {
@@ -763,9 +818,9 @@ class _WodEditorDialogState extends State<_WodEditorDialog> {
       child: InputDecorator(
         decoration: InputDecoration(
           labelText: context.l10n.tr('Date'),
-          prefixIcon: const Icon(Icons.calendar_today),
+          prefixIcon: const Icon(Icons.calendar_today_outlined),
         ),
-        child: Text(DateFormat('EEEE, MMM d, y').format(_date)),
+        child: Text(DateFormat('EEE, MMM d, y').format(_date)),
       ),
     );
   }
@@ -783,12 +838,7 @@ class _WodEditorDialogState extends State<_WodEditorDialog> {
           ),
           hint: Text(context.l10n.tr('Select class type')),
           items: types
-              .map(
-                (t) => DropdownMenuItem(
-                  value: t.id,
-                  child: Text(t.name),
-                ),
-              )
+              .map((t) => DropdownMenuItem(value: t.id, child: Text(t.name)))
               .toList(),
           onChanged: (val) {
             final picked = types.firstWhere(
@@ -796,7 +846,7 @@ class _WodEditorDialogState extends State<_WodEditorDialog> {
               orElse: () => const ClassType(id: '', name: ''),
             );
             setState(() {
-              _classTypeId = picked.id;
+              _classTypeId   = picked.id;
               _classTypeName = picked.name;
             });
           },
@@ -808,245 +858,238 @@ class _WodEditorDialogState extends State<_WodEditorDialog> {
     );
   }
 
-  Widget _buildNoteBox({
-    required Color tint,
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required String hint,
-    required TextEditingController controller,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: tint.withAlpha(18),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: tint.withAlpha(80)),
-      ),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 14, color: tint),
-              const SizedBox(width: 6),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: tint,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: tint.withAlpha(180),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: controller,
-            minLines: 3,
-            maxLines: null,
-            decoration: InputDecoration(
-              hintText: hint,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: tint.withAlpha(90)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: tint.withAlpha(80)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide(color: tint, width: 1.3),
-              ),
-              contentPadding: const EdgeInsets.all(12),
-              filled: true,
-              fillColor: Colors.white.withAlpha(170),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final l10n = context.l10n;
+    final cs    = Theme.of(context).colorScheme;
+    final l10n  = context.l10n;
     final isNew = widget.existing == null;
     final screenHeight = MediaQuery.sizeOf(context).height;
 
     final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // ── Header ─────────────────────────────────────────────────────────
         Container(
-          padding: const EdgeInsets.fromLTRB(20, 20, 12, 16),
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [cs.primary, const Color(0xFFF97316)],
+              colors: [cs.primary, cs.secondary],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
             ),
           ),
+          padding: const EdgeInsets.fromLTRB(24, 18, 12, 18),
           child: Row(
             children: [
-              Icon(Icons.fitness_center, color: cs.onPrimary, size: 22),
-              const SizedBox(width: 10),
+              const Icon(Icons.fitness_center, color: Colors.white, size: 22),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  isNew ? l10n.tr('Post Workout') : l10n.tr('Edit Workout'),
-                  style: TextStyle(
-                    color: cs.onPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isNew ? l10n.tr('Create Workout') : l10n.tr('Edit Workout'),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      isNew
+                          ? l10n.tr('Fill in the details below to post a WOD')
+                          : l10n.tr('Update the workout details'),
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 12),
+                    ),
+                  ],
                 ),
               ),
               IconButton(
-                icon: Icon(Icons.close, color: cs.onPrimary),
+                icon: const Icon(Icons.close, color: Colors.white),
                 onPressed: () => Navigator.pop(context),
               ),
             ],
           ),
         ),
+
+        // ── Form ───────────────────────────────────────────────────────────
         Expanded(
           child: Form(
             key: _formKey,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isWideForm = constraints.maxWidth >= 500;
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (isWideForm)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: _buildDateField()),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildClassTypeField()),
-                          ],
-                        )
-                      else ...[
-                        _buildDateField(),
-                        const SizedBox(height: 14),
-                        _buildClassTypeField(),
-                      ],
-                      const SizedBox(height: 14),
-                      TextFormField(
-                        controller: _titleCtrl,
-                        decoration: InputDecoration(
-                          labelText: l10n.tr('Workout Title'),
-                          prefixIcon: const Icon(Icons.title),
-                        ),
-                        validator: (v) => v == null || v.trim().isEmpty
-                            ? l10n.tr('Workout title is required')
-                            : null,
-                      ),
-                      const SizedBox(height: 14),
-                      TextFormField(
-                        controller: _descCtrl,
-                        decoration: InputDecoration(
-                          labelText: l10n.tr('Description / Instructions'),
-                          prefixIcon: const Icon(Icons.notes),
-                        ),
-                        minLines: 3,
-                        maxLines: null,
-                      ),
-                      const SizedBox(height: 14),
-                      _buildNoteBox(
-                        tint: const Color(0xFFF59E0B),
-                        icon: Icons.lightbulb_outline,
-                        title: l10n.tr('Member Notes · Stimulus'),
-                        subtitle: l10n.tr('— visible to members in the workout view'),
-                        hint:
-                            l10n.tr('STIMULUS, pacing goals, strategy, movement intent…'),
-                        controller: _memberNoteCtrl,
-                      ),
-                      const SizedBox(height: 14),
-                      _buildNoteBox(
-                        tint: const Color(0xFF854D0E),
-                        icon: Icons.lock_outline,
-                        title: l10n.tr('Coach Note (private)'),
-                        subtitle: l10n.tr('— visible only to coaches & admins'),
-                        hint: l10n.tr('Cues, scaling notes, things to watch for…'),
-                        controller: _coachNoteCtrl,
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Row 1: Name | Date ────────────────────────────────────
+                  LayoutBuilder(builder: (context, constraints) {
+                    final wide = constraints.maxWidth >= 480;
+                    if (wide) {
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.view_list_outlined,
-                              size: 16, color: cs.primary),
-                          const SizedBox(width: 6),
+                          Expanded(flex: 3, child: _buildTitleField(l10n)),
+                          const SizedBox(width: 14),
+                          Expanded(flex: 2, child: _buildDateField()),
+                        ],
+                      );
+                    }
+                    return Column(children: [
+                      _buildTitleField(l10n),
+                      const SizedBox(height: 14),
+                      _buildDateField(),
+                    ]);
+                  }),
+                  const SizedBox(height: 14),
+                  // ── Row 2: Class Type (full width) ────────────────────────
+                  _buildClassTypeField(),
+                  const SizedBox(height: 24),
+
+                  // ── Notes ─────────────────────────────────────────────────
+                  _SectionLabel(
+                      icon: Icons.sticky_note_2_outlined,
+                      label: l10n.tr('Notes')),
+                  const SizedBox(height: 10),
+                  LayoutBuilder(builder: (context, constraints) {
+                    final wide = constraints.maxWidth >= 600;
+                    final areas = [
+                      _NoteArea(label: l10n.tr('Warm Up'),
+                          controller: _warmUpCtrl),
+                      _NoteArea(label: l10n.tr('Cool Down'),
+                          controller: _coolDownCtrl),
+                      _NoteArea(label: l10n.tr('Member Notes'),
+                          controller: _memberNoteCtrl),
+                      _NoteArea(label: l10n.tr('Trainer Notes'),
+                          controller: _coachNoteCtrl),
+                    ];
+                    if (wide) {
+                      // 2×2 grid: more readable than 4 narrow columns
+                      return Column(
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: areas[0]),
+                              const SizedBox(width: 12),
+                              Expanded(child: areas[1]),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: areas[2]),
+                              const SizedBox(width: 12),
+                              Expanded(child: areas[3]),
+                            ],
+                          ),
+                        ],
+                      );
+                    }
+                    return Column(
+                      children: areas
+                          .expand((a) => [a, const SizedBox(height: 12)])
+                          .toList()
+                        ..removeLast(),
+                    );
+                  }),
+                  const SizedBox(height: 24),
+
+                  // ── Workout Parts ─────────────────────────────────────────
+                  _SectionLabel(
+                      icon: Icons.view_list_outlined,
+                      label: l10n.tr('Workout Parts')),
+                  const SizedBox(height: 10),
+                  if (_parts.isEmpty && _benchmarks.isEmpty)
+                    // Dashed empty-state container
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 28, horizontal: 16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: cs.outlineVariant,
+                          width: 1.5,
+                          strokeAlign: BorderSide.strokeAlignInside,
+                        ),
+                        color: cs.surfaceContainerLowest,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.fitness_center_outlined,
+                              size: 36,
+                              color: cs.onSurfaceVariant.withAlpha(100)),
+                          const SizedBox(height: 10),
                           Text(
-                            l10n.tr('Workout Parts'),
+                            l10n.tr('No exercises yet'),
                             style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
                               color: cs.onSurface,
                             ),
                           ),
-                          const Spacer(),
-                          TextButton.icon(
-                            onPressed: _addPart,
-                            icon: const Icon(Icons.add, size: 16),
-                            label: Text(l10n.tr('Add Part')),
+                          const SizedBox(height: 4),
+                          Text(
+                            l10n.tr(
+                                'Use the buttons below to add exercises or benchmarks'),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: cs.onSurfaceVariant),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      if (_parts.isEmpty)
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            child: Text(
-                              l10n.tr('Tap "Add Part" to structure your workout'),
-                              style: TextStyle(
-                                color: cs.onSurface.withAlpha(100),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ..._parts.asMap().entries.map((entry) {
-                        final pi = entry.key;
-                        final part = entry.value;
-                        return _PartSection(
-                          part: part,
-                          index: pi,
-                          canRemove: _parts.length > 1,
-                          onRemove: () => _removePart(pi),
-                          onSetState: () => setState(() {}),
-                        );
-                      }),
-                    ],
-                  ),
-                );
-              },
+                    ),
+                  ..._parts.asMap().entries.map((e) => _PartSection(
+                        part: e.value,
+                        index: e.key,
+                        canRemove: _parts.length > 1,
+                        onRemove: () => _removePart(e.key),
+                        onSetState: () => setState(() {}),
+                      )),
+                  ..._benchmarks.asMap().entries.map((e) =>
+                      _BenchmarkSection(
+                        data: e.value,
+                        index: _parts.length + e.key,
+                        onMoveUp: e.key > 0
+                            ? () => _moveBenchmarkUp(e.key)
+                            : null,
+                        onMoveDown: e.key < _benchmarks.length - 1
+                            ? () => _moveBenchmarkDown(e.key)
+                            : null,
+                        onRemove: () => _removeBenchmark(e.key),
+                        onSetState: () => setState(() {}),
+                      )),
+                ],
+              ),
             ),
           ),
         ),
+
+        // ── Action bar ─────────────────────────────────────────────────────
         Container(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: cs.outlineVariant)),
+            color: cs.surfaceContainerLowest,
+            border: Border(
+                top: BorderSide(
+                    color: cs.outlineVariant.withAlpha(120))),
           ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton(
-                onPressed: _saving ? null : () => Navigator.pop(context),
-                child: Text(l10n.tr('Cancel')),
+              OutlinedButton.icon(
+                onPressed: _saving ? null : _addPart,
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(l10n.tr('Add Exercise')),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                onPressed: _saving ? null : _addBenchmark,
+                icon: const Icon(Icons.leaderboard_outlined, size: 16),
+                label: Text(l10n.tr('Add Benchmark')),
+              ),
+              const Spacer(),
               FilledButton.icon(
                 onPressed: _saving ? null : _save,
                 icon: _saving
@@ -1054,12 +1097,11 @@ class _WodEditorDialogState extends State<_WodEditorDialog> {
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.save, size: 18),
-                label: Text(isNew ? l10n.tr('Post') : l10n.tr('Save')),
+                            strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.check, size: 18),
+                label: Text(isNew
+                    ? l10n.tr('Post Workout')
+                    : l10n.tr('Save Changes')),
               ),
             ],
           ),
@@ -1070,17 +1112,371 @@ class _WodEditorDialogState extends State<_WodEditorDialog> {
     if (widget.fullscreen) {
       return Dialog.fullscreen(child: SafeArea(child: content));
     }
-
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
       clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
         constraints: BoxConstraints(
-          maxWidth: 720,
-          maxHeight: math.min(900, screenHeight * 0.92),
+          maxWidth: 960,
+          maxHeight: math.min(920, screenHeight * 0.92),
         ),
         child: content,
+      ),
+    );
+  }
+
+  Widget _buildTitleField(AppLocalizations l10n) => TextFormField(
+        controller: _titleCtrl,
+        decoration: InputDecoration(
+          labelText: l10n.tr('Workout Name'),
+          prefixIcon: const Icon(Icons.fitness_center_outlined),
+        ),
+        validator: (v) => v == null || v.trim().isEmpty
+            ? l10n.tr('Workout title is required')
+            : null,
+      );
+}
+
+// ── Reusable form UI helpers ──────────────────────────────────────────────────
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: cs.primary),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+            color: cs.onSurface,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _NoteArea extends StatelessWidget {
+  const _NoteArea({required this.label, required this.controller});
+  final String label;
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: cs.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          minLines: 5,
+          maxLines: null,
+        ),
+      ],
+    );
+  }
+}
+
+// ── Benchmark data & section ──────────────────────────────────────────────────
+
+const _kBenchmarkCategories = [
+  'All',
+  'Gymnastics',
+  'Weightlifting',
+  'Mono-structural',
+  'Strength',
+];
+
+const _kBenchmarks = [
+  'Fran', 'Cindy', 'Helen', 'Grace', 'DT', 'Diane', 'Karen',
+  'Annie', 'Murph', 'Isabel', 'Jackie', 'Eva', 'Kelly',
+  '1RM Back Squat', '1RM Front Squat', '1RM Deadlift',
+  '1RM Shoulder Press', '1RM Snatch', '1RM Clean & Jerk',
+  'Max Pull-ups', 'Max Push-ups', '400m Run', '1 Mile Run',
+];
+
+class _BenchmarkData {
+  _BenchmarkData({
+    required this.partCtrl,
+    required this.descCtrl,
+    required this.category,
+    required this.benchmark,
+    required this.measure,
+  });
+
+  factory _BenchmarkData.empty(int index) {
+    const labels = ['A', 'B', 'C', 'D', 'E', 'F'];
+    final label = index < labels.length ? labels[index] : '${index + 1}';
+    return _BenchmarkData(
+      partCtrl: TextEditingController(text: label),
+      descCtrl: TextEditingController(),
+      category: 'All',
+      benchmark: '',
+      measure: '',
+    );
+  }
+
+  final TextEditingController partCtrl;
+  final TextEditingController descCtrl;
+  String category;
+  String benchmark;
+  String measure;
+
+  void dispose() {
+    partCtrl.dispose();
+    descCtrl.dispose();
+  }
+}
+
+class _BenchmarkSection extends StatelessWidget {
+  const _BenchmarkSection({
+    required this.data,
+    required this.index,
+    required this.onRemove,
+    required this.onSetState,
+    this.onMoveUp,
+    this.onMoveDown,
+  });
+
+  final _BenchmarkData data;
+  final int index;
+  final VoidCallback onRemove;
+  final VoidCallback onSetState;
+  final VoidCallback? onMoveUp;
+  final VoidCallback? onMoveDown;
+
+  static const _labels = ['A', 'B', 'C', 'D', 'E', 'F'];
+  String get _label =>
+      index < _labels.length ? _labels[index] : '${index + 1}';
+
+  @override
+  Widget build(BuildContext context) {
+    final cs     = Theme.of(context).colorScheme;
+    final accent = cs.primary;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withAlpha(90)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Title row ────────────────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+            decoration: BoxDecoration(
+              color: accent.withAlpha(26),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 30, height: 30,
+                  decoration:
+                      BoxDecoration(color: accent, shape: BoxShape.circle),
+                  child: Center(
+                    child: Text(
+                      _label,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Benchmark Part $_label',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                ),
+                Text('Order:',
+                    style: TextStyle(
+                        color: cs.onSurfaceVariant, fontSize: 12)),
+                IconButton(
+                  icon: const Icon(Icons.arrow_upward, size: 16),
+                  onPressed: onMoveUp,
+                  color: onMoveUp != null
+                      ? cs.onSurface
+                      : cs.outlineVariant,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.arrow_downward, size: 16),
+                  onPressed: onMoveDown,
+                  color: onMoveDown != null
+                      ? cs.onSurface
+                      : cs.outlineVariant,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 28, minHeight: 28),
+                ),
+                IconButton(
+                  icon: Icon(Icons.delete_outline,
+                      size: 18, color: cs.error),
+                  onPressed: onRemove,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                        const BoxConstraints(minWidth: 32, minHeight: 32),
+                    tooltip: 'Remove benchmark',
+                  ),
+              ],
+            ),
+          ),
+
+          // ── Fields grid ──────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: LayoutBuilder(builder: (context, constraints) {
+              final wide = constraints.maxWidth >= 600;
+
+              final leftCol = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: data.category,
+                    decoration: const InputDecoration(
+                      labelText: 'Exercise Category',
+                      prefixIcon:
+                          Icon(Icons.category_outlined),
+                    ),
+                    items: _kBenchmarkCategories
+                        .map((c) => DropdownMenuItem(
+                            value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        data.category = v;
+                        onSetState();
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: data.partCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Part Label',
+                      prefixIcon: Icon(Icons.label_outline),
+                    ),
+                  ),
+                ],
+              );
+
+              final midCol = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: data.benchmark.isEmpty
+                        ? null
+                        : data.benchmark,
+                    decoration: const InputDecoration(
+                      labelText: 'Benchmark',
+                      prefixIcon:
+                          Icon(Icons.leaderboard_outlined),
+                    ),
+                    hint: const Text('Select…'),
+                    items: _kBenchmarks
+                        .map((b) => DropdownMenuItem(
+                            value: b, child: Text(b)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        data.benchmark = v;
+                        onSetState();
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value:
+                        data.measure.isEmpty ? null : data.measure,
+                    decoration: const InputDecoration(
+                      labelText: 'Measure',
+                      prefixIcon:
+                          Icon(Icons.straighten_outlined),
+                    ),
+                    hint: const Text('Select…'),
+                    items: _kMeasures
+                        .map((m) => DropdownMenuItem(
+                            value: m, child: Text(m)))
+                        .toList(),
+                    onChanged: (v) {
+                      if (v != null) {
+                        data.measure = v;
+                        onSetState();
+                      }
+                    },
+                  ),
+                ],
+              );
+
+              final descField = TextField(
+                controller: data.descCtrl,
+                minLines: wide ? 6 : 4,
+                maxLines: null,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  prefixIcon: Icon(Icons.notes_outlined),
+                  alignLabelWithHint: true,
+                ),
+              );
+
+              if (wide) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: leftCol),
+                    const SizedBox(width: 14),
+                    Expanded(child: midCol),
+                    const SizedBox(width: 14),
+                    Expanded(child: descField),
+                  ],
+                );
+              }
+              return Column(
+                children: [
+                  leftCol,
+                  const SizedBox(height: 12),
+                  midCol,
+                  const SizedBox(height: 12),
+                  descField,
+                ],
+              );
+            }),
+          ),
+        ],
       ),
     );
   }
@@ -1356,7 +1752,8 @@ class _PartSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final l10n = context.l10n;
-    final accent = _kPartAccents[index % _kPartAccents.length];
+    // Use brand primary for all parts — consistent with app theme
+    final accent = cs.primary;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
