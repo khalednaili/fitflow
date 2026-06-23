@@ -52,12 +52,12 @@ class _ClassWhiteboardScreenState extends State<ClassWhiteboardScreen>
 
   // ── colour palette ──────────────────────────────────────────────────────────
 
-  static const _bg = Color(0xFF0C0C0C);
-  static const _card = Color(0xFF1A1A1A);
-  static const _border = Color(0xFF282828);
+  static const _bg = Color(0xFF0A1F1A);
+  static const _card = Color(0xFF112820);
+  static const _border = Color(0xFF1A3530);
   static const _accent = Color(0xFF10B981);
   static const _red = Color(0xFFEF4444);
-  static const _textSub = Color(0xFF6B7280);
+  static const _textSub = Color(0xFF9CA3AF);
 
   @override
   void dispose() {
@@ -300,8 +300,8 @@ class _Header extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
       decoration: const BoxDecoration(
-        color: Color(0xFF111111),
-        border: Border(bottom: BorderSide(color: Color(0xFF282828))),
+        color: Color(0xFF0D2920),
+        border: Border(bottom: BorderSide(color: Color(0xFF1A3530))),
       ),
       child: Row(
         children: [
@@ -1458,7 +1458,7 @@ class _TextBlock extends StatelessWidget {
     return Text(
       text,
       style: const TextStyle(
-          color: Color(0xFFE5E7EB), fontSize: 13, height: 1.5),
+          color: Color(0xFFD1FAE5), fontSize: 13, height: 1.5),
     );
   }
 }
