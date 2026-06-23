@@ -1001,10 +1001,14 @@ class _TrainerViewScreenState extends State<_TrainerViewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final section = _sections[_currentPage];
     final fmt = DateFormat('d MMM yyyy');
     final headerTitle =
         '${widget.gymClass.title} – ${fmt.format(widget.gymClass.startTime)}';
+
+    final hasPrev = _currentPage > 0;
+    final hasNext = _currentPage < _sections.length - 1;
+    final prevLabel = hasPrev ? _sections[_currentPage - 1].label : null;
+    final nextLabel = hasNext ? _sections[_currentPage + 1].label : null;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -1016,54 +1020,67 @@ class _TrainerViewScreenState extends State<_TrainerViewScreen> {
             Container(
               color: const Color(0xFFEF4444),
               padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Row(
                 children: [
+                  // WOD title (left)
                   Expanded(
                     child: Text(
                       headerTitle,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 20,
+                        fontSize: 18,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: 0.3,
+                        letterSpacing: 0.2,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  // Section navigation
-                  if (_sections.length > 1) ...[
-                    Text(
-                      section.label,
-                      style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(width: 8),
-                    if (_currentPage < _sections.length - 1)
-                      GestureDetector(
-                        onTap: _next,
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('→',
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700)),
-                          ],
-                        ),
+                  const SizedBox(width: 12),
+                  // ← Prev section name
+                  if (prevLabel != null)
+                    GestureDetector(
+                      onTap: _prev,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.arrow_back_ios,
+                              color: Colors.white, size: 14),
+                          const SizedBox(width: 3),
+                          Text(
+                            prevLabel,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600),
+                          ),
+                        ],
                       ),
-                  ] else
-                    Text(
-                      section.label,
-                      style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600),
+                    ),
+                  if (prevLabel != null && nextLabel != null)
+                    const SizedBox(width: 16),
+                  // Next section name →
+                  if (nextLabel != null)
+                    GestureDetector(
+                      onTap: _next,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            nextLabel,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(width: 3),
+                          const Icon(Icons.arrow_forward_ios,
+                              color: Colors.white, size: 14),
+                        ],
+                      ),
                     ),
                   const SizedBox(width: 16),
+                  // Close
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
                     child: const Icon(Icons.close,
@@ -1072,82 +1089,79 @@ class _TrainerViewScreenState extends State<_TrainerViewScreen> {
                 ],
               ),
             ),
-            // ── Section dots ─────────────────────────────────────────────
-            if (_sections.length > 1)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                child: Row(
-                  children: List.generate(_sections.length, (i) {
-                    final active = i == _currentPage;
-                    return GestureDetector(
-                      onTap: () => _pageController.animateToPage(i,
-                          duration: const Duration(milliseconds: 250),
-                          curve: Curves.easeInOut),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: const EdgeInsets.only(right: 8),
-                        width: active ? 28 : 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: active
-                              ? const Color(0xFFEF4444)
-                              : Colors.white24,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              ),
             // ── Workout content ──────────────────────────────────────────
             Expanded(
               child: PageView.builder(
                 controller: _pageController,
                 itemCount: _sections.length,
                 onPageChanged: (i) => setState(() => _currentPage = i),
-                itemBuilder: (_, i) => SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(32, 24, 32, 32),
-                  child: Text(
-                    _sections[i].content,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      height: 1.7,
-                      fontWeight: FontWeight.w400,
+                itemBuilder: (_, i) {
+                  final s = _sections[i];
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(32, 28, 32, 40),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Part title in large red text
+                        Text(
+                          s.label,
+                          style: const TextStyle(
+                            color: Color(0xFFEF4444),
+                            fontSize: 32,
+                            fontWeight: FontWeight.w800,
+                            height: 1.2,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        // Content
+                        if (s.content.isNotEmpty)
+                          Text(
+                            s.content,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 22,
+                              height: 1.7,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                      ],
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
-            // ── Bottom nav arrows ────────────────────────────────────────
+            // ── Dot indicators ───────────────────────────────────────────
             if (_sections.length > 1)
-              Container(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    TextButton.icon(
-                      onPressed: _currentPage > 0 ? _prev : null,
-                      icon: const Icon(Icons.arrow_back_ios, size: 14),
-                      label: const Text('Previous'),
-                      style: TextButton.styleFrom(
-                          foregroundColor: Colors.white54),
-                    ),
+                    ...List.generate(_sections.length, (i) {
+                      final active = i == _currentPage;
+                      return GestureDetector(
+                        onTap: () => _pageController.animateToPage(i,
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeInOut),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          margin: const EdgeInsets.only(right: 8),
+                          width: active ? 28 : 8,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: active
+                                ? const Color(0xFFEF4444)
+                                : Colors.white24,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                      );
+                    }),
+                    const Spacer(),
                     Text(
                       '${_currentPage + 1} / ${_sections.length}',
                       style: const TextStyle(
-                          color: Colors.white38, fontSize: 13),
-                    ),
-                    TextButton.icon(
-                      onPressed: _currentPage < _sections.length - 1
-                          ? _next
-                          : null,
-                      icon: const Text('Next'),
-                      label: const Icon(Icons.arrow_forward_ios, size: 14),
-                      iconAlignment: IconAlignment.end,
-                      style: TextButton.styleFrom(
-                          foregroundColor: Colors.white54),
+                          color: Colors.white38, fontSize: 12),
                     ),
                   ],
                 ),
