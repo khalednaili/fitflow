@@ -47,6 +47,8 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
   MembershipPlan? _selectedPlan;
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now().add(const Duration(days: 30));
+  String _paymentMethod = 'cash';
+  DateTime _paymentDate = DateTime.now();
   bool _saving = false;
 
   // validation
@@ -92,6 +94,17 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
       _endDate = DateTime(end.year, end.month, end.day);
       _planError = null;
     });
+  }
+
+  Future<void> _pickPaymentDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _paymentDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (picked == null) return;
+    setState(() => _paymentDate = DateTime(picked.year, picked.month, picked.day));
   }
 
   Future<void> _pickStartDate() async {
@@ -169,21 +182,16 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
     final messenger = ScaffoldMessenger.of(context);
 
     try {
-      await _subscriptionService.createUserSubscription(
+      await _subscriptionService.assignOfferAtomic(
         userId: userId,
         planId: plan.id,
         totalAmount: plan.price,
         currency: plan.currency,
+        startDate: _startDate,
+        endDate: _endDate,
         initialAmountPaid: initialAmountPaid,
-        startDate: _startDate,
-        endDate: _endDate,
-      );
-
-      await _memberService.assignOfferWithDates(
-        userId: userId,
-        membershipPlanId: plan.id,
-        startDate: _startDate,
-        endDate: _endDate,
+        initialPaymentMethod: _paymentMethod,
+        initialPaymentDate: _paymentDate,
       );
 
       if (!mounted) return;
@@ -202,64 +210,210 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final accentColor = _selectedPlan != null
-        ? (_typeColors[_selectedPlan!.offerType] ?? cs.primary)
-        : cs.primary;
+  Widget _buildMemberSelector(BuildContext context, ColorScheme cs) {
+    return StreamBuilder<List<AppUser>>(
+      stream: _memberService.streamMembers(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        final members = snap.data ?? <AppUser>[];
+        if (members.isEmpty) {
+          return _EmptyBanner(
+              message: context.l10n
+                  .tr('No members found. Create a member first.'));
+        }
+        final validId = members.any((m) => m.id == _selectedUserId)
+            ? _selectedUserId
+            : null;
 
-    return Scaffold(
-      backgroundColor: cs.surface,
-      body: CustomScrollView(
-        slivers: [
-          // ── Gradient app bar ────────────────────────────────────────────────
-          SliverAppBar(
-            expandedHeight: 120,
-            pinned: true,
-            backgroundColor: accentColor,
-            iconTheme: const IconThemeData(color: Colors.white),
-            flexibleSpace: FlexibleSpaceBar(
-              background: AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [accentColor, accentColor.withValues(alpha: 0.7)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _memberError != null
+                      ? cs.error
+                      : validId != null
+                          ? cs.primary.withValues(alpha: 0.5)
+                          : cs.outlineVariant,
+                  width: validId != null ? 1.5 : 1,
                 ),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 50, 20, 14),
+                color: validId != null
+                    ? cs.primary.withValues(alpha: 0.04)
+                    : cs.surfaceContainerLow,
+              ),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: validId,
+                  hint: Text(context.l10n.tr('Choose a member…'),
+                      style: TextStyle(color: cs.onSurfaceVariant)),
+                  isExpanded: true,
+                  icon: Icon(Icons.keyboard_arrow_down,
+                      color:
+                          validId != null ? cs.primary : cs.onSurfaceVariant),
+                  items: members.map((m) {
+                    final name =
+                        m.displayName.isEmpty ? m.email : m.displayName;
+                    return DropdownMenuItem<String>(
+                      value: m.id,
+                      child: Row(
+                        children: [
+                          UserAvatar(
+                            photoUrl: m.photoUrl,
+                            initials: name[0].toUpperCase(),
+                            color: cs.primary,
+                            radius: 14,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              m.displayName.isEmpty
+                                  ? m.email
+                                  : '${m.displayName}  ·  ${m.email}',
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (v) {
+                    if (v == null) return;
+                    setState(() {
+                      _selectedUserId = v;
+                      _memberError = null;
+                    });
+                  },
+                ),
+              ),
+            ),
+            if (_memberError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, left: 12),
+                child: Text(_memberError!,
+                    style: TextStyle(fontSize: 12, color: cs.error)),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildOffersSelector(BuildContext context, ColorScheme cs) {
+    return StreamBuilder<List<MembershipPlan>>(
+      stream: _subscriptionService.streamPlans(),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return _EmptyBanner(
+              message:
+                  '${context.l10n.tr('Could not load offers')}: ${snap.error}');
+        }
+        final plans = (snap.data ?? <MembershipPlan>[])
+            .where((p) => p.active)
+            .toList();
+        if (plans.isEmpty) {
+          return _EmptyBanner(
+              message: context.l10n
+                  .tr('No active offers. Create one in the Offers tab.'));
+        }
+
+        if (_selectedPlan == null && plans.isNotEmpty) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            _selectPlan(plans.first);
+          });
+        }
+
+        return Column(
+          children: plans.map((plan) {
+            final selected = _selectedPlan?.id == plan.id;
+            final color = _typeColors[plan.offerType] ?? cs.primary;
+            final icon =
+                _typeIcons[plan.offerType] ?? Icons.local_offer_outlined;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: () => _selectPlan(plan),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      color: selected
+                          ? color.withValues(alpha: 0.07)
+                          : cs.surfaceContainerLow,
+                      border: Border.all(
+                        color: selected ? color : cs.outlineVariant,
+                        width: selected ? 2 : 1,
+                      ),
+                    ),
                     child: Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(9),
+                          padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
+                            color: color.withValues(
+                                alpha: selected ? 0.15 : 0.08),
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: const Icon(Icons.assignment_turned_in_outlined,
-                              color: Colors.white, size: 22),
+                          child: Icon(icon, size: 20, color: color),
                         ),
                         const SizedBox(width: 12),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(context.l10n.tr('Assign Offer'),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(plan.name,
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                      color:
+                                          selected ? color : cs.onSurface)),
+                              const SizedBox(height: 3),
+                              Text(
+                                '${plan.checkinSummary}  ·  ${plan.durationLabel}',
                                 style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700)),
+                                    fontSize: 12,
+                                    color: cs.onSurfaceVariant),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
                             Text(
-                              _selectedPlan == null
-                                  ? context.l10n.tr('Select member & offer')
-                                  : '${_selectedPlan!.name} · ${_selectedPlan!.durationLabel}',
+                              '${plan.price} ${plan.currency}',
                               style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.85),
-                                  fontSize: 12),
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                                color: selected ? color : cs.onSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 160),
+                              child: selected
+                                  ? Icon(Icons.check_circle,
+                                      key: const ValueKey('on'),
+                                      color: color,
+                                      size: 20)
+                                  : Icon(Icons.radio_button_unchecked,
+                                      key: const ValueKey('off'),
+                                      color: cs.outlineVariant,
+                                      size: 20),
                             ),
                           ],
                         ),
@@ -268,336 +422,284 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
                   ),
                 ),
               ),
+            );
+          }).toList(),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final accentColor = _selectedPlan != null
+        ? (_typeColors[_selectedPlan!.offerType] ?? cs.primary)
+        : cs.primary;
+    final width = MediaQuery.sizeOf(context).width;
+    final isWide = width >= 800;
+
+    // ── Left column: member + offers ─────────────────────────────────────────
+    Widget leftColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SectionCard(
+          title: context.l10n.tr('MEMBER'),
+          step: 1,
+          accentColor: accentColor,
+          child: _buildMemberSelector(context, cs),
+        ),
+        const SizedBox(height: 16),
+        _SectionCard(
+          title: context.l10n.tr('CHOOSE OFFER'),
+          step: 2,
+          accentColor: accentColor,
+          errorText: _planError,
+          child: _buildOffersSelector(context, cs),
+        ),
+      ],
+    );
+
+    // ── Right column: period + payment + button + history ────────────────────
+    Widget rightColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _SectionCard(
+          title: context.l10n.tr('SUBSCRIPTION PERIOD'),
+          step: 3,
+          accentColor: accentColor,
+          child: _DateRangeCard(
+            startDate: _startDate,
+            endDate: _endDate,
+            plan: _selectedPlan,
+            onPickStart: _pickStartDate,
+            onPickEnd: _pickEndDate,
+            accentColor: accentColor,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _SectionCard(
+          title: context.l10n.tr('INITIAL PAYMENT'),
+          step: 4,
+          accentColor: accentColor,
+          child: _selectedPlan != null
+              ? _PaymentSection(
+                  plan: _selectedPlan!,
+                  controller: _initialPaidController,
+                  errorText: _paymentError,
+                  onChanged: (_) => setState(() => _paymentError = null),
+                  accentColor: accentColor,
+                  paymentMethod: _paymentMethod,
+                  onPaymentMethodChanged: (v) =>
+                      setState(() => _paymentMethod = v),
+                  paymentDate: _paymentDate,
+                  onPickPaymentDate: _pickPaymentDate,
+                )
+              : Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(context.l10n.tr('Select an offer first'),
+                      style: TextStyle(color: cs.onSurfaceVariant)),
+                ),
+        ),
+        const SizedBox(height: 20),
+        // ── Assign Button ───────────────────────────────────────────────────
+        MouseRegion(
+          cursor: _saving
+              ? SystemMouseCursors.wait
+              : SystemMouseCursors.click,
+          child: FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: accentColor,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+            ),
+            onPressed: _saving ? null : _assign,
+            icon: _saving
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.assignment_turned_in_outlined, size: 20),
+            label: Text(
+              _saving
+                  ? context.l10n.tr('Assigning…')
+                  : context.l10n.tr('Assign Offer'),
+              style: const TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w700),
             ),
           ),
+        ),
+        if (_selectedUserId != null) ...[
+          const SizedBox(height: 24),
+          _ExistingSubscriptions(
+            userId: _selectedUserId!,
+            subscriptionService: _subscriptionService,
+            gymId: widget.gymId,
+          ),
+        ],
+      ],
+    );
 
-          // ── Body ─────────────────────────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 100),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ── Step 1: Member ────────────────────────────────────────
-                  _StepLabel(step: 1, label: context.l10n.tr('SELECT MEMBER & OFFER')),
-                  const SizedBox(height: 10),
-                  StreamBuilder<List<AppUser>>(
-                    stream: _memberService.streamMembers(),
-                    builder: (context, snap) {
-                      if (snap.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      final members = snap.data ?? <AppUser>[];
-                      if (members.isEmpty) {
-                        return _EmptyBanner(
-                            message: context.l10n.tr(
-                                'No members found. Create a member first.'));
-                      }
-
-                      final validId =
-                          members.any((m) => m.id == _selectedUserId)
-                              ? _selectedUserId
-                              : null;
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: _memberError != null
-                                    ? cs.error
-                                    : validId != null
-                                        ? cs.primary.withValues(alpha: 0.5)
-                                        : cs.outlineVariant,
-                                width: validId != null ? 1.5 : 1,
-                              ),
-                              color: validId != null
-                                  ? cs.primary.withValues(alpha: 0.04)
-                                  : cs.surfaceContainerLow,
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 4),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: validId,
-                                hint: Text(context.l10n.tr('Choose a member…'),
-                                    style:
-                                        TextStyle(color: cs.onSurfaceVariant)),
-                                isExpanded: true,
-                                icon: Icon(Icons.keyboard_arrow_down,
-                                    color: validId != null
-                                        ? cs.primary
-                                        : cs.onSurfaceVariant),
-                                items: members.map((m) {
-                                  final name = m.displayName.isEmpty
-                                      ? m.email
-                                      : m.displayName;
-                                  return DropdownMenuItem<String>(
-                                    value: m.id,
-                                    child: Row(
-                                      children: [
-                                        UserAvatar(
-                                          photoUrl: m.photoUrl,
-                                          initials: name[0].toUpperCase(),
-                                          color: cs.primary,
-                                          radius: 14,
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Text(
-                                            m.displayName.isEmpty
-                                                ? m.email
-                                                : '${m.displayName}  ·  ${m.email}',
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                }).toList(),
-                                onChanged: (v) {
-                                  if (v == null) return;
-                                  setState(() {
-                                    _selectedUserId = v;
-                                    _memberError = null;
-                                  });
-                                },
-                              ),
-                            ),
-                          ),
-                          if (_memberError != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4, left: 12),
-                              child: Text(_memberError!,
-                                  style:
-                                      TextStyle(fontSize: 12, color: cs.error)),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // ── Step 2: Offer ─────────────────────────────────────────
-                  _StepLabel(step: 2, label: context.l10n.tr('CHOOSE OFFER')),
-                  if (_planError != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4, bottom: 6),
-                      child: Text(_planError!,
-                          style: TextStyle(fontSize: 12, color: cs.error)),
-                    ),
-                  const SizedBox(height: 10),
-                  StreamBuilder<List<MembershipPlan>>(
-                    stream: _subscriptionService.streamPlans(),
-                    builder: (context, snap) {
-                      if (snap.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (snap.hasError) {
-                        return _EmptyBanner(
-                            message:
-                                '${context.l10n.tr('Could not load offers')}: ${snap.error}');
-                      }
-                      final plans = (snap.data ?? <MembershipPlan>[])
-                          .where((p) => p.active)
-                          .toList();
-                      if (plans.isEmpty) {
-                        return _EmptyBanner(
-                            message: context.l10n.tr(
-                                'No active offers. Create one in the Offers tab.'));
-                      }
-
-                      // Auto-select first plan once on first load
-                      if (_selectedPlan == null && plans.isNotEmpty) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (!mounted) return;
-                          _selectPlan(plans.first);
-                        });
-                      }
-
-                      return Column(
-                        children: plans.map((plan) {
-                          final selected = _selectedPlan?.id == plan.id;
-                          final color =
-                              _typeColors[plan.offerType] ?? cs.primary;
-                          final icon = _typeIcons[plan.offerType] ??
-                              Icons.local_offer_outlined;
-
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(14),
-                              onTap: () => _selectPlan(plan),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
-                                  color: selected
-                                      ? color.withValues(alpha: 0.07)
-                                      : cs.surfaceContainerLow,
-                                  border: Border.all(
-                                    color: selected ? color : cs.outlineVariant,
-                                    width: selected ? 2 : 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(10),
-                                      decoration: BoxDecoration(
-                                        color: color.withValues(
-                                            alpha: selected ? 0.15 : 0.08),
-                                        borderRadius: BorderRadius.circular(10),
-                                      ),
-                                      child: Icon(icon, size: 20, color: color),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(plan.name,
-                                              style: TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                  fontSize: 14,
-                                                  color: selected
-                                                      ? color
-                                                      : cs.onSurface)),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            '${plan.checkinSummary}  ·  ${plan.durationLabel}',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: cs.onSurfaceVariant),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          '${plan.price} ${plan.currency}',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 16,
-                                            color:
-                                                selected ? color : cs.onSurface,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        AnimatedSwitcher(
-                                          duration:
-                                              const Duration(milliseconds: 160),
-                                          child: selected
-                                              ? Icon(Icons.check_circle,
-                                                  key: const ValueKey('on'),
-                                                  color: color,
-                                                  size: 20)
-                                              : Icon(
-                                                  Icons.radio_button_unchecked,
-                                                  key: const ValueKey('off'),
-                                                  color: cs.outlineVariant,
-                                                  size: 20),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      );
-                    },
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // ── Step 3: Subscription Period ───────────────────────────
-                  _StepLabel(step: 3, label: context.l10n.tr('SUBSCRIPTION PERIOD')),
-                  const SizedBox(height: 10),
-                  _DateRangeCard(
-                    startDate: _startDate,
-                    endDate: _endDate,
-                    plan: _selectedPlan,
-                    onPickStart: _pickStartDate,
-                    onPickEnd: _pickEndDate,
-                    accentColor: accentColor,
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // ── Step 4: Initial Payment ───────────────────────────────
-                  _StepLabel(step: 4, label: context.l10n.tr('INITIAL PAYMENT')),
-                  const SizedBox(height: 10),
-                  if (_selectedPlan != null)
-                    _PaymentSection(
-                      plan: _selectedPlan!,
-                      controller: _initialPaidController,
-                      errorText: _paymentError,
-                      onChanged: (_) => setState(() => _paymentError = null),
-                      accentColor: accentColor,
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerLow,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: cs.outlineVariant),
-                      ),
-                      child: Text(context.l10n.tr('Select an offer first'),
-                          style: TextStyle(color: cs.onSurfaceVariant)),
-                    ),
-
-                  const SizedBox(height: 32),
-
-                  // ── Assign Button ─────────────────────────────────────────
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: accentColor,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                    ),
-                    onPressed: _saving ? null : _assign,
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.assignment_turned_in_outlined,
-                            size: 20),
-                    label: Text(
-                      _saving
-                          ? context.l10n.tr('Assigning…')
-                          : context.l10n.tr('Assign Offer'),
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // ── Existing subscriptions ────────────────────────────────
-                  if (_selectedUserId != null)
-                    _ExistingSubscriptions(
-                      userId: _selectedUserId!,
-                      subscriptionService: _subscriptionService,
-                      gymId: widget.gymId,
-                    ),
-                ],
+    return Scaffold(
+      backgroundColor: cs.surfaceContainerLowest,
+      appBar: AppBar(
+        backgroundColor: cs.surfaceContainerLowest,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        title: Row(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(9),
               ),
+              child: Icon(Icons.assignment_turned_in_outlined,
+                  color: accentColor, size: 18),
             ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(context.l10n.tr('Assign Offer'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 16)),
+                if (_selectedPlan != null)
+                  Text(
+                    '${_selectedPlan!.name} · ${_selectedPlan!.durationLabel}',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: accentColor,
+                        fontWeight: FontWeight.w600),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 960),
+          child: SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+                isWide ? 24 : 16, 20, isWide ? 24 : 16, 40),
+            child: isWide
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 5, child: leftColumn),
+                      const SizedBox(width: 20),
+                      Expanded(flex: 4, child: rightColumn),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      leftColumn,
+                      const SizedBox(height: 16),
+                      rightColumn,
+                    ],
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Section card ──────────────────────────────────────────────────────────────
+
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
+    required this.title,
+    required this.child,
+    this.step,
+    this.accentColor,
+    this.errorText,
+  });
+
+  final String title;
+  final Widget child;
+  final int? step;
+  final Color? accentColor;
+  final String? errorText;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final color = accentColor ?? cs.primary;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Card header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.05),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(15)),
+              border: Border(
+                  bottom: BorderSide(
+                      color: cs.outlineVariant.withValues(alpha: 0.4))),
+            ),
+            child: Row(
+              children: [
+                if (step != null) ...[
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text('$step',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Text(context.l10n.tr(title),
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                        letterSpacing: 0.6)),
+                if (errorText != null) ...[
+                  const SizedBox(width: 8),
+                  Icon(Icons.error_outline, size: 13, color: cs.error),
+                  const SizedBox(width: 4),
+                  Text(errorText!,
+                      style: TextStyle(fontSize: 11, color: cs.error)),
+                ],
+              ],
+            ),
+          ),
+          // Card body
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: child,
           ),
         ],
       ),
@@ -695,7 +797,9 @@ class _DateRangeCard extends StatelessWidget {
               children: [
                 // Start date
                 Expanded(
-                  child: InkWell(
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: InkWell(
                     onTap: onPickStart,
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
@@ -728,12 +832,17 @@ class _DateRangeCard extends StatelessWidget {
                                 fontWeight: FontWeight.w700, fontSize: 13),
                           ),
                           const SizedBox(height: 4),
-                          Text(context.l10n.tr('Tap to change'),
-                              style: TextStyle(
-                                  fontSize: 10, color: cs.onSurfaceVariant)),
+                          Row(children: [
+                            Icon(Icons.edit_outlined, size: 10, color: cs.onSurfaceVariant),
+                            const SizedBox(width: 3),
+                            Text(context.l10n.tr('Edit'),
+                                style: TextStyle(
+                                    fontSize: 10, color: cs.onSurfaceVariant)),
+                          ]),
                         ],
                       ),
                     ),
+                  ),
                   ),
                 ),
                 // Arrow
@@ -747,7 +856,9 @@ class _DateRangeCard extends StatelessWidget {
                 ),
                 // End date
                 Expanded(
-                  child: InkWell(
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: InkWell(
                     onTap: onPickEnd,
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
@@ -783,12 +894,17 @@ class _DateRangeCard extends StatelessWidget {
                                 color: accentColor),
                           ),
                           const SizedBox(height: 4),
-                          Text(context.l10n.tr('Tap to override'),
-                              style: TextStyle(
-                                  fontSize: 10, color: cs.onSurfaceVariant)),
+                          Row(children: [
+                            Icon(Icons.edit_outlined, size: 10, color: cs.onSurfaceVariant),
+                            const SizedBox(width: 3),
+                            Text(context.l10n.tr('Override'),
+                                style: TextStyle(
+                                    fontSize: 10, color: cs.onSurfaceVariant)),
+                          ]),
                         ],
                       ),
                     ),
+                  ),
                   ),
                 ),
               ],
@@ -808,6 +924,10 @@ class _PaymentSection extends StatelessWidget {
     required this.controller,
     required this.onChanged,
     required this.accentColor,
+    required this.paymentMethod,
+    required this.onPaymentMethodChanged,
+    required this.paymentDate,
+    required this.onPickPaymentDate,
     this.errorText,
   });
 
@@ -816,6 +936,17 @@ class _PaymentSection extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final String? errorText;
   final Color accentColor;
+  final String paymentMethod;
+  final ValueChanged<String> onPaymentMethodChanged;
+  final DateTime paymentDate;
+  final VoidCallback onPickPaymentDate;
+
+  static const _methods = [
+    ('cash', 'Cash', Icons.payments_outlined),
+    ('card', 'Card', Icons.credit_card_outlined),
+    ('transfer', 'Transfer', Icons.account_balance_outlined),
+    ('cheque', 'Cheque', Icons.receipt_outlined),
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -825,6 +956,7 @@ class _PaymentSection extends StatelessWidget {
     final remaining = (total - paid).clamp(0, total);
     final progress = total > 0 ? (paid / total).clamp(0.0, 1.0) : 0.0;
     final isFullyPaid = remaining == 0 && total > 0;
+    final fmt = DateFormat('EEE, d MMM yyyy');
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -914,6 +1046,114 @@ class _PaymentSection extends StatelessWidget {
                       ? Colors.orange.shade700
                       : Colors.green.shade600),
             ],
+          ),
+
+          const SizedBox(height: 20),
+          Divider(color: cs.outlineVariant.withValues(alpha: 0.4)),
+          const SizedBox(height: 14),
+
+          // Payment method selector
+          Text(context.l10n.tr('Payment Method'),
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurfaceVariant,
+                  letterSpacing: 0.4)),
+          const SizedBox(height: 10),
+          Row(
+            children: _methods.map((m) {
+              final isSelected = paymentMethod == m.$1;
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: InkWell(
+                    onTap: () => onPaymentMethodChanged(m.$1),
+                    borderRadius: BorderRadius.circular(10),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? accentColor.withValues(alpha: 0.1)
+                            : cs.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: isSelected
+                              ? accentColor.withValues(alpha: 0.5)
+                              : cs.outlineVariant.withValues(alpha: 0.4),
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(m.$3,
+                              size: 20,
+                              color: isSelected
+                                  ? accentColor
+                                  : cs.onSurfaceVariant),
+                          const SizedBox(height: 4),
+                          Text(
+                            context.l10n.tr(m.$2),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected
+                                  ? accentColor
+                                  : cs.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Payment date picker
+          Text(context.l10n.tr('Payment Date'),
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onSurfaceVariant,
+                  letterSpacing: 0.4)),
+          const SizedBox(height: 8),
+          MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: InkWell(
+            onTap: onPickPaymentDate,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.calendar_today_outlined,
+                      size: 16, color: accentColor),
+                  const SizedBox(width: 10),
+                  Text(
+                    fmt.format(paymentDate),
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  const Spacer(),
+                  Icon(Icons.edit_outlined, size: 14, color: cs.onSurfaceVariant),
+                ],
+              ),
+            ),
+          ),
           ),
         ],
       ),

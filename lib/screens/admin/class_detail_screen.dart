@@ -19,6 +19,7 @@ import 'tabs/admin_classes_tab.dart';
 import '../../models/app_user.dart';
 import 'member_detail_screen.dart';
 import '../../l10n/app_localizations.dart';
+import 'class_whiteboard_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public widget
@@ -471,6 +472,19 @@ class _ClassDetailScreenState extends State<ClassDetailScreen> {
     final pendingCheckIn =
         bookings.where((b) => !b.checkedIn && b.userId.isNotEmpty).toList();
     return [
+      _HeaderAction(
+        icon: Icons.dashboard_outlined,
+        label: 'Whiteboard',
+        color: const Color(0xFF10B981),
+        onPressed: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => ClassWhiteboardScreen(
+              gymClass: liveClass,
+              gymId: widget.gymId,
+            ),
+          ),
+        ),
+      ),
       _HeaderAction(
         icon: Icons.how_to_reg_outlined,
         label: 'Check-In Screen',

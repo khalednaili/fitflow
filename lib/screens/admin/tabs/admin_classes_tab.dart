@@ -1352,6 +1352,7 @@ class _ClassEditorDialogState extends State<_ClassEditorDialog> {
   bool _dropInEnabled = false;
   bool _isSaving = false;
   List<ClassType> _loadedClassTypes = <ClassType>[];
+  String _selectedClassTypeId = '';
   _EditScope _editScope = _EditScope.thisOnly;
 
   @override
@@ -1395,6 +1396,7 @@ class _ClassEditorDialogState extends State<_ClassEditorDialog> {
         ..addAll(existing.requiredOfferPlanIds);
       _selectedClassColorValue = existing.classColorValue;
       _repeatEndDate = existing.recurrenceEndDate;
+      _selectedClassTypeId = existing.classTypeId;
     } else {
       final initialStart = widget.initialStartDateTime;
       final initialEnd = widget.initialEndDateTime ??
@@ -1675,6 +1677,7 @@ class _ClassEditorDialogState extends State<_ClassEditorDialog> {
           dropInEnabled: _dropInEnabled,
           dropInPrice:
               double.tryParse(_dropInPriceController.text.trim()) ?? 0.0,
+          classTypeId: _selectedClassTypeId,
         );
       } else if (existing.recurrenceGroupId != null &&
           _editScope != _EditScope.thisOnly) {
@@ -1696,6 +1699,7 @@ class _ClassEditorDialogState extends State<_ClassEditorDialog> {
             dropInEnabled: _dropInEnabled,
             dropInPrice:
                 double.tryParse(_dropInPriceController.text.trim()) ?? 0.0,
+            classTypeId: _selectedClassTypeId,
           );
         } else {
           await _classService.updateEntireSeries(
@@ -1714,6 +1718,7 @@ class _ClassEditorDialogState extends State<_ClassEditorDialog> {
             dropInEnabled: _dropInEnabled,
             dropInPrice:
                 double.tryParse(_dropInPriceController.text.trim()) ?? 0.0,
+            classTypeId: _selectedClassTypeId,
           );
         }
       } else {
@@ -1735,6 +1740,7 @@ class _ClassEditorDialogState extends State<_ClassEditorDialog> {
           dropInEnabled: _dropInEnabled,
           dropInPrice:
               double.tryParse(_dropInPriceController.text.trim()) ?? 0.0,
+          classTypeId: _selectedClassTypeId,
         );
       }
 
@@ -2255,6 +2261,29 @@ class _ClassEditorDialogState extends State<_ClassEditorDialog> {
               ),
             );
           },
+        ),
+        const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          value: _selectedClassTypeId.isEmpty ? null : _selectedClassTypeId,
+          decoration: InputDecoration(
+            labelText: context.l10n.tr('Class type'),
+            prefixIcon: const Icon(Icons.category_outlined),
+          ),
+          hint: Text(context.l10n.tr('None (unrestricted)')),
+          items: [
+            DropdownMenuItem<String>(
+              value: '',
+              child: Text(context.l10n.tr('None (unrestricted)')),
+            ),
+            ..._loadedClassTypes.map(
+              (ct) => DropdownMenuItem<String>(
+                value: ct.id,
+                child: Text(ct.name),
+              ),
+            ),
+          ],
+          onChanged: (v) =>
+              setState(() => _selectedClassTypeId = v ?? ''),
         ),
         const SizedBox(height: 10),
         SwitchListTile(

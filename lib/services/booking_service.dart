@@ -10,7 +10,10 @@ enum BookingResult { booked, waitlisted }
 class BookingService {
   BookingService({this.gymId = '', FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance,
-        _notificationService = NotificationService(gymId: gymId);
+        _notificationService = NotificationService(
+          gymId: gymId,
+          firestore: firestore,
+        );
 
   final String gymId;
   final FirebaseFirestore _firestore;
@@ -157,6 +160,42 @@ class BookingService {
     );
   }
 
+  /// When true, a member cannot book a class whose time slot overlaps with
+  /// an existing booking. Defaults to false (overlap allowed).
+  Future<bool> getPreventOverlappingBookings() async {
+    final rules = await _getBookingRules();
+    return (rules['preventOverlappingBookings'] ?? false) as bool;
+  }
+
+  Future<void> setPreventOverlappingBookings(bool value) async {
+    await _firestore.collection('settings').doc('bookingRules').set(
+      <String, dynamic>{
+        'preventOverlappingBookings': value,
+        'gymId': gymId,
+      },
+      SetOptions(merge: true),
+    );
+    _rulesCache = null; // invalidate cache
+  }
+
+  /// When true, a member cannot book more than one class of the same type
+  /// (classTypeId) on the same calendar day. Defaults to false.
+  Future<bool> getPreventSameClassTypePerDay() async {
+    final rules = await _getBookingRules();
+    return (rules['preventSameClassTypePerDay'] ?? false) as bool;
+  }
+
+  Future<void> setPreventSameClassTypePerDay(bool value) async {
+    await _firestore.collection('settings').doc('bookingRules').set(
+      <String, dynamic>{
+        'preventSameClassTypePerDay': value,
+        'gymId': gymId,
+      },
+      SetOptions(merge: true),
+    );
+    _rulesCache = null; // invalidate cache
+  }
+
   /// Stream all late-cancellation penalty records for a user.
   Stream<List<Map<String, dynamic>>> streamLateCancellationsForUser(
       String userId) {
@@ -287,6 +326,10 @@ class BookingService {
             : <String>[legacyRequiredOfferPlanId.trim()]);
     final classStartTime =
         (classData['startTime'] as Timestamp?)?.toDate() ?? DateTime.now();
+    final classEndTime =
+        (classData['endTime'] as Timestamp?)?.toDate() ??
+            classStartTime.add(const Duration(hours: 1));
+    final classTypeId = (classData['classTypeId'] ?? '') as String;
 
     bool hasAnyValidAssignedOffer = false;
     for (final doc in userSubscriptionsQuery.docs) {
@@ -386,11 +429,50 @@ class BookingService {
       }
     }
 
-    // ── Duplicate booking check (uses pre-fetched allBookingsSnap) ────────────
+    // ── Duplicate booking check ───────────────────────────────────────────────
     final alreadyBooked = allBookingsSnap.docs
         .any((doc) => (doc.data()['classId'] ?? '') == classId);
     if (alreadyBooked) {
       throw Exception('You already booked this class.');
+    }
+
+    // ── Overlapping time-slot check ───────────────────────────────────────────
+    if (!isDropIn &&
+        (rules['preventOverlappingBookings'] ?? false) as bool) {
+      for (final doc in allBookingsSnap.docs) {
+        final data = doc.data();
+        final existingStart =
+            (data['classStartTime'] as Timestamp?)?.toDate();
+        final existingEnd = (data['classEndTime'] as Timestamp?)?.toDate();
+        // Skip legacy bookings that don't carry time-slot data.
+        if (existingStart == null || existingEnd == null) continue;
+        // Two intervals overlap when: newStart < existingEnd && existingStart < newEnd
+        if (classStartTime.isBefore(existingEnd) &&
+            existingStart.isBefore(classEndTime)) {
+          throw Exception(
+              'You already have a class booked during this time slot.');
+        }
+      }
+    }
+
+    // ── Same class-type per day check ─────────────────────────────────────────
+    if (!isDropIn &&
+        classTypeId.isNotEmpty &&
+        (rules['preventSameClassTypePerDay'] ?? false) as bool) {
+      final classDay = DateTime(
+          classStartTime.year, classStartTime.month, classStartTime.day);
+      final classDayEnd = classDay.add(const Duration(days: 1));
+      for (final doc in allBookingsSnap.docs) {
+        final data = doc.data();
+        final existingTypeId = (data['classTypeId'] ?? '') as String;
+        if (existingTypeId.isEmpty || existingTypeId != classTypeId) continue;
+        final bd = (data['bookingDate'] as Timestamp?)?.toDate();
+        if (bd == null) continue;
+        if (!bd.isBefore(classDay) && bd.isBefore(classDayEnd)) {
+          throw Exception(
+              'You already have a class of this type booked for today.');
+        }
+      }
     }
 
     // ── Minimum advance booking time check (uses cached rules) ────────────
@@ -436,9 +518,14 @@ class BookingService {
       }
     }
 
-    // ── Per-offer session limit check ───────────────────────────────────────
-    if (!isDropIn) {
-      Map<String, dynamic>? matchedSub;
+    // ── Resolve which subscription best matches this class ────────────────────
+    // When the class has requiredOfferPlanIds, prefer the subscription whose
+    // planId is in that set so that per-offer limits are checked against the
+    // correct offer. Fall back to the first date-valid subscription for classes
+    // with no offer restriction (any offer can join).
+    Map<String, dynamic>? matchedSub;
+    {
+      Map<String, dynamic>? fallbackSub;
       for (final doc in userSubscriptionsQuery.docs) {
         final data = doc.data();
         final subStatus = (data['status'] ?? 'pending') as String;
@@ -449,91 +536,111 @@ class BookingService {
             offerStart == null || !classStartTime.isBefore(offerStart);
         final withinEnd = offerEnd == null || !classStartTime.isAfter(offerEnd);
         if (withinStart && withinEnd) {
-          matchedSub = data;
-          break;
+          final subPlanId = (data['planId'] ?? '') as String;
+          if (effectiveRequiredOfferPlanIds.isNotEmpty &&
+              effectiveRequiredOfferPlanIds.contains(subPlanId)) {
+            matchedSub = data;
+            break; // exact match for this class's required offer
+          }
+          fallbackSub ??= data;
         }
       }
+      matchedSub ??= fallbackSub;
+    }
+    // usedPlanId is stored on the booking so per-plan counters stay isolated.
+    final usedPlanId = (matchedSub?['planId'] as String?) ?? '';
 
-      if (matchedSub != null) {
-        final planId = (matchedSub['planId'] ?? '') as String;
-        final subStart = (matchedSub['startDate'] as Timestamp?)?.toDate();
-        final subEnd = (matchedSub['endDate'] as Timestamp?)?.toDate();
+    // ── Per-offer session limit check ───────────────────────────────────────
+    if (!isDropIn && matchedSub != null) {
+      final planId = (matchedSub['planId'] ?? '') as String;
+      final subStart = (matchedSub['startDate'] as Timestamp?)?.toDate();
+      final subEnd = (matchedSub['endDate'] as Timestamp?)?.toDate();
 
-        if (planId.isNotEmpty) {
-          final p = await _getPlan(planId);
+      if (planId.isNotEmpty) {
+        final p = await _getPlan(planId);
 
-          if (p != null) {
-            final offerType = (p['offerType'] ?? 'weekly') as String;
-            final checkinsPerWeek = (p['checkinsPerWeek'] ?? 0) as int;
-            final checkinsPerMonth = (p['checkinsPerMonth'] ?? 0) as int;
-            final totalCheckins = (p['totalCheckins'] ?? 0) as int;
+        if (p != null) {
+          final offerType = (p['offerType'] ?? 'weekly') as String;
+          final checkinsPerWeek = (p['checkinsPerWeek'] ?? 0) as int;
+          final checkinsPerMonth = (p['checkinsPerMonth'] ?? 0) as int;
+          final totalCheckins = (p['totalCheckins'] ?? 0) as int;
 
-            // Use the already-fetched allBookingsSnap — no extra query needed.
-            if ((offerType == 'weekly' || offerType == 'weekly_recurring') &&
-                checkinsPerWeek > 0) {
-              // Monday of the week containing classStartTime
-              final daysFromMon = classStartTime.weekday - 1;
-              final weekStart = DateTime(
-                classStartTime.year,
-                classStartTime.month,
-                classStartTime.day,
-              ).subtract(Duration(days: daysFromMon));
-              final weekEnd = weekStart.add(const Duration(days: 7));
+          // Use the already-fetched allBookingsSnap — no extra query needed.
+          // Only count bookings that consumed this same plan so that a member
+          // holding multiple simultaneous offers doesn't have their limits
+          // counted across unrelated classes (e.g. "skills" bookings must not
+          // eat into "punic" weekly slots). Legacy bookings without usedPlanId
+          // are counted conservatively so old data can't be used to bypass limits.
+          bool sameOffer(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+            final docPlanId = (doc.data()['usedPlanId'] as String?) ?? '';
+            return docPlanId.isEmpty || docPlanId == planId;
+          }
 
-              final weekCount = allBookingsSnap.docs.where((doc) {
-                final bd = doc.data()['bookingDate'];
-                if (bd is! Timestamp) return false;
-                final dt = bd.toDate();
-                return !dt.isBefore(weekStart) && dt.isBefore(weekEnd);
-              }).length;
+          if ((offerType == 'weekly' || offerType == 'weekly_recurring') &&
+              checkinsPerWeek > 0) {
+            // Monday of the week containing classStartTime
+            final daysFromMon = classStartTime.weekday - 1;
+            final weekStart = DateTime(
+              classStartTime.year,
+              classStartTime.month,
+              classStartTime.day,
+            ).subtract(Duration(days: daysFromMon));
+            final weekEnd = weekStart.add(const Duration(days: 7));
 
-              if (weekCount >= checkinsPerWeek) {
-                throw Exception(
-                  'Weekly limit reached. Your offer allows $checkinsPerWeek '
-                  'class${checkinsPerWeek == 1 ? '' : 'es'} per week and you '
-                  'have already booked $weekCount this week.',
-                );
-              }
-            } else if (offerType == 'monthly_recurring' &&
-                checkinsPerMonth > 0) {
-              final monthStart =
-                  DateTime(classStartTime.year, classStartTime.month, 1);
-              final monthEnd =
-                  DateTime(classStartTime.year, classStartTime.month + 1, 1);
+            final weekCount = allBookingsSnap.docs.where((doc) {
+              final bd = doc.data()['bookingDate'];
+              if (bd is! Timestamp) return false;
+              final dt = bd.toDate();
+              if (!sameOffer(doc)) return false;
+              return !dt.isBefore(weekStart) && dt.isBefore(weekEnd);
+            }).length;
 
-              final monthCount = allBookingsSnap.docs.where((doc) {
-                final bd = doc.data()['bookingDate'];
-                if (bd is! Timestamp) return false;
-                final dt = bd.toDate();
-                return !dt.isBefore(monthStart) && dt.isBefore(monthEnd);
-              }).length;
+            if (weekCount >= checkinsPerWeek) {
+              throw Exception(
+                'Weekly limit reached. Your offer allows $checkinsPerWeek '
+                'class${checkinsPerWeek == 1 ? '' : 'es'} per week and you '
+                'have already booked $weekCount this week.',
+              );
+            }
+          } else if (offerType == 'monthly_recurring' && checkinsPerMonth > 0) {
+            final monthStart =
+                DateTime(classStartTime.year, classStartTime.month, 1);
+            final monthEnd =
+                DateTime(classStartTime.year, classStartTime.month + 1, 1);
 
-              if (monthCount >= checkinsPerMonth) {
-                throw Exception(
-                  'Monthly limit reached. Your offer allows $checkinsPerMonth '
-                  'class${checkinsPerMonth == 1 ? '' : 'es'} per month and you '
-                  'have already booked $monthCount this month.',
-                );
-              }
-            } else if ((offerType == 'limited_sessions' ||
-                    offerType == 'pack') &&
-                totalCheckins > 0) {
-              final periodStart = subStart ?? DateTime(2000);
-              final periodEnd = subEnd ?? DateTime(2100);
+            final monthCount = allBookingsSnap.docs.where((doc) {
+              final bd = doc.data()['bookingDate'];
+              if (bd is! Timestamp) return false;
+              final dt = bd.toDate();
+              if (!sameOffer(doc)) return false;
+              return !dt.isBefore(monthStart) && dt.isBefore(monthEnd);
+            }).length;
 
-              final usedCount = allBookingsSnap.docs.where((doc) {
-                final bd = doc.data()['bookingDate'];
-                if (bd is! Timestamp) return false;
-                final dt = bd.toDate();
-                return !dt.isBefore(periodStart) && !dt.isAfter(periodEnd);
-              }).length;
+            if (monthCount >= checkinsPerMonth) {
+              throw Exception(
+                'Monthly limit reached. Your offer allows $checkinsPerMonth '
+                'class${checkinsPerMonth == 1 ? '' : 'es'} per month and you '
+                'have already booked $monthCount this month.',
+              );
+            }
+          } else if ((offerType == 'limited_sessions' || offerType == 'pack') &&
+              totalCheckins > 0) {
+            final periodStart = subStart ?? DateTime(2000);
+            final periodEnd = subEnd ?? DateTime(2100);
 
-              if (usedCount >= totalCheckins) {
-                throw Exception(
-                  'Session pack exhausted. Your offer includes $totalCheckins '
-                  'session${totalCheckins == 1 ? '' : 's'} and all have been used.',
-                );
-              }
+            final usedCount = allBookingsSnap.docs.where((doc) {
+              final bd = doc.data()['bookingDate'];
+              if (bd is! Timestamp) return false;
+              final dt = bd.toDate();
+              if (!sameOffer(doc)) return false;
+              return !dt.isBefore(periodStart) && !dt.isAfter(periodEnd);
+            }).length;
+
+            if (usedCount >= totalCheckins) {
+              throw Exception(
+                'Session pack exhausted. Your offer includes $totalCheckins '
+                'session${totalCheckins == 1 ? '' : 's'} and all have been used.',
+              );
             }
           }
         }
@@ -575,6 +682,10 @@ class BookingService {
           'memberName': memberName,
           'isDropIn': isDropIn,
           'dropInPaymentStatus': dropInPaymentStatus,
+          'usedPlanId': usedPlanId,
+          'classStartTime': Timestamp.fromDate(classStartTime),
+          'classEndTime': Timestamp.fromDate(classEndTime),
+          'classTypeId': classTypeId,
         });
       });
       return BookingResult.booked;

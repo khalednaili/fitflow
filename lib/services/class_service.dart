@@ -146,6 +146,7 @@ class ClassService {
     int? classColorValue,
     bool dropInEnabled = false,
     double dropInPrice = 0.0,
+    String classTypeId = '',
   }) async {
     final cleanCoachIds = coachIds
         .map((id) => id.trim())
@@ -196,6 +197,7 @@ class ClassService {
         'dropInEnabled': dropInEnabled,
         'dropInPrice': dropInPrice,
         'gymId': gymId,
+        'classTypeId': classTypeId,
       };
       if (classColorValue != null) {
         payload['classColorValue'] = classColorValue;
@@ -269,6 +271,7 @@ class ClassService {
           'dropInEnabled': dropInEnabled,
           'dropInPrice': dropInPrice,
           'gymId': gymId,
+          'classTypeId': classTypeId,
         };
         if (classColorValue != null) {
           payload['classColorValue'] = classColorValue;
@@ -300,6 +303,7 @@ class ClassService {
         'dropInEnabled': dropInEnabled,
         'dropInPrice': dropInPrice,
         'gymId': gymId,
+        'classTypeId': classTypeId,
       };
       if (classColorValue != null) {
         payload['classColorValue'] = classColorValue;
@@ -325,6 +329,7 @@ class ClassService {
     int? classColorValue,
     bool dropInEnabled = false,
     double dropInPrice = 0.0,
+    String classTypeId = '',
   }) async {
     final cleanCoachIds = coachIds
         .map((id) => id.trim())
@@ -362,6 +367,7 @@ class ClassService {
       'classColorValue': classColorValue ?? FieldValue.delete(),
       'dropInEnabled': dropInEnabled,
       'dropInPrice': dropInPrice,
+      'classTypeId': classTypeId,
     };
 
     await _firestore.collection('classes').doc(classId).update(payload);
@@ -509,6 +515,7 @@ class ClassService {
     int? classColorValue,
     bool dropInEnabled = false,
     double dropInPrice = 0.0,
+    String classTypeId = '',
   }) async {
     final snap = await _firestore
         .collection('classes')
@@ -561,6 +568,7 @@ class ClassService {
           'dropInEnabled': dropInEnabled,
           'dropInPrice': dropInPrice,
           'updatedAt': updatedAt,
+          'classTypeId': classTypeId,
         });
       }
       await batch.commit();
@@ -583,6 +591,7 @@ class ClassService {
     int? classColorValue,
     bool dropInEnabled = false,
     double dropInPrice = 0.0,
+    String classTypeId = '',
   }) async {
     final snap = await _firestore
         .collection('classes')
@@ -637,6 +646,7 @@ class ClassService {
           'dropInEnabled': dropInEnabled,
           'dropInPrice': dropInPrice,
           'updatedAt': updatedAt,
+          'classTypeId': classTypeId,
         });
       }
       await batch.commit();

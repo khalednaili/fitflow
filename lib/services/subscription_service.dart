@@ -270,6 +270,7 @@ class SubscriptionService {
     int initialAmountPaid = 0,
     String initialPaymentMethod = 'cash',
     String initialPaymentNotes = '',
+    DateTime? initialPaymentDate,
     DateTime? startDate,
     DateTime? endDate,
   }) async {
@@ -280,7 +281,7 @@ class SubscriptionService {
         ? <Map<String, dynamic>>[
             <String, dynamic>{
               'amount': safeInitialAmountPaid,
-              'date': Timestamp.fromDate(now),
+              'date': Timestamp.fromDate(initialPaymentDate ?? now),
               'method': initialPaymentMethod,
               'notes': initialPaymentNotes,
             },
@@ -305,60 +306,131 @@ class SubscriptionService {
     });
   }
 
+  /// Atomically creates the subscription document AND updates the member's
+  /// user doc in a single [WriteBatch].
+  ///
+  /// Throws if the member already has an **active** subscription for this plan.
+  Future<void> assignOfferAtomic({
+    required String userId,
+    required String planId,
+    required int totalAmount,
+    required String currency,
+    required DateTime startDate,
+    required DateTime endDate,
+    int initialAmountPaid = 0,
+    String initialPaymentMethod = 'cash',
+    String initialPaymentNotes = '',
+    DateTime? initialPaymentDate,
+  }) async {
+    final docId = '${userId}_$planId';
+    final now = DateTime.now();
+
+    // ── Duplicate-offer guard ─────────────────────────────────────────────
+    final existingSnap = await _firestore
+        .collection('user_subscriptions')
+        .doc(docId)
+        .get();
+    if (existingSnap.exists) {
+      final existingStatus =
+          (existingSnap.data()?['status'] ?? '') as String;
+      if (existingStatus == 'active') {
+        throw Exception(
+            'This member already has an active subscription for this offer.');
+      }
+    }
+
+    final safeInitialAmountPaid = initialAmountPaid.clamp(0, totalAmount);
+    final paymentHistory = safeInitialAmountPaid > 0
+        ? <Map<String, dynamic>>[
+            <String, dynamic>{
+              'amount': safeInitialAmountPaid,
+              'date': Timestamp.fromDate(initialPaymentDate ?? now),
+              'method': initialPaymentMethod,
+              'notes': initialPaymentNotes,
+            },
+          ]
+        : <Map<String, dynamic>>[];
+
+    // ── Atomic batch: subscription doc + user doc ─────────────────────────
+    final batch = _firestore.batch();
+
+    batch.set(
+      _firestore.collection('user_subscriptions').doc(docId),
+      <String, dynamic>{
+        'gymId': gymId,
+        'userId': userId,
+        'planId': planId,
+        'totalAmount': totalAmount,
+        'amountPaid': safeInitialAmountPaid,
+        'currency': currency,
+        'status': 'active',
+        'startDate': Timestamp.fromDate(startDate),
+        'endDate': Timestamp.fromDate(endDate),
+        'paymentHistory': paymentHistory,
+        'updatedAt': Timestamp.now(),
+      },
+    );
+
+    batch.update(
+      _firestore.collection('users').doc(userId),
+      <String, dynamic>{
+        'membershipPlanId': planId,
+        'subscriptionStatus': 'active',
+        'offerStartAt': Timestamp.fromDate(startDate),
+        'offerEndAt': Timestamp.fromDate(endDate),
+        'updatedAt': Timestamp.now(),
+      },
+    );
+
+    await batch.commit();
+  }
+
   Future<void> recordPayment({
     required String subscriptionId,
     required int amount,
     required String method,
     required String notes,
   }) async {
-    final subSnapshot = await _firestore
+    final subRef = _firestore
         .collection('user_subscriptions')
-        .doc(subscriptionId)
-        .get();
+        .doc(subscriptionId);
 
-    if (!subSnapshot.exists) {
-      throw Exception('User subscription not found');
-    }
+    await _firestore.runTransaction((tx) async {
+      final subSnapshot = await tx.get(subRef);
 
-    final data = subSnapshot.data() ?? <String, dynamic>{};
-    final currentAmountPaid = (data['amountPaid'] as num? ?? 0).toInt();
-    final totalAmount = (data['totalAmount'] as num? ?? 0).toInt();
-    final paymentHistoryData = (data['paymentHistory'] ?? []) as List<dynamic>;
-    final remainingAmount = totalAmount - currentAmountPaid;
+      if (!subSnapshot.exists) {
+        throw Exception('User subscription not found');
+      }
 
-    if (amount <= 0) {
-      throw Exception('Payment amount must be greater than zero.');
-    }
+      final data = subSnapshot.data() ?? <String, dynamic>{};
+      final currentAmountPaid = (data['amountPaid'] as num? ?? 0).toInt();
+      final totalAmount = (data['totalAmount'] as num? ?? 0).toInt();
+      final paymentHistoryData =
+          (data['paymentHistory'] ?? []) as List<dynamic>;
+      final remainingAmount = totalAmount - currentAmountPaid;
 
-    if (remainingAmount <= 0) {
-      throw Exception('This offer is already fully paid.');
-    }
+      if (amount <= 0) {
+        throw Exception('Payment amount must be greater than zero.');
+      }
+      if (remainingAmount <= 0) {
+        throw Exception('This offer is already fully paid.');
+      }
+      if (amount > remainingAmount) {
+        throw Exception('Payment exceeds the remaining amount.');
+      }
 
-    if (amount > remainingAmount) {
-      throw Exception('Payment exceeds the remaining amount.');
-    }
+      final paymentRecord = <String, dynamic>{
+        'amount': amount,
+        'date': Timestamp.now(),
+        'method': method,
+        'notes': notes,
+      };
 
-    final paymentRecord = <String, dynamic>{
-      'amount': amount,
-      'date': Timestamp.now(),
-      'method': method,
-      'notes': notes,
-    };
-
-    final newAmountPaid = currentAmountPaid + amount;
-
-    final updatedPaymentHistory = [
-      ...paymentHistoryData,
-      paymentRecord,
-    ];
-
-    await _firestore
-        .collection('user_subscriptions')
-        .doc(subscriptionId)
-        .update(<String, dynamic>{
-      'amountPaid': newAmountPaid,
-      'paymentHistory': updatedPaymentHistory,
-      'updatedAt': Timestamp.now(),
+      tx.update(subRef, <String, dynamic>{
+        'amountPaid': currentAmountPaid + amount,
+        'paymentHistory': [...paymentHistoryData, paymentRecord],
+        'updatedAt': Timestamp.now(),
+      });
     });
   }
 

@@ -25,6 +25,7 @@ class GymClass {
     this.coachNote = '',
     this.recurrenceGroupId,
     this.recurrenceEndDate,
+    this.classTypeId = '',
   });
 
   final String id;
@@ -50,6 +51,8 @@ class GymClass {
   final String coachNote;
   final String? recurrenceGroupId;
   final DateTime? recurrenceEndDate;
+  /// ID of the ClassType this class belongs to. Empty means unclassified.
+  final String classTypeId;
 
   bool get isFull => bookedCount >= capacity;
   bool get hasOfferRequirement => requiredOfferPlanIds.isNotEmpty;
@@ -111,6 +114,7 @@ class GymClass {
       coachNote: (data['coachNote'] ?? '') as String,
       recurrenceGroupId: data['recurrenceGroupId'] as String?,
       recurrenceEndDate: (data['recurrenceEndDate'] as Timestamp?)?.toDate(),
+      classTypeId: (data['classTypeId'] ?? '') as String,
     );
   }
 
@@ -139,6 +143,7 @@ class GymClass {
       'recurrenceEndDate': recurrenceEndDate != null
           ? Timestamp.fromDate(recurrenceEndDate!)
           : null,
+      'classTypeId': classTypeId,
     };
   }
 }

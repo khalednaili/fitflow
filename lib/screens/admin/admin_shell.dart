@@ -533,6 +533,7 @@ class _AdminShellState extends State<AdminShell> {
                   .toList(),
             ),
           ),
+          _buildSidebarBookingSettings(showLabels: showLabels),
           _buildSidebarLogout(showLabels: showLabels),
         ],
       ),
@@ -629,6 +630,42 @@ class _AdminShellState extends State<AdminShell> {
                         color: Colors.white,
                         fontSize: 13,
                         fontWeight: FontWeight.w700)),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildSidebarBookingSettings({required bool showLabels}) {
+    void openDialog() => showDialog<void>(
+          context: context,
+          builder: (_) =>
+              BookingSettingsDialog(gymId: widget.appUser?.gymId ?? ''),
+        );
+
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Color(0xFF1A3530))),
+      ),
+      child: showLabels
+          ? ListTile(
+              dense: true,
+              leading: const Icon(Icons.tune_outlined,
+                  size: 18, color: Color(0xFF6B7280)),
+              title: Text(context.l10n.tr('Booking Rules'),
+                  style:
+                      const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
+              onTap: openDialog,
+            )
+          : Tooltip(
+              message: context.l10n.tr('Booking Rules'),
+              child: InkWell(
+                onTap: openDialog,
+                child: const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                      child: Icon(Icons.tune_outlined,
+                          size: 18, color: Color(0xFF6B7280))),
+                ),
               ),
             ),
     );
@@ -785,6 +822,7 @@ class _AdminShellState extends State<AdminShell> {
                     .toList(),
               ),
             ),
+            _buildSidebarBookingSettings(showLabels: true),
             _buildSidebarLogout(showLabels: true),
           ],
         ),

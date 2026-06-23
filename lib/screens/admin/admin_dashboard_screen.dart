@@ -1032,6 +1032,8 @@ class BookingSettingsDialogState extends State<BookingSettingsDialog> {
   final _minAdvanceCtrl = TextEditingController();
   // unit: 'minutes' | 'hours' | 'days'
   String _minAdvanceUnit = 'hours';
+  bool _preventOverlapping = false;
+  bool _preventSameTypePerDay = false;
   bool _loading = true;
   bool _saving = false;
 
@@ -1054,12 +1056,16 @@ class BookingSettingsDialogState extends State<BookingSettingsDialog> {
       _bookingService.getMaxBookingsPerDay(),
       _bookingService.getLateCancellationMinutes(),
       _bookingService.getMinAdvanceBookingMinutes(),
+      _bookingService.getPreventOverlappingBookings(),
+      _bookingService.getPreventSameClassTypePerDay(),
     ]);
     if (mounted) {
       setState(() {
-        final max = results[0];
-        final lateMins = results[1];
-        final advanceMins = results[2];
+        final max = results[0] as int;
+        final lateMins = results[1] as int;
+        final advanceMins = results[2] as int;
+        _preventOverlapping = results[3] as bool;
+        _preventSameTypePerDay = results[4] as bool;
         _maxPerDayCtrl.text = max == 0 ? '' : '$max';
         _lateCancelCtrl.text = lateMins == 0 ? '' : '$lateMins';
         // Convert stored minutes to preferred unit
@@ -1106,6 +1112,8 @@ class BookingSettingsDialogState extends State<BookingSettingsDialog> {
       _bookingService.setMaxBookingsPerDay(maxValue),
       _bookingService.setLateCancellationMinutes(lateValue),
       _bookingService.setMinAdvanceBookingMinutes(advMinutes),
+      _bookingService.setPreventOverlappingBookings(_preventOverlapping),
+      _bookingService.setPreventSameClassTypePerDay(_preventSameTypePerDay),
     ]);
     if (mounted) {
       setState(() => _saving = false);
@@ -1398,6 +1406,72 @@ class BookingSettingsDialogState extends State<BookingSettingsDialog> {
                         ),
                       ],
                     ),
+                  ),
+
+                  const SizedBox(height: 20),
+                  Divider(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                  const SizedBox(height: 8),
+
+                  // ── Prevent overlapping time slots ────────────────────
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.event_busy_outlined,
+                          color: Colors.red, size: 16),
+                    ),
+                    title: Text(
+                      context.l10n.tr('Prevent overlapping bookings'),
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      context.l10n.tr(
+                          'Members cannot book a class whose time slot overlaps with an existing booking.'),
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant),
+                    ),
+                    value: _preventOverlapping,
+                    onChanged: (v) =>
+                        setState(() => _preventOverlapping = v),
+                  ),
+
+                  const SizedBox(height: 8),
+                  Divider(color: cs.outlineVariant.withValues(alpha: 0.5)),
+                  const SizedBox(height: 8),
+
+                  // ── Prevent same class type per day ───────────────────
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    secondary: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.block_outlined,
+                          color: Colors.purple, size: 16),
+                    ),
+                    title: Text(
+                      context.l10n.tr('One class type per day'),
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      context.l10n.tr(
+                          'Members can only book one class of the same type per day (requires class type to be set on each class).'),
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant),
+                    ),
+                    value: _preventSameTypePerDay,
+                    onChanged: (v) =>
+                        setState(() => _preventSameTypePerDay = v),
                   ),
                 ],
               ),

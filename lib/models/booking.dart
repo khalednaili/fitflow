@@ -13,6 +13,10 @@ class Booking {
     this.isDropIn = false,
     this.dropInPaymentStatus = 'pending',
     this.gymId = '',
+    this.usedPlanId = '',
+    this.classStartTime,
+    this.classEndTime,
+    this.classTypeId = '',
   });
 
   final String id;
@@ -28,6 +32,16 @@ class Booking {
   final bool isDropIn;
   final String dropInPaymentStatus;
   final String gymId;
+  /// The planId of the subscription that was consumed for this booking.
+  /// Used to isolate per-offer check-in counters when a member holds
+  /// multiple simultaneous offers.
+  final String usedPlanId;
+  /// Start/end times of the class — stored on the booking so overlap checks
+  /// can be done without fetching every booked class document.
+  final DateTime? classStartTime;
+  final DateTime? classEndTime;
+  /// ClassType ID of the booked class. Empty when the class has no type set.
+  final String classTypeId;
 
   bool get isGuest => userId.isEmpty && guestEmail.isNotEmpty;
 
@@ -46,6 +60,10 @@ class Booking {
       isDropIn: (data['isDropIn'] ?? false) as bool,
       dropInPaymentStatus: (data['dropInPaymentStatus'] ?? 'pending') as String,
       gymId: (data['gymId'] ?? '') as String,
+      usedPlanId: (data['usedPlanId'] ?? '') as String,
+      classStartTime: (data['classStartTime'] as Timestamp?)?.toDate(),
+      classEndTime: (data['classEndTime'] as Timestamp?)?.toDate(),
+      classTypeId: (data['classTypeId'] ?? '') as String,
     );
   }
 
@@ -61,6 +79,12 @@ class Booking {
       'isDropIn': isDropIn,
       'dropInPaymentStatus': dropInPaymentStatus,
       'gymId': gymId,
+      'usedPlanId': usedPlanId,
+      if (classStartTime != null)
+        'classStartTime': Timestamp.fromDate(classStartTime!),
+      if (classEndTime != null)
+        'classEndTime': Timestamp.fromDate(classEndTime!),
+      'classTypeId': classTypeId,
     };
   }
 }

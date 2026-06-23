@@ -139,20 +139,14 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
         final plan = _selectedPlan!;
         final initialPaid =
             int.tryParse(_initialPaidCtrl.text.trim()) ?? 0;
-        await _subscriptionService.createUserSubscription(
+        await _subscriptionService.assignOfferAtomic(
           userId: uid,
           planId: plan.id,
           totalAmount: plan.price,
           currency: plan.currency,
+          startDate: _offerStart,
+          endDate: _offerEnd,
           initialAmountPaid: initialPaid.clamp(0, plan.price),
-          startDate: _offerStart,
-          endDate: _offerEnd,
-        );
-        await _memberService.assignOfferWithDates(
-          userId: uid,
-          membershipPlanId: plan.id,
-          startDate: _offerStart,
-          endDate: _offerEnd,
         );
       }
 

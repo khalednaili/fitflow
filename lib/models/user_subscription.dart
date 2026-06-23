@@ -50,6 +50,13 @@ class UserSubscription {
   double get paymentPercentage =>
       totalAmount > 0 ? amountPaid / totalAmount : 0;
 
+  /// `'paid'` · `'partial'` · `'unpaid'`
+  String get paymentStatus {
+    if (totalAmount <= 0 || amountPaid >= totalAmount) return 'paid';
+    if (amountPaid > 0) return 'partial';
+    return 'unpaid';
+  }
+
   factory UserSubscription.fromSnapshot(
     DocumentSnapshot<Map<String, dynamic>> snapshot,
   ) {
