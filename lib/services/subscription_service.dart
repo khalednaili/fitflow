@@ -367,7 +367,7 @@ class SubscriptionService {
     if (instalmentSchedule.isNotEmpty) {
       final paidNow =
           instalmentSchedule.where((i) => i.paid).toList();
-      amountPaid = paidNow.fold(0, (sum, i) => sum + i.amount)
+      amountPaid = paidNow.fold(0, (acc, i) => acc + i.amount)
           .clamp(0, totalAmount);
       paymentHistory = paidNow
           .map((i) => <String, dynamic>{
@@ -508,7 +508,7 @@ class SubscriptionService {
 
   /// Stream all instalment schedules for the gym with pending (unpaid)
   /// instalments, for the admin payment calendar.
-  Stream<List<_InstalmentWithSubscription>> streamPendingInstalments() {
+  Stream<List<InstalmentWithSubscription>> streamPendingInstalments() {
     return _userSubscriptionsQuery
         .where('gymId', isEqualTo: gymId)
         .snapshots()

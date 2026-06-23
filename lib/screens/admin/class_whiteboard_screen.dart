@@ -33,9 +33,12 @@ class ClassWhiteboardScreen extends StatefulWidget {
   State<ClassWhiteboardScreen> createState() => _ClassWhiteboardScreenState();
 }
 
-class _ClassWhiteboardScreenState extends State<ClassWhiteboardScreen> {
+class _ClassWhiteboardScreenState extends State<ClassWhiteboardScreen>
+    with SingleTickerProviderStateMixin {
   late final _bookingService = BookingService(gymId: widget.gymId);
   late final _wodService = WodService(gymId: widget.gymId);
+  late final TabController _tabController =
+      TabController(length: 2, vsync: this);
 
   late final Stream<List<Booking>> _bookingsStream =
       _bookingService.streamBookingsForClass(widget.gymClass.id);
@@ -54,6 +57,12 @@ class _ClassWhiteboardScreenState extends State<ClassWhiteboardScreen> {
   static const _border = Color(0xFF1A3530);
   static const _accent = Color(0xFF10B981);
   static const _textSub = Color(0xFF9CA3AF);
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
 
   // ── helpers ──────────────────────────────────────────────────────────────
 

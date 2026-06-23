@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../l10n/app_localizations.dart';
-import '../../models/user_subscription.dart';
+import '../../models/app_user.dart';
+import '../../models/membership_plan.dart';
+import '../../services/member_service.dart';
 import '../../services/subscription_service.dart';
+import 'member_detail_screen.dart';
 
-/// Shows all pending (unpaid) instalments across every member,
+/// Admin screen — shows all pending (unpaid) instalments across every member,
 /// grouped by status: Overdue · Due Today · Upcoming.
 class PaymentCalendarScreen extends StatefulWidget {
   const PaymentCalendarScreen({super.key, required this.gymId});
@@ -18,117 +21,32 @@ class PaymentCalendarScreen extends StatefulWidget {
 class _PaymentCalendarScreenState extends State<PaymentCalendarScreen> {
   late final SubscriptionService _service =
       SubscriptionService(gymId: widget.gymId);
+  late final MemberService _memberService =
+      MemberService(gymId: widget.gymId);
 
-  static const _methodIcons = {
-    'cash': Icons.payments_outlined,
-    'card': Icons.credit_card_outlined,
-    'transfer': Icons.account_balance_outlined,
-    'cheque': Icons.receipt_outlined,
-  };
+  Map<String, AppUser> _membersById = {};
+  Map<String, String> _planNamesById = {};
+  bool _metadataReady = false;
 
   @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
+  void initState() {
+    super.initState();
+    _loadMetadata();
+  }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(context.l10n.tr('Payment Calendar')),
-        centerTitle: true,
-      ),
-      body: StreamBuilder<List<InstalmentWithSubscription>>(
-        stream: _service.streamPendingInstalments(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-                child: Text('${context.l10n.tr('Error')}: ${snapshot.error}'));
-          }
-
-          final all = snapshot.data ?? [];
-          if (all.isEmpty) {
-            return _EmptyState(cs: cs);
-          }
-
-          // ── Split into groups ────────────────────────────────────────
-          final overdue = <InstalmentWithSubscription>[];
-          final dueToday = <InstalmentWithSubscription>[];
-          final upcoming = <InstalmentWithSubscription>[];
-
-          for (final item in all) {
-            final due = item.instalment.dueDate;
-            final dueDate =
-                DateTime(due.year, due.month, due.day);
-            if (dueDate.isBefore(todayDate)) {
-              overdue.add(item);
-            } else if (dueDate.isAtSameMomentAs(todayDate)) {
-              dueToday.add(item);
-            } else {
-              upcoming.add(item);
-            }
-          }
-
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (overdue.isNotEmpty) ...[
-                _GroupHeader(
-                  icon: Icons.warning_amber_rounded,
-                  label: context.l10n.tr('Overdue'),
-                  count: overdue.length,
-                  color: cs.error,
-                ),
-                const SizedBox(height: 8),
-                ...overdue.map((item) => _InstalmentTile(
-                      item: item,
-                      methodIcons: _methodIcons,
-                      statusColor: cs.error,
-                      statusIcon: Icons.warning_amber_outlined,
-                      onMarkPaid: _handleMarkPaid,
-                    )),
-                const SizedBox(height: 20),
-              ],
-              if (dueToday.isNotEmpty) ...[
-                _GroupHeader(
-                  icon: Icons.today_outlined,
-                  label: context.l10n.tr('Due Today'),
-                  count: dueToday.length,
-                  color: Colors.orange,
-                ),
-                const SizedBox(height: 8),
-                ...dueToday.map((item) => _InstalmentTile(
-                      item: item,
-                      methodIcons: _methodIcons,
-                      statusColor: Colors.orange,
-                      statusIcon: Icons.today_outlined,
-                      onMarkPaid: _handleMarkPaid,
-                    )),
-                const SizedBox(height: 20),
-              ],
-              if (upcoming.isNotEmpty) ...[
-                _GroupHeader(
-                  icon: Icons.schedule_outlined,
-                  label: context.l10n.tr('Upcoming'),
-                  count: upcoming.length,
-                  color: cs.primary,
-                ),
-                const SizedBox(height: 8),
-                ...upcoming.map((item) => _InstalmentTile(
-                      item: item,
-                      methodIcons: _methodIcons,
-                      statusColor: cs.primary,
-                      statusIcon: Icons.schedule_outlined,
-                      onMarkPaid: _handleMarkPaid,
-                    )),
-              ],
-            ],
-          );
-        },
-      ),
-    );
+  Future<void> _loadMetadata() async {
+    final results = await Future.wait([
+      _memberService.fetchMembers(),
+      _service.streamAllOffers().first,
+    ]);
+    if (!mounted) return;
+    final members = results[0] as List<AppUser>;
+    final plans = results[1] as List<MembershipPlan>;
+    setState(() {
+      _membersById = {for (final m in members) m.id: m};
+      _planNamesById = {for (final p in plans) p.id: p.name};
+      _metadataReady = true;
+    });
   }
 
   Future<void> _handleMarkPaid(
@@ -138,8 +56,317 @@ class _PaymentCalendarScreenState extends State<PaymentCalendarScreen> {
       instalmentId: instalmentId,
     );
   }
+
+  void _openProfile(BuildContext context, AppUser member) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MemberDetailScreen(member: member),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+
+    return Scaffold(
+      backgroundColor: cs.surfaceContainerLowest,
+      appBar: AppBar(
+        backgroundColor: cs.surfaceContainerLowest,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.calendar_month_outlined, size: 20, color: cs.primary),
+            const SizedBox(width: 8),
+            Text(
+              context.l10n.tr('Payment Calendar'),
+              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+            ),
+          ],
+        ),
+        actions: [
+          if (!_metadataReady)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+          IconButton(
+            icon: const Icon(Icons.refresh_outlined),
+            tooltip: 'Refresh',
+            onPressed: _loadMetadata,
+          ),
+        ],
+      ),
+      body: StreamBuilder<List<InstalmentWithSubscription>>(
+        stream: _service.streamPendingInstalments(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return _ErrorState(error: '${snapshot.error}');
+          }
+
+          final all = snapshot.data ?? [];
+          if (all.isEmpty) {
+            return const _EmptyState();
+          }
+
+          // Group by status
+          final overdue = <InstalmentWithSubscription>[];
+          final dueToday = <InstalmentWithSubscription>[];
+          final upcoming = <InstalmentWithSubscription>[];
+
+          for (final item in all) {
+            final d = item.instalment.dueDate;
+            final due = DateTime(d.year, d.month, d.day);
+            if (due.isBefore(todayDate)) {
+              overdue.add(item);
+            } else if (due.isAtSameMomentAs(todayDate)) {
+              dueToday.add(item);
+            } else {
+              upcoming.add(item);
+            }
+          }
+
+          int groupTotal(List<InstalmentWithSubscription> g) =>
+              g.fold(0, (s, i) => s + i.instalment.amount);
+
+          final currency = all.first.subscription.currency;
+
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 760;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _SummaryBar(
+                    overdueCount: overdue.length,
+                    overdueTotal: groupTotal(overdue),
+                    todayCount: dueToday.length,
+                    todayTotal: groupTotal(dueToday),
+                    upcomingCount: upcoming.length,
+                    upcomingTotal: groupTotal(upcoming),
+                    currency: currency,
+                  ),
+                  Expanded(
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                          isWide ? 24 : 16, 16, isWide ? 24 : 16, 32),
+                      children: [
+                        if (overdue.isNotEmpty) ...[
+                          _GroupHeader(
+                            icon: Icons.warning_amber_rounded,
+                            label: context.l10n.tr('Overdue'),
+                            count: overdue.length,
+                            color: cs.error,
+                          ),
+                          const SizedBox(height: 10),
+                          _TileGrid(
+                            items: overdue,
+                            statusColor: cs.error,
+                            statusIcon: Icons.warning_amber_outlined,
+                            membersById: _membersById,
+                            planNamesById: _planNamesById,
+                            todayDate: todayDate,
+                            isWide: isWide,
+                            onMarkPaid: _handleMarkPaid,
+                            onViewProfile: (m) => _openProfile(context, m),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                        if (dueToday.isNotEmpty) ...[
+                          _GroupHeader(
+                            icon: Icons.today_outlined,
+                            label: context.l10n.tr('Due Today'),
+                            count: dueToday.length,
+                            color: Colors.orange.shade700,
+                          ),
+                          const SizedBox(height: 10),
+                          _TileGrid(
+                            items: dueToday,
+                            statusColor: Colors.orange.shade700,
+                            statusIcon: Icons.today_outlined,
+                            membersById: _membersById,
+                            planNamesById: _planNamesById,
+                            todayDate: todayDate,
+                            isWide: isWide,
+                            onMarkPaid: _handleMarkPaid,
+                            onViewProfile: (m) => _openProfile(context, m),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                        if (upcoming.isNotEmpty) ...[
+                          _GroupHeader(
+                            icon: Icons.schedule_outlined,
+                            label: context.l10n.tr('Upcoming'),
+                            count: upcoming.length,
+                            color: cs.primary,
+                          ),
+                          const SizedBox(height: 10),
+                          _TileGrid(
+                            items: upcoming,
+                            statusColor: cs.primary,
+                            statusIcon: Icons.schedule_outlined,
+                            membersById: _membersById,
+                            planNamesById: _planNamesById,
+                            todayDate: todayDate,
+                            isWide: isWide,
+                            onMarkPaid: _handleMarkPaid,
+                            onViewProfile: (m) => _openProfile(context, m),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// _SummaryBar
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SummaryBar extends StatelessWidget {
+  const _SummaryBar({
+    required this.overdueCount,
+    required this.overdueTotal,
+    required this.todayCount,
+    required this.todayTotal,
+    required this.upcomingCount,
+    required this.upcomingTotal,
+    required this.currency,
+  });
+
+  final int overdueCount, overdueTotal;
+  final int todayCount, todayTotal;
+  final int upcomingCount, upcomingTotal;
+  final String currency;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLow,
+        border: Border(
+            bottom:
+                BorderSide(color: cs.outlineVariant.withValues(alpha: 0.4))),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Row(
+        children: [
+          _SummaryChip(
+            label: context.l10n.tr('Overdue'),
+            count: overdueCount,
+            amount: overdueTotal,
+            currency: currency,
+            color: cs.error,
+            icon: Icons.warning_amber_rounded,
+          ),
+          const SizedBox(width: 10),
+          _SummaryChip(
+            label: context.l10n.tr('Today'),
+            count: todayCount,
+            amount: todayTotal,
+            currency: currency,
+            color: Colors.orange.shade700,
+            icon: Icons.today_outlined,
+          ),
+          const SizedBox(width: 10),
+          _SummaryChip(
+            label: context.l10n.tr('Upcoming'),
+            count: upcomingCount,
+            amount: upcomingTotal,
+            currency: currency,
+            color: cs.primary,
+            icon: Icons.schedule_outlined,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryChip extends StatelessWidget {
+  const _SummaryChip({
+    required this.label,
+    required this.count,
+    required this.amount,
+    required this.currency,
+    required this.color,
+    required this.icon,
+  });
+
+  final String label;
+  final int count, amount;
+  final String currency;
+  final Color color;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: color,
+                          letterSpacing: 0.4)),
+                  Text(
+                    count == 0
+                        ? context.l10n.tr('None')
+                        : '$count  ·  $amount $currency',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: count == 0
+                            ? color.withValues(alpha: 0.4)
+                            : color),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _GroupHeader
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _GroupHeader extends StatelessWidget {
@@ -158,13 +385,11 @@ class _GroupHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 8),
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 7),
         Text(label,
             style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: color)),
+                fontSize: 13, fontWeight: FontWeight.w700, color: color)),
         const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -174,31 +399,103 @@ class _GroupHeader extends StatelessWidget {
           ),
           child: Text('$count',
               style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: color)),
+                  fontSize: 11, fontWeight: FontWeight.w700, color: color)),
         ),
-        const SizedBox(width: 8),
-        Expanded(child: Divider(color: color.withValues(alpha: 0.3))),
+        const SizedBox(width: 10),
+        Expanded(child: Divider(color: color.withValues(alpha: 0.25))),
       ],
     );
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// _TileGrid — responsive 1-col / 2-col
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _TileGrid extends StatelessWidget {
+  const _TileGrid({
+    required this.items,
+    required this.statusColor,
+    required this.statusIcon,
+    required this.membersById,
+    required this.planNamesById,
+    required this.todayDate,
+    required this.isWide,
+    required this.onMarkPaid,
+    required this.onViewProfile,
+  });
+
+  final List<InstalmentWithSubscription> items;
+  final Color statusColor;
+  final IconData statusIcon;
+  final Map<String, AppUser> membersById;
+  final Map<String, String> planNamesById;
+  final DateTime todayDate;
+  final bool isWide;
+  final Future<void> Function(String subId, String instId) onMarkPaid;
+  final void Function(AppUser) onViewProfile;
+
+  Widget _tile(InstalmentWithSubscription item) => _InstalmentTile(
+        item: item,
+        statusColor: statusColor,
+        statusIcon: statusIcon,
+        member: membersById[item.subscription.userId],
+        planName: planNamesById[item.subscription.planId],
+        todayDate: todayDate,
+        onMarkPaid: onMarkPaid,
+        onViewProfile: onViewProfile,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isWide) {
+      return Column(children: items.map(_tile).toList());
+    }
+    final rows = <Widget>[];
+    for (var i = 0; i < items.length; i += 2) {
+      rows.add(Padding(
+        padding: const EdgeInsets.only(bottom: 0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _tile(items[i])),
+            const SizedBox(width: 12),
+            Expanded(
+                child: i + 1 < items.length
+                    ? _tile(items[i + 1])
+                    : const SizedBox.shrink()),
+          ],
+        ),
+      ));
+    }
+    return Column(children: rows);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _InstalmentTile
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _InstalmentTile extends StatefulWidget {
   const _InstalmentTile({
     required this.item,
-    required this.methodIcons,
     required this.statusColor,
     required this.statusIcon,
+    required this.todayDate,
     required this.onMarkPaid,
+    required this.onViewProfile,
+    this.member,
+    this.planName,
   });
 
   final InstalmentWithSubscription item;
-  final Map<String, IconData> methodIcons;
   final Color statusColor;
   final IconData statusIcon;
+  final AppUser? member;
+  final String? planName;
+  final DateTime todayDate;
   final Future<void> Function(String subId, String instId) onMarkPaid;
+  final void Function(AppUser) onViewProfile;
 
   @override
   State<_InstalmentTile> createState() => _InstalmentTileState();
@@ -207,172 +504,449 @@ class _InstalmentTile extends StatefulWidget {
 class _InstalmentTileState extends State<_InstalmentTile> {
   bool _loading = false;
 
+  static const _methodIcons = <String, IconData>{
+    'cash': Icons.payments_outlined,
+    'card': Icons.credit_card_outlined,
+    'transfer': Icons.account_balance_outlined,
+    'cheque': Icons.receipt_outlined,
+  };
+
+  static const _methodLabels = <String, String>{
+    'cash': 'Cash',
+    'card': 'Card',
+    'transfer': 'Transfer',
+    'cheque': 'Cheque',
+  };
+
+  String _initials(String name) {
+    final words = name.trim().split(RegExp(r'\s+'));
+    if (words.isEmpty || words.first.isEmpty) return '?';
+    if (words.length == 1) return words.first[0].toUpperCase();
+    return '${words.first[0]}${words.last[0]}'.toUpperCase();
+  }
+
+  String _daysBadge(DateTime dueDate) {
+    final due = DateTime(dueDate.year, dueDate.month, dueDate.day);
+    final diff = due.difference(widget.todayDate).inDays;
+    if (diff == 0) return '';
+    if (diff < 0) return '${diff.abs()}d overdue';
+    if (diff == 1) return 'Tomorrow';
+    return 'In ${diff}d';
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final sub = widget.item.subscription;
     final inst = widget.item.instalment;
-    final fmt = DateFormat('d MMM yyyy');
+    final member = widget.member;
+    final memberName = (member?.displayName.isNotEmpty == true)
+        ? member!.displayName
+        : sub.userId;
+    final planName = widget.planName ?? sub.planId;
     final idx = sub.instalmentSchedule.indexOf(inst);
-
-    // Find member name — stored in subscription userId, load async if needed.
-    // For now display the userId until a member lookup is added.
-    final memberLabel = sub.userId;
+    final fmt = DateFormat('d MMM yyyy');
+    final methodIcon = _methodIcons[inst.method] ?? Icons.payments_outlined;
+    final methodLabel = _methodLabels[inst.method] ?? inst.method;
+    final daysBadge = _daysBadge(inst.dueDate);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
+        color: cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-            color: widget.statusColor.withValues(alpha: 0.3)),
-        color: cs.surface,
+            color: widget.statusColor.withValues(alpha: 0.25), width: 1.5),
         boxShadow: [
           BoxShadow(
-              color: cs.shadow.withValues(alpha: 0.04),
-              blurRadius: 4,
+              color: cs.shadow.withValues(alpha: 0.05),
+              blurRadius: 6,
               offset: const Offset(0, 2)),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Status icon
+          // Coloured top accent strip
           Container(
-            width: 36,
-            height: 36,
+            height: 4,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: widget.statusColor.withValues(alpha: 0.12),
+              color: widget.statusColor.withValues(alpha: 0.7),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(15)),
             ),
-            child: Icon(widget.statusIcon,
-                size: 18, color: widget.statusColor),
           ),
-          const SizedBox(width: 12),
-          // Details
-          Expanded(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  memberLabel,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
+                // ── Member row ─────────────────────────────────────────
                 Row(
                   children: [
-                    Icon(
-                      widget.methodIcons[inst.method] ??
-                          Icons.payments_outlined,
-                      size: 12,
-                      color: cs.onSurfaceVariant,
+                    // Avatar
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: widget.statusColor.withValues(alpha: 0.1),
+                        border: Border.all(
+                            color: widget.statusColor.withValues(alpha: 0.35),
+                            width: 2),
+                      ),
+                      child: Center(
+                        child: Text(
+                          _initials(memberName),
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                              color: widget.statusColor),
+                        ),
+                      ),
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${inst.amount} ${sub.currency}  ·  ${context.l10n.tr('Instalment')} ${idx >= 0 ? idx + 1 : '?'}/${sub.instalmentSchedule.length}',
-                      style: TextStyle(
-                          fontSize: 11, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 10),
+                    // Name + plan
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            memberName,
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w700),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (planName.isNotEmpty)
+                            Text(
+                              planName,
+                              style: TextStyle(
+                                  fontSize: 11, color: cs.onSurfaceVariant),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                    // View profile
+                    if (member != null)
+                      Tooltip(
+                        message: context.l10n.tr('View Profile'),
+                        child: InkWell(
+                          onTap: () => widget.onViewProfile(member),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 5),
+                            decoration: BoxDecoration(
+                              color:
+                                  cs.primaryContainer.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: cs.primary.withValues(alpha: 0.2)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.person_outline,
+                                    size: 14, color: cs.primary),
+                                const SizedBox(width: 4),
+                                Text(context.l10n.tr('Profile'),
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: cs.primary)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // ── Amount + instalment progress ───────────────────────
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: widget.statusColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color:
+                                widget.statusColor.withValues(alpha: 0.25)),
+                      ),
+                      child: Text(
+                        '${inst.amount} ${sub.currency}',
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: widget.statusColor),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${context.l10n.tr('Inst.')} ${idx >= 0 ? idx + 1 : '?'} / ${sub.instalmentSchedule.length}',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                    const Spacer(),
+                    // Method
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(methodIcon,
+                            size: 12, color: cs.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Text(context.l10n.tr(methodLabel),
+                            style: TextStyle(
+                                fontSize: 11, color: cs.onSurfaceVariant)),
+                      ],
                     ),
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${context.l10n.tr('Due')}: ${fmt.format(inst.dueDate)}',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: widget.statusColor,
-                      fontWeight: FontWeight.w500),
+                const SizedBox(height: 10),
+                // ── Due date + days badge + action ─────────────────────
+                Row(
+                  children: [
+                    Icon(Icons.event_outlined,
+                        size: 13, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 4),
+                    Text(fmt.format(inst.dueDate),
+                        style: TextStyle(
+                            fontSize: 12, color: cs.onSurfaceVariant)),
+                    if (daysBadge.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color:
+                              widget.statusColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(daysBadge,
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: widget.statusColor)),
+                      ),
+                    ],
+                    const Spacer(),
+                    _loading
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: widget.statusColor),
+                          )
+                        : FilledButton.tonal(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: widget.statusColor
+                                  .withValues(alpha: 0.12),
+                              foregroundColor: widget.statusColor,
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 6),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                            ),
+                            onPressed: _confirmAndPay,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.check_circle_outline,
+                                    size: 14),
+                                const SizedBox(width: 5),
+                                Text(context.l10n.tr('Mark Paid'),
+                                    style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700)),
+                              ],
+                            ),
+                          ),
+                  ],
                 ),
               ],
             ),
           ),
-          // Mark as Paid button
-          _loading
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2))
-              : TextButton(
-                  style: TextButton.styleFrom(
-                    foregroundColor: cs.primary,
-                    visualDensity: VisualDensity.compact,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                  onPressed: () async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title:
-                            Text(context.l10n.tr('Mark as Paid')),
-                        content: Text(
-                            '${context.l10n.tr('Confirm payment of')} ${inst.amount} ${sub.currency}?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () =>
-                                Navigator.pop(ctx, false),
-                            child:
-                                Text(context.l10n.tr('Cancel')),
-                          ),
-                          FilledButton(
-                            onPressed: () =>
-                                Navigator.pop(ctx, true),
-                            child:
-                                Text(context.l10n.tr('Confirm')),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (confirmed != true) return;
-                    setState(() => _loading = true);
-                    try {
-                      await widget.onMarkPaid(sub.id, inst.id);
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                                content: Text('$e'),
-                                backgroundColor: cs.error));
-                      }
-                    } finally {
-                      if (mounted) setState(() => _loading = false);
-                    }
-                  },
-                  child: Text(context.l10n.tr('Mark as Paid'),
-                      style: const TextStyle(fontSize: 12)),
-                ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmAndPay() async {
+    final sub = widget.item.subscription;
+    final inst = widget.item.instalment;
+    final messenger = ScaffoldMessenger.of(context);
+    final cs = Theme.of(context).colorScheme;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: widget.statusColor),
+            const SizedBox(width: 8),
+            Text(context.l10n.tr('Mark as Paid')),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ConfirmRow(
+              label: context.l10n.tr('Member'),
+              value: widget.member?.displayName ?? sub.userId,
+            ),
+            _ConfirmRow(
+              label: context.l10n.tr('Amount'),
+              value: '${inst.amount} ${sub.currency}',
+              bold: true,
+            ),
+            _ConfirmRow(
+              label: context.l10n.tr('Method'),
+              value: _methodLabels[inst.method] ?? inst.method,
+            ),
+            _ConfirmRow(
+              label: context.l10n.tr('Due date'),
+              value: DateFormat('d MMM yyyy').format(inst.dueDate),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(context.l10n.tr('Cancel')),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: widget.statusColor),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(context.l10n.tr('Confirm')),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    setState(() => _loading = true);
+    try {
+      await widget.onMarkPaid(sub.id, inst.id);
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(SnackBar(
+          content: Text('$e'),
+          backgroundColor: cs.error,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+}
+
+class _ConfirmRow extends StatelessWidget {
+  const _ConfirmRow(
+      {required this.label, required this.value, this.bold = false});
+  final String label;
+  final String value;
+  final bool bold;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(label,
+                style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: bold ? FontWeight.w800 : FontWeight.w600),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Empty / Error states
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _EmptyState extends StatelessWidget {
-  const _EmptyState({required this.cs});
-  final ColorScheme cs;
+  const _EmptyState();
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.check_circle_outline,
-              size: 56,
-              color: Colors.green.shade400),
-          const SizedBox(height: 16),
-          Text(
-            context.l10n.tr('No pending instalments'),
-            style: const TextStyle(
-                fontWeight: FontWeight.w700, fontSize: 16),
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                shape: BoxShape.circle),
+            child: Icon(Icons.check_circle_outline,
+                size: 40, color: Colors.green.shade500),
           ),
+          const SizedBox(height: 20),
+          Text(context.l10n.tr('All caught up!'),
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
           Text(
-            context.l10n.tr(
-                'All payment plans are up to date.'),
-            style: TextStyle(color: cs.onSurfaceVariant),
+            context.l10n.tr('No pending instalments at this time.'),
+            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  const _ErrorState({required this.error});
+  final String error;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.error_outline, size: 40, color: cs.error),
+          const SizedBox(height: 12),
+          Text(context.l10n.tr('Something went wrong'),
+              style: const TextStyle(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          Text(error,
+              style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+              textAlign: TextAlign.center),
         ],
       ),
     );

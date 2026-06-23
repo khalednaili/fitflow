@@ -44,16 +44,14 @@ class _InstalmentDraft {
     required this.amount,
     required this.dueDate,
     required this.method,
-    this.notes = '',
-    this.paid = false,
   }) : amountController = TextEditingController(text: amount > 0 ? '$amount' : '');
 
   final String id;
   int amount;
   DateTime dueDate;
   String method;
-  String notes;
-  bool paid;
+  String notes = '';
+  bool paid = false;
   final TextEditingController amountController;
 
   void dispose() => amountController.dispose();

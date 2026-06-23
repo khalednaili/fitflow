@@ -124,6 +124,13 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
     ));
   }
 
+  static String _initials(String name) {
+    final words = name.trim().split(RegExp(r'\s+'));
+    if (words.isEmpty || words.first.isEmpty) return '?';
+    if (words.length == 1) return words.first[0].toUpperCase();
+    return '${words.first[0]}${words.last[0]}'.toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
@@ -135,18 +142,41 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
         backgroundColor: cs.surfaceContainerLowest,
         elevation: 0,
         scrolledUnderElevation: 1,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        titleSpacing: 4,
+        title: Row(
           children: [
-            Text(l10n.tr('Record Payment'),
-                style:
-                    const TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
-            Text(
-              widget.userName,
-              style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onSurfaceVariant,
-                  fontWeight: FontWeight.w400),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: cs.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  _initials(widget.userName),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: cs.onPrimaryContainer,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(l10n.tr('Record Payment'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 16)),
+                Text(widget.userName,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w400)),
+              ],
             ),
           ],
         ),
@@ -155,13 +185,15 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
         stream: _subscriptionService.streamUserSubscriptions(widget.userId),
         builder: (context, subSnap) {
           final subscriptions = subSnap.data ?? <UserSubscription>[];
-          final loading = subSnap.connectionState == ConnectionState.waiting;
+          final loading =
+              subSnap.connectionState == ConnectionState.waiting;
 
-          if (_selectedSubscriptionId == null && subscriptions.isNotEmpty) {
+          if (_selectedSubscriptionId == null &&
+              subscriptions.isNotEmpty) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) {
-                setState(
-                    () => _selectedSubscriptionId = subscriptions.first.id);
+                setState(() =>
+                    _selectedSubscriptionId = subscriptions.first.id);
               }
             });
           }
@@ -178,114 +210,185 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
             stream: _subscriptionService.streamAllOffers(),
             builder: (context, plansSnap) {
               final plansById = <String, MembershipPlan>{
-                for (final p in plansSnap.data ?? <MembershipPlan>[]) p.id: p,
+                for (final p in plansSnap.data ?? <MembershipPlan>[])
+                  p.id: p,
               };
 
               if (loading) {
                 return const Center(child: CircularProgressIndicator());
               }
 
-              return Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 620),
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // ── Offer selector ──────────────────────────
-                        if (subscriptions.isEmpty)
-                          _EmptyOffersCard(l10n: l10n)
-                        else
-                          _OfferSelector(
-                            subscriptions: subscriptions,
-                            plansById: plansById,
-                            selectedId: _selectedSubscriptionId,
-                            onChanged: (v) =>
-                                setState(() => _selectedSubscriptionId = v),
-                          ),
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth >= 760;
+                  final sub = subscription;
 
-                        if (subscription != null) ...[
-                          const SizedBox(height: 16),
+                  // ── Shared: offer selector ─────────────────────────
+                  final offerWidget = subscriptions.isEmpty
+                      ? _EmptyOffersCard(l10n: l10n)
+                      : _OfferSelector(
+                          subscriptions: subscriptions,
+                          plansById: plansById,
+                          selectedId: _selectedSubscriptionId,
+                          onChanged: (v) => setState(
+                              () => _selectedSubscriptionId = v),
+                        );
 
-                          // ── Balance overview ─────────────────────
-                          _BalanceCard(subscription: subscription),
-                          const SizedBox(height: 16),
+                  // ── Shared: instalment card ────────────────────────
+                  final instalmentWidget =
+                      (sub != null && sub.hasPaymentPlan)
+                          ? _InstalmentScheduleCard(
+                              subscription: sub,
+                              onMarkPaid: (id) async {
+                                final sid = sub.id;
+                                await SubscriptionService(
+                                        gymId: widget.gymId)
+                                    .markInstalmentPaid(
+                                        subscriptionId: sid,
+                                        instalmentId: id);
+                              },
+                            )
+                          : null;
 
-                          // ── Amount input ─────────────────────────
+                  // ── Shared: payment form widgets (no history) ──────
+                  final formWidgets = sub == null
+                      ? null
+                      : <Widget>[
                           ValueListenableBuilder<TextEditingValue>(
                             valueListenable: _amountController,
-                            builder: (context, value, _) {
+                            builder: (ctx, val, _) {
                               final entered =
-                                  int.tryParse(value.text.trim()) ?? 0;
+                                  int.tryParse(val.text.trim()) ?? 0;
                               return _AmountInput(
                                 controller: _amountController,
-                                subscription: subscription!,
+                                subscription: sub,
                                 enteredAmount: entered,
-                                onFillRemaining: () {
-                                  _amountController.text =
-                                      '${subscription!.remainingAmount}';
-                                },
+                                onFillRemaining: () =>
+                                    _amountController.text =
+                                        '${sub.remainingAmount}',
                               );
                             },
                           ),
-                          const SizedBox(height: 16),
-
-                          // ── Payment method ───────────────────────
+                          const SizedBox(height: 14),
                           _MethodSelector(
                             selected: _selectedMethod,
                             onChanged: (v) =>
                                 setState(() => _selectedMethod = v),
                           ),
-                          const SizedBox(height: 16),
-
-                          // ── Notes ────────────────────────────────
+                          const SizedBox(height: 14),
                           _NotesField(controller: _notesController),
-                          const SizedBox(height: 24),
-
-                          // ── Submit ───────────────────────────────
+                          const SizedBox(height: 22),
                           ValueListenableBuilder<TextEditingValue>(
                             valueListenable: _amountController,
-                            builder: (context, value, _) {
+                            builder: (ctx, val, _) {
                               final entered =
-                                  int.tryParse(value.text.trim()) ?? 0;
+                                  int.tryParse(val.text.trim()) ?? 0;
                               return _SubmitButton(
                                 isProcessing: _isProcessing,
                                 canSubmit: entered > 0,
                                 onPressed: _recordPayment,
                                 amount: entered,
-                                currency: subscription!.currency,
+                                currency: sub.currency,
                               );
                             },
                           ),
+                        ];
 
-                          // ── Instalment schedule ──────────────────────
-                          if (subscription!.hasPaymentPlan) ...[
-                            const SizedBox(height: 24),
-                            _InstalmentScheduleCard(
-                              subscription: subscription,
-                              onMarkPaid: (instalmentId) async {
-                                final subId = subscription!.id;
-                                final svc = SubscriptionService(
-                                    gymId: widget.gymId);
-                                await svc.markInstalmentPaid(
-                                  subscriptionId: subId,
-                                  instalmentId: instalmentId,
-                                );
-                              },
-                            ),
-                          ],
+                  // ── Wide 2-column layout (≥760px) ──────────────────
+                  if (isWide) {
+                    return SingleChildScrollView(
+                      padding:
+                          const EdgeInsets.fromLTRB(24, 20, 24, 48),
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints:
+                              const BoxConstraints(maxWidth: 1060),
+                          child: Row(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              // ── Left: context ──────────────
+                              SizedBox(
+                                width: 360,
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    offerWidget,
+                                    if (sub != null) ...[
+                                      const SizedBox(height: 16),
+                                      _BalanceCard(subscription: sub),
+                                      if (instalmentWidget != null) ...[
+                                        const SizedBox(height: 16),
+                                        instalmentWidget,
+                                      ],
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 20),
+                              // ── Right: action ──────────────
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: formWidgets != null
+                                      ? [
+                                          ...formWidgets,
+                                          if (sub!.paymentHistory
+                                              .isNotEmpty) ...[
+                                            const SizedBox(height: 24),
+                                            _PaymentHistory(
+                                                subscription: sub),
+                                          ],
+                                        ]
+                                      : [
+                                          _NoSelectionHint(
+                                              hasOffers: subscriptions
+                                                  .isNotEmpty),
+                                        ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }
 
-                          // ── Payment history ───────────────────────
-                          if (subscription.paymentHistory.isNotEmpty) ...[
-                            const SizedBox(height: 24),
-                            _PaymentHistory(subscription: subscription),
+                  // ── Narrow single-column layout (<760px) ───────────
+                  return SingleChildScrollView(
+                    padding:
+                        const EdgeInsets.fromLTRB(16, 16, 16, 40),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints:
+                            const BoxConstraints(maxWidth: 620),
+                        child: Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.stretch,
+                          children: [
+                            offerWidget,
+                            if (sub != null) ...[
+                              const SizedBox(height: 16),
+                              _BalanceCard(subscription: sub),
+                              const SizedBox(height: 16),
+                              ...?formWidgets,
+                              if (instalmentWidget != null) ...[
+                                const SizedBox(height: 24),
+                                instalmentWidget,
+                              ],
+                              if (sub.paymentHistory.isNotEmpty) ...[
+                                const SizedBox(height: 24),
+                                _PaymentHistory(subscription: sub),
+                              ],
+                            ],
                           ],
-                        ],
-                      ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               );
             },
           );
@@ -327,6 +430,46 @@ class _EmptyOffersCard extends StatelessWidget {
             l10n.tr('Assign an offer first before recording a payment.'),
             textAlign: TextAlign.center,
             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── No selection hint (wide layout, right col) ────────────────────────────────
+
+class _NoSelectionHint extends StatelessWidget {
+  const _NoSelectionHint({required this.hasOffers});
+  final bool hasOffers;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+            color: cs.outlineVariant.withValues(alpha: 0.4),
+            style: BorderStyle.solid),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.arrow_back_outlined,
+              size: 32, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+          const SizedBox(height: 12),
+          Text(
+            hasOffers
+                ? context.l10n.tr('Select an offer on the left to record a payment')
+                : context.l10n.tr('Assign an offer to this member first'),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 14,
+                color: cs.onSurfaceVariant.withValues(alpha: 0.6),
+                fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -463,39 +606,32 @@ class _BalanceCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final pct = subscription.paymentPercentage.clamp(0.0, 1.0);
     final isPaid = subscription.remainingAmount <= 0;
+    final pctLabel = '${(pct * 100).toStringAsFixed(0)}%';
+    final progressColor =
+        isPaid ? Colors.green.shade500 : Colors.orange.shade600;
 
     return _SectionCard(
       title: context.l10n.tr('Current Balance'),
       icon: Icons.account_balance_wallet_outlined,
+      trailing: Text(
+        pctLabel,
+        style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w900,
+            color: progressColor,
+            letterSpacing: -0.5),
+      ),
       child: Column(
         children: [
           // Progress bar
-          Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(
-                    value: pct,
-                    minHeight: 10,
-                    backgroundColor: cs.outlineVariant.withValues(alpha: 0.3),
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      isPaid ? Colors.green.shade500 : Colors.orange.shade600,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                '${(pct * 100).toStringAsFixed(0)}%',
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    color: isPaid
-                        ? Colors.green.shade600
-                        : Colors.orange.shade700),
-              ),
-            ],
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: pct,
+              minHeight: 12,
+              backgroundColor: cs.outlineVariant.withValues(alpha: 0.25),
+              valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+            ),
           ),
           const SizedBox(height: 14),
           // Three stats
@@ -1133,6 +1269,8 @@ class _InstalmentScheduleCardState extends State<_InstalmentScheduleCard> {
                                 visualDensity: VisualDensity.compact,
                               ),
                               onPressed: () async {
+                                final messenger =
+                                    ScaffoldMessenger.of(context);
                                 final confirmed = await showDialog<bool>(
                                   context: context,
                                   builder: (ctx) => AlertDialog(
@@ -1164,10 +1302,9 @@ class _InstalmentScheduleCardState extends State<_InstalmentScheduleCard> {
                                   await widget.onMarkPaid(inst.id);
                                 } catch (e) {
                                   if (mounted) {
-                                    ScaffoldMessenger.of(context)
-                                        .showSnackBar(SnackBar(
-                                            content: Text('$e'),
-                                            backgroundColor: cs.error));
+                                    messenger.showSnackBar(SnackBar(
+                                        content: Text('$e'),
+                                        backgroundColor: cs.error));
                                   }
                                 } finally {
                                   if (mounted) {
@@ -1198,79 +1335,148 @@ class _PaymentHistory extends StatelessWidget {
   const _PaymentHistory({required this.subscription});
   final UserSubscription subscription;
 
+  static const _methodIcons = {
+    'cash': Icons.payments_outlined,
+    'card': Icons.credit_card_outlined,
+    'transfer': Icons.account_balance_outlined,
+    'cheque': Icons.receipt_outlined,
+  };
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final history = subscription.paymentHistory.toList()
       ..sort((a, b) => b.date.compareTo(a.date));
+    final fmt = DateFormat('d MMM yyyy');
+    final timeFmt = DateFormat('HH:mm');
 
     return _SectionCard(
       title: '${context.l10n.tr('Payment History')} (${history.length})',
       icon: Icons.history_outlined,
       child: Column(
-        children: history.map((p) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
+        children: history.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final p = entry.value;
+          final isLast = idx == history.length - 1;
+          final methodIcon =
+              _methodIcons[p.method] ?? Icons.payments_outlined;
+
+          return IntrinsicHeight(
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(Icons.payments_outlined,
-                      size: 16, color: Colors.green.shade700),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
+                // ── Timeline track ─────────────────────────────────
+                SizedBox(
+                  width: 32,
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        DateFormat('d MMM yyyy • HH:mm').format(p.date),
-                        style:
-                            TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                              color: Colors.green.shade400, width: 1.5),
+                        ),
+                        child: Icon(methodIcon,
+                            size: 13, color: Colors.green.shade700),
                       ),
-                      if (p.notes.isNotEmpty)
-                        Text(
-                          p.notes,
-                          style: TextStyle(
-                              fontSize: 12,
-                              color:
-                                  cs.onSurfaceVariant.withValues(alpha: 0.8)),
-                          overflow: TextOverflow.ellipsis,
+                      if (!isLast)
+                        Expanded(
+                          child: Container(
+                            width: 2,
+                            margin: const EdgeInsets.symmetric(vertical: 3),
+                            color: cs.outlineVariant.withValues(alpha: 0.5),
+                          ),
                         ),
                     ],
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '+${p.amount} ${subscription.currency}',
-                      style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.green.shade700),
+                const SizedBox(width: 10),
+                // ── Content ────────────────────────────────────────
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: isLast ? 0 : 14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                fmt.format(p.date),
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 1),
+                              Row(
+                                children: [
+                                  Text(
+                                    timeFmt.format(p.date),
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: cs.onSurfaceVariant),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: cs.surfaceContainerHigh,
+                                      borderRadius:
+                                          BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      p.method.toUpperCase(),
+                                      style: TextStyle(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          color: cs.onSurfaceVariant),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (p.notes.isNotEmpty) ...[
+                                const SizedBox(height: 3),
+                                Text(
+                                  p.notes,
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: cs.onSurfaceVariant
+                                          .withValues(alpha: 0.7)),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Amount badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color:
+                                    Colors.green.withValues(alpha: 0.25)),
+                          ),
+                          child: Text(
+                            '+${p.amount} ${subscription.currency}',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.green.shade700),
+                          ),
+                        ),
+                      ],
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: cs.surfaceContainerHigh,
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: Text(
-                        p.method.toUpperCase(),
-                        style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: cs.onSurfaceVariant),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -1288,10 +1494,12 @@ class _SectionCard extends StatelessWidget {
     required this.title,
     required this.icon,
     required this.child,
+    this.trailing,
   });
   final String title;
   final IconData icon;
   final Widget child;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -1318,14 +1526,17 @@ class _SectionCard extends StatelessWidget {
               children: [
                 Icon(icon, size: 16, color: cs.primary),
                 const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: cs.primary,
-                      letterSpacing: 0.2),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: cs.primary,
+                        letterSpacing: 0.2),
+                  ),
                 ),
+                if (trailing != null) trailing!,
               ],
             ),
           ),
