@@ -161,12 +161,20 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
           final allClasses = classSnap.data ?? [];
           final dayClasses = _forDate(allClasses);
 
-          // Auto-select first class if none selected
-          if (_selectedClass == null && dayClasses.isNotEmpty) {
+          // Reconcile _selectedClass against the fresh list by ID to avoid
+          // DropdownButton assertion (value must be in items list).
+          final selectedId = _selectedClass?.id;
+          GymClass? reconciled;
+          if (selectedId != null) {
+            final matches = dayClasses.where((c) => c.id == selectedId);
+            reconciled = matches.isNotEmpty ? matches.first : null;
+          } else if (dayClasses.isNotEmpty) {
+            reconciled = dayClasses.first;
+          }
+
+          if (reconciled != _selectedClass) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && _selectedClass == null && dayClasses.isNotEmpty) {
-                setState(() => _selectedClass = dayClasses.first);
-              }
+              if (mounted) setState(() => _selectedClass = reconciled);
             });
           }
 
@@ -174,15 +182,15 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // ── Top header ──────────────────────────────────────────────
-              _buildTopBar(dateFmt, isToday, dayClasses),
+              _buildTopBar(dateFmt, isToday, dayClasses, reconciled),
               // ── Section headers row ─────────────────────────────────────
-              if (_selectedClass != null)
-                _buildSectionHeaders(_selectedClass!),
+              if (reconciled != null)
+                _buildSectionHeaders(reconciled),
               // ── Main content ─────────────────────────────────────────────
               Expanded(
-                child: _selectedClass == null
+                child: reconciled == null
                     ? _buildNoSelection(dayClasses.isEmpty)
-                    : _buildWhiteboardContent(_selectedClass!),
+                    : _buildWhiteboardContent(reconciled),
               ),
             ],
           );
@@ -194,7 +202,8 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
   // ── Top bar: date + class selector ───────────────────────────────────────
 
   Widget _buildTopBar(
-      DateFormat dateFmt, bool isToday, List<GymClass> dayClasses) {
+      DateFormat dateFmt, bool isToday, List<GymClass> dayClasses,
+      GymClass? currentClass) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: const BoxDecoration(
@@ -227,7 +236,7 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
               Expanded(
                 child: _ClassDropdown(
                   classes: dayClasses,
-                  selected: _selectedClass,
+                  selected: currentClass,
                   onChanged: (c) => setState(() {
                     _selectedClass = c;
                     _loadingMap.clear();
@@ -237,7 +246,7 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
               ),
               const SizedBox(width: 12),
               // Add Bookings button
-              if (_selectedClass != null)
+              if (currentClass != null)
                 FilledButton.icon(
                   onPressed: () {}, // placeholder — open booking dialog
                   icon: const Icon(Icons.add, size: 16),
