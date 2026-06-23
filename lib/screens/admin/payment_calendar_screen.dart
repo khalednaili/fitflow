@@ -68,6 +68,27 @@ class _PaymentCalendarScreenState extends State<PaymentCalendarScreen> {
     );
   }
 
+  Future<void> _handleEditInstalment(InstalmentWithSubscription item) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _EditInstalmentSheet(
+        item: item,
+        onSave: (amount, dueDate, method, notes) async {
+          await _service.updateInstalment(
+            subscriptionId: item.subscription.id,
+            instalmentId: item.instalment.id,
+            amount: amount,
+            dueDate: dueDate,
+            method: method,
+            notes: notes,
+          );
+        },
+      ),
+    );
+  }
+
   void _openProfile(BuildContext context, AppUser member) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -263,6 +284,7 @@ class _PaymentCalendarScreenState extends State<PaymentCalendarScreen> {
                             isWide: isWide,
                             onMarkPaid: _handleMarkPaid,
                             onViewProfile: (m) => _openProfile(context, m),
+                            onEditInstalment: _handleEditInstalment,
                           ),
                           const SizedBox(height: 24),
                         ],
@@ -284,6 +306,7 @@ class _PaymentCalendarScreenState extends State<PaymentCalendarScreen> {
                             isWide: isWide,
                             onMarkPaid: _handleMarkPaid,
                             onViewProfile: (m) => _openProfile(context, m),
+                            onEditInstalment: _handleEditInstalment,
                           ),
                           const SizedBox(height: 24),
                         ],
@@ -305,6 +328,7 @@ class _PaymentCalendarScreenState extends State<PaymentCalendarScreen> {
                             isWide: isWide,
                             onMarkPaid: _handleMarkPaid,
                             onViewProfile: (m) => _openProfile(context, m),
+                            onEditInstalment: _handleEditInstalment,
                           ),
                         ],
                       ],
@@ -505,6 +529,7 @@ class _TileGrid extends StatelessWidget {
     required this.isWide,
     required this.onMarkPaid,
     required this.onViewProfile,
+    required this.onEditInstalment,
   });
 
   final List<InstalmentWithSubscription> items;
@@ -516,6 +541,7 @@ class _TileGrid extends StatelessWidget {
   final bool isWide;
   final Future<void> Function(String subId, String instId) onMarkPaid;
   final void Function(AppUser) onViewProfile;
+  final Future<void> Function(InstalmentWithSubscription item) onEditInstalment;
 
   Widget _tile(InstalmentWithSubscription item) => _InstalmentTile(
         item: item,
@@ -526,6 +552,7 @@ class _TileGrid extends StatelessWidget {
         todayDate: todayDate,
         onMarkPaid: onMarkPaid,
         onViewProfile: onViewProfile,
+        onEditInstalment: onEditInstalment,
       );
 
   @override
@@ -566,6 +593,7 @@ class _InstalmentTile extends StatefulWidget {
     required this.todayDate,
     required this.onMarkPaid,
     required this.onViewProfile,
+    required this.onEditInstalment,
     this.member,
     this.planName,
   });
@@ -578,6 +606,7 @@ class _InstalmentTile extends StatefulWidget {
   final DateTime todayDate;
   final Future<void> Function(String subId, String instId) onMarkPaid;
   final void Function(AppUser) onViewProfile;
+  final Future<void> Function(InstalmentWithSubscription item) onEditInstalment;
 
   @override
   State<_InstalmentTile> createState() => _InstalmentTileState();
@@ -825,15 +854,57 @@ class _InstalmentTileState extends State<_InstalmentTile> {
                       ),
                     ],
                     const Spacer(),
-                    _loading
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: widget.statusColor),
-                          )
-                        : FilledButton.tonal(
+                    if (_loading)
+                      SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: widget.statusColor),
+                      )
+                    else
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Edit button
+                          Tooltip(
+                            message: context.l10n.tr('Edit instalment'),
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                                side: BorderSide(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .outline
+                                        .withValues(alpha: 0.5)),
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(8)),
+                              ),
+                              onPressed: () =>
+                                  widget.onEditInstalment(widget.item),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.edit_outlined,
+                                      size: 13),
+                                  const SizedBox(width: 4),
+                                  Text(context.l10n.tr('Edit'),
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          // Mark Paid button
+                          FilledButton.tonal(
                             style: FilledButton.styleFrom(
                               backgroundColor: widget.statusColor
                                   .withValues(alpha: 0.12),
@@ -842,7 +913,8 @@ class _InstalmentTileState extends State<_InstalmentTile> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 12, vertical: 6),
                               shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8)),
+                                  borderRadius:
+                                      BorderRadius.circular(8)),
                             ),
                             onPressed: _confirmAndPay,
                             child: Row(
@@ -858,6 +930,8 @@ class _InstalmentTileState extends State<_InstalmentTile> {
                               ],
                             ),
                           ),
+                        ],
+                      ),
                   ],
                 ),
               ],
@@ -936,6 +1010,410 @@ class _InstalmentTileState extends State<_InstalmentTile> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _EditInstalmentSheet — bottom sheet to edit amount / date / method / notes
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _EditInstalmentSheet extends StatefulWidget {
+  const _EditInstalmentSheet({required this.item, required this.onSave});
+
+  final InstalmentWithSubscription item;
+  final Future<void> Function(
+      int? amount, DateTime? dueDate, String? method, String? notes) onSave;
+
+  @override
+  State<_EditInstalmentSheet> createState() => _EditInstalmentSheetState();
+}
+
+class _EditInstalmentSheetState extends State<_EditInstalmentSheet> {
+  static const _methods = ['cash', 'card', 'transfer', 'cheque'];
+  static const _methodLabels = {
+    'cash': 'Cash',
+    'card': 'Card',
+    'transfer': 'Transfer',
+    'cheque': 'Cheque',
+  };
+  static const _methodIcons = {
+    'cash': Icons.payments_outlined,
+    'card': Icons.credit_card_outlined,
+    'transfer': Icons.account_balance_outlined,
+    'cheque': Icons.receipt_outlined,
+  };
+
+  late final TextEditingController _amountCtrl;
+  late final TextEditingController _notesCtrl;
+  late DateTime _dueDate;
+  late String _method;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final inst = widget.item.instalment;
+    _amountCtrl =
+        TextEditingController(text: inst.amount > 0 ? '${inst.amount}' : '');
+    _notesCtrl = TextEditingController(text: inst.notes);
+    _dueDate = inst.dueDate;
+    _method = inst.method;
+  }
+
+  @override
+  void dispose() {
+    _amountCtrl.dispose();
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final amountText = _amountCtrl.text.trim();
+    final int? amount =
+        amountText.isNotEmpty ? int.tryParse(amountText) : null;
+
+    if (amountText.isNotEmpty && amount == null) {
+      setState(() => _error = 'Please enter a valid amount.');
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.onSave(
+        amount,
+        _dueDate,
+        _method,
+        _notesCtrl.text.trim().isEmpty ? null : _notesCtrl.text.trim(),
+      );
+      if (mounted) {
+        Navigator.of(context).pop();
+        messenger.showSnackBar(SnackBar(
+          content: Text('Instalment updated successfully.'),
+          behavior: SnackBarBehavior.floating,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _error = '$e';
+        });
+      }
+    }
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dueDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (picked != null && mounted) setState(() => _dueDate = picked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final inst = widget.item.instalment;
+    final sub = widget.item.subscription;
+    final fmt = DateFormat('d MMM yyyy');
+
+    return SafeArea(
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: cs.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              // Title
+              Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.edit_outlined,
+                        size: 20, color: cs.onPrimaryContainer),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(context.l10n.tr('Edit Instalment'),
+                            style: const TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w800)),
+                        Text(
+                          '${inst.amount} ${sub.currency}  ·  ${fmt.format(inst.dueDate)}',
+                          style: TextStyle(
+                              fontSize: 12, color: cs.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // Amount field
+              Text(context.l10n.tr('Amount'),
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurfaceVariant)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _amountCtrl,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: '${inst.amount}',
+                  suffix: Text(sub.currency,
+                      style: TextStyle(color: cs.onSurfaceVariant)),
+                  filled: true,
+                  fillColor: cs.surfaceContainerLow,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide:
+                        BorderSide(color: cs.primary, width: 1.5),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Due Date picker
+              Text(context.l10n.tr('Due Date'),
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurfaceVariant)),
+              const SizedBox(height: 6),
+              InkWell(
+                onTap: _pickDate,
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: cs.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.event_outlined,
+                          size: 18, color: cs.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          fmt.format(_dueDate),
+                          style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Icon(Icons.chevron_right,
+                          size: 18, color: cs.onSurfaceVariant),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Payment method
+              Text(context.l10n.tr('Payment Method'),
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurfaceVariant)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: _methods.map((m) {
+                  final selected = m == _method;
+                  return GestureDetector(
+                    onTap: () => setState(() => _method = m),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? cs.primaryContainer
+                            : cs.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: selected
+                              ? cs.primary
+                              : cs.outline.withValues(alpha: 0.3),
+                          width: selected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(_methodIcons[m]!,
+                              size: 14,
+                              color: selected
+                                  ? cs.onPrimaryContainer
+                                  : cs.onSurfaceVariant),
+                          const SizedBox(width: 6),
+                          Text(
+                            context.l10n.tr(_methodLabels[m]!),
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: selected
+                                    ? cs.onPrimaryContainer
+                                    : cs.onSurface),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+
+              // Notes field
+              Text(context.l10n.tr('Notes'),
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurfaceVariant)),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _notesCtrl,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  hintText: context.l10n.tr('Optional notes…'),
+                  filled: true,
+                  fillColor: cs.surfaceContainerLow,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide:
+                        BorderSide(color: cs.primary, width: 1.5),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14, vertical: 12),
+                ),
+              ),
+
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: cs.errorContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.error_outline,
+                          size: 14, color: cs.onErrorContainer),
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: Text(_error!,
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onErrorContainer))),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 24),
+
+              // Action buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed:
+                          _saving ? null : () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(context.l10n.tr('Cancel')),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton(
+                      onPressed: _saving ? null : _save,
+                      style: FilledButton.styleFrom(
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white),
+                            )
+                          : Text(context.l10n.tr('Save Changes'),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

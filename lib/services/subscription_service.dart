@@ -506,6 +506,53 @@ class SubscriptionService {
     });
   }
 
+  /// Update mutable fields of an unpaid instalment (amount, dueDate, method,
+  /// notes). Throws if the instalment is already paid or not found.
+  Future<void> updateInstalment({
+    required String subscriptionId,
+    required String instalmentId,
+    int? amount,
+    DateTime? dueDate,
+    String? method,
+    String? notes,
+  }) async {
+    final subRef = _firestore
+        .collection('user_subscriptions')
+        .doc(subscriptionId);
+
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(subRef);
+      if (!snap.exists) throw Exception('Subscription not found.');
+
+      final data = snap.data()!;
+      final scheduleData =
+          (data['instalmentSchedule'] ?? []) as List<dynamic>;
+
+      bool found = false;
+      final updatedSchedule = scheduleData.map((raw) {
+        final m = Map<String, dynamic>.from(raw as Map);
+        if (m['id'] == instalmentId) {
+          found = true;
+          if (m['paid'] == true) {
+            throw Exception('Cannot edit an already paid instalment.');
+          }
+          if (amount != null) m['amount'] = amount;
+          if (dueDate != null) m['dueDate'] = Timestamp.fromDate(dueDate);
+          if (method != null) m['method'] = method;
+          if (notes != null) m['notes'] = notes;
+        }
+        return m;
+      }).toList();
+
+      if (!found) throw Exception('Instalment not found.');
+
+      tx.update(subRef, {
+        'instalmentSchedule': updatedSchedule,
+        'updatedAt': Timestamp.now(),
+      });
+    });
+  }
+
   /// Stream all instalment schedules for the gym with pending (unpaid)
   /// instalments, for the admin payment calendar.
   Stream<List<InstalmentWithSubscription>> streamPendingInstalments() {
