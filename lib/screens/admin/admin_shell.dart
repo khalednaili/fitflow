@@ -17,6 +17,7 @@ import 'tabs/admin_offers_tab.dart';
 import 'tabs/admin_personal_training_tab.dart';
 import 'tabs/admin_templates_tab.dart';
 import 'tabs/admin_coaches_tab.dart';
+import 'tabs/admin_whiteboard_tab.dart';
 import 'tabs/admin_wod_calendar_tab.dart';
 import 'tabs/admin_wod_tab.dart';
 import 'tabs/admin_billing_tab.dart';
@@ -90,6 +91,13 @@ const _adminSections = <_AdminSection>[
       icon: Icons.calendar_today_outlined,
       activeIcon: Icons.calendar_today,
       color: Color(0xFFF97316),
+    ),
+    _AdminItem(
+      index: 15,
+      label: 'Whiteboard',
+      icon: Icons.dashboard_outlined,
+      activeIcon: Icons.dashboard,
+      color: Color(0xFF0F766E),
     ),
     _AdminItem(
       index: 14,
@@ -256,6 +264,7 @@ class _AdminShellState extends State<AdminShell> {
       2 => AdminTemplatesTab(gymId: gymId),
       3 => AdminWodTab(gymId: gymId),
       4 => AdminWodCalendarTab(gymId: gymId),
+      15 => AdminWhiteboardTab(gymId: gymId),
       14 => AdminPersonalTrainingTab(gymId: gymId),
       5 => AdminMembersTab(gymId: gymId),
       6 => AdminAttendanceTab(gymId: gymId),
