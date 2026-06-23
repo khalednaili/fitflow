@@ -28,10 +28,21 @@ class _PaymentCalendarScreenState extends State<PaymentCalendarScreen> {
   Map<String, String> _planNamesById = {};
   bool _metadataReady = false;
 
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
     _loadMetadata();
+    _searchController.addListener(
+        () => setState(() => _searchQuery = _searchController.text.trim()));
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadMetadata() async {
@@ -63,6 +74,22 @@ class _PaymentCalendarScreenState extends State<PaymentCalendarScreen> {
         builder: (_) => MemberDetailScreen(member: member),
       ),
     );
+  }
+
+  /// Returns true when [item] matches the current [_searchQuery].
+  /// Matches against member name, plan name, amount and method.
+  bool _matches(InstalmentWithSubscription item) {
+    final q = _searchQuery.toLowerCase();
+    if (q.isEmpty) return true;
+    final sub = item.instalment;
+    final memberName = (_membersById[item.subscription.userId]?.displayName ?? item.subscription.userId).toLowerCase();
+    final planName = (_planNamesById[item.subscription.planId] ?? item.subscription.planId).toLowerCase();
+    final amount = '${sub.amount}';
+    final method = sub.method.toLowerCase();
+    return memberName.contains(q) ||
+        planName.contains(q) ||
+        amount.contains(q) ||
+        method.contains(q);
   }
 
   @override
@@ -120,12 +147,16 @@ class _PaymentCalendarScreenState extends State<PaymentCalendarScreen> {
             return const _EmptyState();
           }
 
+          // Apply search filter
+          final filtered =
+              _searchQuery.isEmpty ? all : all.where(_matches).toList();
+
           // Group by status
           final overdue = <InstalmentWithSubscription>[];
           final dueToday = <InstalmentWithSubscription>[];
           final upcoming = <InstalmentWithSubscription>[];
 
-          for (final item in all) {
+          for (final item in filtered) {
             final d = item.instalment.dueDate;
             final due = DateTime(d.year, d.month, d.day);
             if (due.isBefore(todayDate)) {
@@ -141,6 +172,8 @@ class _PaymentCalendarScreenState extends State<PaymentCalendarScreen> {
               g.fold(0, (s, i) => s + i.instalment.amount);
 
           final currency = all.first.subscription.currency;
+          final hasResults =
+              overdue.isNotEmpty || dueToday.isNotEmpty || upcoming.isNotEmpty;
 
           return LayoutBuilder(
             builder: (context, constraints) {
@@ -158,8 +191,57 @@ class _PaymentCalendarScreenState extends State<PaymentCalendarScreen> {
                     upcomingTotal: groupTotal(upcoming),
                     currency: currency,
                   ),
-                  Expanded(
-                    child: ListView(
+                  // ── Search bar ────────────────────────────────────
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                        isWide ? 24 : 16, 12, isWide ? 24 : 16, 4),
+                    child: TextField(
+                      controller: _searchController,
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        hintText: context.l10n.tr(
+                            'Search by member, plan, amount or method…'),
+                        hintStyle: TextStyle(
+                            fontSize: 13,
+                            color: cs.onSurfaceVariant
+                                .withValues(alpha: 0.6)),
+                        prefixIcon: Icon(Icons.search_outlined,
+                            size: 20, color: cs.onSurfaceVariant),
+                        suffixIcon: _searchQuery.isNotEmpty
+                            ? IconButton(
+                                icon: Icon(Icons.close,
+                                    size: 18,
+                                    color: cs.onSurfaceVariant),
+                                tooltip:
+                                    context.l10n.tr('Clear search'),
+                                onPressed: () =>
+                                    _searchController.clear(),
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: cs.surfaceContainerLow,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(
+                              color: cs.primary, width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // ── No results state ──────────────────────────────
+                  if (!hasResults)
+                    Expanded(
+                      child: _NoResultsState(query: _searchQuery),
+                    )
+                  else
+                    Expanded(
+                      child: ListView(
                       padding: EdgeInsets.fromLTRB(
                           isWide ? 24 : 16, 16, isWide ? 24 : 16, 32),
                       children: [
@@ -893,6 +975,43 @@ class _ConfirmRow extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // Empty / Error states
 // ─────────────────────────────────────────────────────────────────────────────
+
+class _NoResultsState extends StatelessWidget {
+  const _NoResultsState({required this.query});
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+                color: cs.surfaceContainerLow, shape: BoxShape.circle),
+            child: Icon(Icons.search_off_outlined,
+                size: 36, color: cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 20),
+          Text(context.l10n.tr('No results found'),
+              style:
+                  const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text(
+            '"$query"',
+            style: TextStyle(
+                color: cs.onSurfaceVariant,
+                fontSize: 13,
+                fontStyle: FontStyle.italic),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
