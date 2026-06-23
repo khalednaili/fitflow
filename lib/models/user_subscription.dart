@@ -1,5 +1,78 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+// ── ScheduledInstalment ───────────────────────────────────────────────────────
+
+/// One instalment in a multi-part payment plan.
+class ScheduledInstalment {
+  const ScheduledInstalment({
+    required this.id,
+    required this.amount,
+    required this.dueDate,
+    required this.method,
+    this.notes = '',
+    this.paid = false,
+    this.paidAt,
+    this.paidBy = '',
+  });
+
+  final String id;
+  final int amount;
+  final DateTime dueDate;
+  final String method; // 'cash' | 'card' | 'transfer' | 'cheque'
+  final String notes;
+  final bool paid;
+  final DateTime? paidAt;
+  final String paidBy;
+
+  bool get isOverdue =>
+      !paid && dueDate.isBefore(DateTime.now());
+
+  ScheduledInstalment copyWith({
+    int? amount,
+    DateTime? dueDate,
+    String? method,
+    String? notes,
+    bool? paid,
+    DateTime? paidAt,
+    String? paidBy,
+  }) =>
+      ScheduledInstalment(
+        id: id,
+        amount: amount ?? this.amount,
+        dueDate: dueDate ?? this.dueDate,
+        method: method ?? this.method,
+        notes: notes ?? this.notes,
+        paid: paid ?? this.paid,
+        paidAt: paidAt ?? this.paidAt,
+        paidBy: paidBy ?? this.paidBy,
+      );
+
+  factory ScheduledInstalment.fromMap(Map<String, dynamic> m) =>
+      ScheduledInstalment(
+        id: (m['id'] ?? '') as String,
+        amount: (m['amount'] as num? ?? 0).toInt(),
+        dueDate: (m['dueDate'] as Timestamp).toDate(),
+        method: (m['method'] ?? 'cash') as String,
+        notes: (m['notes'] ?? '') as String,
+        paid: (m['paid'] ?? false) as bool,
+        paidAt: (m['paidAt'] as Timestamp?)?.toDate(),
+        paidBy: (m['paidBy'] ?? '') as String,
+      );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'amount': amount,
+        'dueDate': Timestamp.fromDate(dueDate),
+        'method': method,
+        'notes': notes,
+        'paid': paid,
+        if (paidAt != null) 'paidAt': Timestamp.fromDate(paidAt!),
+        'paidBy': paidBy,
+      };
+}
+
+// ── UserSubscription ──────────────────────────────────────────────────────────
+
 class UserSubscription {
   const UserSubscription({
     required this.id,
@@ -14,6 +87,7 @@ class UserSubscription {
     required this.paymentHistory,
     this.gymId = '',
     this.updatedAt,
+    this.instalmentSchedule = const [],
   });
 
   factory UserSubscription.empty() {
@@ -30,6 +104,7 @@ class UserSubscription {
       paymentHistory: [],
       gymId: '',
       updatedAt: null,
+      instalmentSchedule: [],
     );
   }
 
@@ -45,6 +120,7 @@ class UserSubscription {
   final List<PaymentRecord> paymentHistory;
   final String gymId;
   final DateTime? updatedAt;
+  final List<ScheduledInstalment> instalmentSchedule;
 
   int get remainingAmount => totalAmount - amountPaid;
   double get paymentPercentage =>
@@ -57,6 +133,11 @@ class UserSubscription {
     return 'unpaid';
   }
 
+  bool get hasPaymentPlan => instalmentSchedule.isNotEmpty;
+
+  int get overdueInstalmentCount =>
+      instalmentSchedule.where((i) => i.isOverdue).length;
+
   factory UserSubscription.fromSnapshot(
     DocumentSnapshot<Map<String, dynamic>> snapshot,
   ) {
@@ -64,6 +145,13 @@ class UserSubscription {
     final paymentHistoryData = (data['paymentHistory'] ?? []) as List<dynamic>;
     final paymentHistory = paymentHistoryData
         .map((e) => PaymentRecord.fromMap(e as Map<String, dynamic>))
+        .toList();
+
+    final instalmentData =
+        (data['instalmentSchedule'] ?? []) as List<dynamic>;
+    final instalmentSchedule = instalmentData
+        .map((e) =>
+            ScheduledInstalment.fromMap(e as Map<String, dynamic>))
         .toList();
 
     return UserSubscription(
@@ -79,6 +167,7 @@ class UserSubscription {
       paymentHistory: paymentHistory,
       gymId: (data['gymId'] ?? '') as String,
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      instalmentSchedule: instalmentSchedule,
     );
   }
 
@@ -95,9 +184,13 @@ class UserSubscription {
       'paymentHistory': paymentHistory.map((p) => p.toMap()).toList(),
       'gymId': gymId,
       'updatedAt': updatedAt,
+      'instalmentSchedule':
+          instalmentSchedule.map((i) => i.toMap()).toList(),
     };
   }
 }
+
+// ── PaymentRecord ─────────────────────────────────────────────────────────────
 
 class PaymentRecord {
   const PaymentRecord({

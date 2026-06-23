@@ -7,6 +7,7 @@ import '../../services/notification_service.dart';
 import '../notifications/notifications_screen.dart';
 import 'admin_calendar_screen.dart';
 import 'admin_dashboard_screen.dart' show BookingSettingsDialog;
+import 'payment_calendar_screen.dart';
 import 'tabs/admin_attendance_tab.dart';
 import 'tabs/admin_checkin_tab.dart';
 import 'tabs/admin_classes_tab.dart';
@@ -534,6 +535,7 @@ class _AdminShellState extends State<AdminShell> {
             ),
           ),
           _buildSidebarBookingSettings(showLabels: showLabels),
+          _buildSidebarPaymentCalendar(showLabels: showLabels),
           _buildSidebarLogout(showLabels: showLabels),
         ],
       ),
@@ -669,6 +671,38 @@ class _AdminShellState extends State<AdminShell> {
               ),
             ),
     );
+  }
+
+  Widget _buildSidebarPaymentCalendar({required bool showLabels}) {
+    void openCalendar() => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                PaymentCalendarScreen(gymId: widget.appUser?.gymId ?? ''),
+          ),
+        );
+
+    return showLabels
+        ? ListTile(
+            dense: true,
+            leading: const Icon(Icons.calendar_month_outlined,
+                size: 18, color: Color(0xFF6B7280)),
+            title: Text(context.l10n.tr('Payment Calendar'),
+                style:
+                    const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
+            onTap: openCalendar,
+          )
+        : Tooltip(
+            message: context.l10n.tr('Payment Calendar'),
+            child: InkWell(
+              onTap: openCalendar,
+              child: const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(
+                    child: Icon(Icons.calendar_month_outlined,
+                        size: 18, color: Color(0xFF6B7280))),
+              ),
+            ),
+          );
   }
 
   Widget _buildSidebarLogout({required bool showLabels}) {
@@ -823,6 +857,7 @@ class _AdminShellState extends State<AdminShell> {
               ),
             ),
             _buildSidebarBookingSettings(showLabels: true),
+            _buildSidebarPaymentCalendar(showLabels: true),
             _buildSidebarLogout(showLabels: true),
           ],
         ),

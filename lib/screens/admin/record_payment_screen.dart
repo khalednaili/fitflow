@@ -259,6 +259,23 @@ class _RecordPaymentScreenState extends State<RecordPaymentScreen> {
                             },
                           ),
 
+                          // ── Instalment schedule ──────────────────────
+                          if (subscription!.hasPaymentPlan) ...[
+                            const SizedBox(height: 24),
+                            _InstalmentScheduleCard(
+                              subscription: subscription,
+                              onMarkPaid: (instalmentId) async {
+                                final subId = subscription!.id;
+                                final svc = SubscriptionService(
+                                    gymId: widget.gymId);
+                                await svc.markInstalmentPaid(
+                                  subscriptionId: subId,
+                                  instalmentId: instalmentId,
+                                );
+                              },
+                            ),
+                          ],
+
                           // ── Payment history ───────────────────────
                           if (subscription.paymentHistory.isNotEmpty) ...[
                             const SizedBox(height: 24),
@@ -905,6 +922,271 @@ class _SubmitButton extends StatelessWidget {
                   ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+// ── Instalment schedule card ──────────────────────────────────────────────────
+
+class _InstalmentScheduleCard extends StatefulWidget {
+  const _InstalmentScheduleCard({
+    required this.subscription,
+    required this.onMarkPaid,
+  });
+  final UserSubscription subscription;
+  final Future<void> Function(String instalmentId) onMarkPaid;
+
+  @override
+  State<_InstalmentScheduleCard> createState() =>
+      _InstalmentScheduleCardState();
+}
+
+class _InstalmentScheduleCardState extends State<_InstalmentScheduleCard> {
+  final Set<String> _loadingIds = {};
+
+  static const _methodIcons = {
+    'cash': Icons.payments_outlined,
+    'card': Icons.credit_card_outlined,
+    'transfer': Icons.account_balance_outlined,
+    'cheque': Icons.receipt_outlined,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final schedule = widget.subscription.instalmentSchedule;
+    final paid = schedule.where((i) => i.paid).length;
+    final fmt = DateFormat('d MMM yyyy');
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outlineVariant),
+        color: cs.surfaceContainerLow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Title ──────────────────────────────────────────────────────
+          Row(
+            children: [
+              Icon(Icons.calendar_month_outlined,
+                  size: 16, color: cs.primary),
+              const SizedBox(width: 8),
+              Text(
+                context.l10n.tr('Payment Plan'),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  color: cs.primaryContainer,
+                ),
+                child: Text(
+                  '$paid / ${schedule.length} ${context.l10n.tr('paid')}',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: cs.onPrimaryContainer),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // ── Rows ───────────────────────────────────────────────────────
+          ...schedule.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final inst = entry.value;
+            final isOverdue = inst.isOverdue;
+            final isLoading = _loadingIds.contains(inst.id);
+
+            Color statusColor;
+            IconData statusIcon;
+            String statusLabel;
+            if (inst.paid) {
+              statusColor = Colors.green.shade600;
+              statusIcon = Icons.check_circle_outline;
+              statusLabel = context.l10n.tr('Paid');
+            } else if (isOverdue) {
+              statusColor = cs.error;
+              statusIcon = Icons.warning_amber_outlined;
+              statusLabel = context.l10n.tr('Overdue');
+            } else {
+              statusColor = Colors.orange;
+              statusIcon = Icons.schedule_outlined;
+              statusLabel = context.l10n.tr('Upcoming');
+            }
+
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: inst.paid
+                      ? Colors.green.withValues(alpha: 0.3)
+                      : isOverdue
+                          ? cs.error.withValues(alpha: 0.4)
+                          : cs.outlineVariant,
+                ),
+                color: inst.paid
+                    ? Colors.green.withValues(alpha: 0.05)
+                    : isOverdue
+                        ? cs.error.withValues(alpha: 0.05)
+                        : null,
+              ),
+              child: Row(
+                children: [
+                  // Index badge
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.15),
+                        shape: BoxShape.circle),
+                    child: Center(
+                      child: Text('${idx + 1}',
+                          style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: statusColor)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Details
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              _methodIcons[inst.method] ??
+                                  Icons.payments_outlined,
+                              size: 13,
+                              color: cs.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${inst.amount} ${widget.subscription.currency}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          inst.paid && inst.paidAt != null
+                              ? '${context.l10n.tr('Paid on')} ${fmt.format(inst.paidAt!)}'
+                              : '${context.l10n.tr('Due')} ${fmt.format(inst.dueDate)}',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: cs.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Status chip
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      color: statusColor.withValues(alpha: 0.12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(statusIcon, size: 12, color: statusColor),
+                        const SizedBox(width: 4),
+                        Text(statusLabel,
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: statusColor)),
+                      ],
+                    ),
+                  ),
+                  // Mark as Paid button
+                  if (!inst.paid) ...[
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      height: 32,
+                      child: isLoading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2))
+                          : TextButton(
+                              style: TextButton.styleFrom(
+                                foregroundColor: cs.primary,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8),
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              onPressed: () async {
+                                final confirmed = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    title: Text(
+                                        context.l10n.tr('Mark as Paid')),
+                                    content: Text(
+                                      '${context.l10n.tr('Confirm payment of')} ${inst.amount} ${widget.subscription.currency} ${context.l10n.tr('for instalment')} ${idx + 1}?',
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, false),
+                                        child: Text(
+                                            context.l10n.tr('Cancel')),
+                                      ),
+                                      FilledButton(
+                                        onPressed: () =>
+                                            Navigator.pop(ctx, true),
+                                        child: Text(
+                                            context.l10n.tr('Confirm')),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirmed != true) return;
+                                setState(
+                                    () => _loadingIds.add(inst.id));
+                                try {
+                                  await widget.onMarkPaid(inst.id);
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(SnackBar(
+                                            content: Text('$e'),
+                                            backgroundColor: cs.error));
+                                  }
+                                } finally {
+                                  if (mounted) {
+                                    setState(() =>
+                                        _loadingIds.remove(inst.id));
+                                  }
+                                }
+                              },
+                              child: Text(
+                                  context.l10n.tr('Mark as Paid'),
+                                  style: const TextStyle(fontSize: 12)),
+                            ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+        ],
       ),
     );
   }

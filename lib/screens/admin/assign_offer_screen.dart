@@ -38,6 +38,27 @@ class AssignOfferScreen extends StatefulWidget {
   State<AssignOfferScreen> createState() => _AssignOfferScreenState();
 }
 
+class _InstalmentDraft {
+  _InstalmentDraft({
+    required this.id,
+    required this.amount,
+    required this.dueDate,
+    required this.method,
+    this.notes = '',
+    this.paid = false,
+  }) : amountController = TextEditingController(text: amount > 0 ? '$amount' : '');
+
+  final String id;
+  int amount;
+  DateTime dueDate;
+  String method;
+  String notes;
+  bool paid;
+  final TextEditingController amountController;
+
+  void dispose() => amountController.dispose();
+}
+
 class _AssignOfferScreenState extends State<AssignOfferScreen> {
   late final _memberService = MemberService(gymId: widget.gymId);
   late final _subscriptionService = SubscriptionService(gymId: widget.gymId);
@@ -50,6 +71,10 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
   String _paymentMethod = 'cash';
   DateTime _paymentDate = DateTime.now();
   bool _saving = false;
+
+  // ── Payment plan ──────────────────────────────────────────────────────────
+  bool _usePaymentPlan = false;
+  final List<_InstalmentDraft> _instalments = [];
 
   // validation
   String? _memberError;
@@ -65,8 +90,48 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
   @override
   void dispose() {
     _initialPaidController.dispose();
+    for (final i in _instalments) {
+      i.dispose();
+    }
     super.dispose();
   }
+
+  void _togglePaymentPlan(bool value) {
+    setState(() {
+      _usePaymentPlan = value;
+      if (value && _instalments.isEmpty && _selectedPlan != null) {
+        _addInstalment();
+        _addInstalment();
+      }
+    });
+  }
+
+  void _addInstalment() {
+    final plan = _selectedPlan;
+    final nextDate = _instalments.isEmpty
+        ? DateTime.now()
+        : _instalments.last.dueDate.add(const Duration(days: 30));
+    _instalments.add(_InstalmentDraft(
+      id: '${DateTime.now().microsecondsSinceEpoch}_${_instalments.length}',
+      amount: plan != null ? _suggestedAmount(plan.price) : 0,
+      dueDate: DateTime(nextDate.year, nextDate.month, nextDate.day),
+      method: 'cash',
+    ));
+  }
+
+  int _suggestedAmount(int total) {
+    if (_instalments.isEmpty) return total;
+    final alreadyAllocated =
+        _instalments.fold(0, (s, i) => s + i.amount);
+    final remaining = total - alreadyAllocated;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  int get _instalmentTotal =>
+      _instalments.fold(0, (s, i) {
+        final v = int.tryParse(i.amountController.text.trim()) ?? 0;
+        return s + v;
+      });
 
   DateTime _addDuration(
       {required DateTime from, required int value, required String unit}) {
@@ -149,10 +214,21 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
       _planError = _selectedPlan == null
           ? context.l10n.tr('Please select an offer')
           : null;
-      final paid = int.tryParse(_initialPaidController.text.trim());
-      _paymentError = (paid == null || paid < 0)
-          ? context.l10n.tr('Enter a valid amount')
-          : null;
+      if (_usePaymentPlan) {
+        if (_instalments.isEmpty) {
+          _paymentError = context.l10n.tr('Add at least one instalment');
+        } else if (_instalmentTotal != _selectedPlan!.price) {
+          _paymentError =
+              '${context.l10n.tr('Instalments must total')} ${_selectedPlan!.price} ${_selectedPlan!.currency} (${context.l10n.tr('currently')} $_instalmentTotal)';
+        } else {
+          _paymentError = null;
+        }
+      } else {
+        final paid = int.tryParse(_initialPaidController.text.trim());
+        _paymentError = (paid == null || paid < 0)
+            ? context.l10n.tr('Enter a valid amount')
+            : null;
+      }
     });
     return _memberError == null && _planError == null && _paymentError == null;
   }
@@ -162,13 +238,17 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
 
     final userId = _selectedUserId!;
     final plan = _selectedPlan!;
-    final initialAmountPaid = int.tryParse(_initialPaidController.text.trim())!;
 
-    if (initialAmountPaid > plan.price) {
-      setState(() => _paymentError =
-          '${context.l10n.tr('Amount cannot exceed total price')} (${plan.price} ${plan.currency})');
-      return;
+    if (!_usePaymentPlan) {
+      final initialAmountPaid =
+          int.tryParse(_initialPaidController.text.trim())!;
+      if (initialAmountPaid > plan.price) {
+        setState(() => _paymentError =
+            '${context.l10n.tr('Amount cannot exceed total price')} (${plan.price} ${plan.currency})');
+        return;
+      }
     }
+
     if (_endDate.isBefore(_startDate)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -182,17 +262,47 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
     final messenger = ScaffoldMessenger.of(context);
 
     try {
-      await _subscriptionService.assignOfferAtomic(
-        userId: userId,
-        planId: plan.id,
-        totalAmount: plan.price,
-        currency: plan.currency,
-        startDate: _startDate,
-        endDate: _endDate,
-        initialAmountPaid: initialAmountPaid,
-        initialPaymentMethod: _paymentMethod,
-        initialPaymentDate: _paymentDate,
-      );
+      if (_usePaymentPlan) {
+        // Build ScheduledInstalment list from drafts
+        final schedule = _instalments.asMap().entries.map((e) {
+          final draft = e.value;
+          final amt =
+              int.tryParse(draft.amountController.text.trim()) ?? 0;
+          return ScheduledInstalment(
+            id: draft.id,
+            amount: amt,
+            dueDate: draft.dueDate,
+            method: draft.method,
+            notes: draft.notes,
+            paid: draft.paid,
+            paidAt: draft.paid ? DateTime.now() : null,
+          );
+        }).toList();
+
+        await _subscriptionService.assignOfferAtomic(
+          userId: userId,
+          planId: plan.id,
+          totalAmount: plan.price,
+          currency: plan.currency,
+          startDate: _startDate,
+          endDate: _endDate,
+          instalmentSchedule: schedule,
+        );
+      } else {
+        final initialAmountPaid =
+            int.tryParse(_initialPaidController.text.trim())!;
+        await _subscriptionService.assignOfferAtomic(
+          userId: userId,
+          planId: plan.id,
+          totalAmount: plan.price,
+          currency: plan.currency,
+          startDate: _startDate,
+          endDate: _endDate,
+          initialAmountPaid: initialAmountPaid,
+          initialPaymentMethod: _paymentMethod,
+          initialPaymentDate: _paymentDate,
+        );
+      }
 
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(
@@ -478,21 +588,59 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
         ),
         const SizedBox(height: 16),
         _SectionCard(
-          title: context.l10n.tr('INITIAL PAYMENT'),
+          title: context.l10n.tr('PAYMENT'),
           step: 4,
           accentColor: accentColor,
           child: _selectedPlan != null
-              ? _PaymentSection(
-                  plan: _selectedPlan!,
-                  controller: _initialPaidController,
-                  errorText: _paymentError,
-                  onChanged: (_) => setState(() => _paymentError = null),
-                  accentColor: accentColor,
-                  paymentMethod: _paymentMethod,
-                  onPaymentMethodChanged: (v) =>
-                      setState(() => _paymentMethod = v),
-                  paymentDate: _paymentDate,
-                  onPickPaymentDate: _pickPaymentDate,
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Payment plan toggle ─────────────────────────────
+                    SwitchListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        context.l10n.tr('Payment Plan (multiple instalments)'),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        context.l10n.tr('Split the total into agreed instalments with fixed dates'),
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      value: _usePaymentPlan,
+                      onChanged: _togglePaymentPlan,
+                      activeColor: accentColor,
+                    ),
+                    const Divider(height: 20),
+                    if (!_usePaymentPlan) ...[
+                      _PaymentSection(
+                        plan: _selectedPlan!,
+                        controller: _initialPaidController,
+                        errorText: _paymentError,
+                        onChanged: (_) => setState(() => _paymentError = null),
+                        accentColor: accentColor,
+                        paymentMethod: _paymentMethod,
+                        onPaymentMethodChanged: (v) =>
+                            setState(() => _paymentMethod = v),
+                        paymentDate: _paymentDate,
+                        onPickPaymentDate: _pickPaymentDate,
+                      ),
+                    ] else ...[
+                      _InstalmentPlanEditor(
+                        instalments: _instalments,
+                        plan: _selectedPlan!,
+                        total: _instalmentTotal,
+                        errorText: _paymentError,
+                        accentColor: accentColor,
+                        onAdd: () => setState(_addInstalment),
+                        onRemove: (idx) => setState(() {
+                          _instalments[idx].dispose();
+                          _instalments.removeAt(idx);
+                        }),
+                        onChanged: () => setState(() => _paymentError = null),
+                      ),
+                    ],
+                  ],
                 )
               : Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1355,6 +1503,301 @@ class _ExistingSubscriptions extends StatelessWidget {
 }
 
 // ── Helper widgets ────────────────────────────────────────────────────────────
+
+/// Editor widget for a multi-instalment payment plan inside [AssignOfferScreen].
+class _InstalmentPlanEditor extends StatelessWidget {
+  const _InstalmentPlanEditor({
+    required this.instalments,
+    required this.plan,
+    required this.total,
+    required this.accentColor,
+    required this.onAdd,
+    required this.onRemove,
+    required this.onChanged,
+    this.errorText,
+  });
+
+  final List<_InstalmentDraft> instalments;
+  final MembershipPlan plan;
+  final int total;
+  final Color accentColor;
+  final VoidCallback onAdd;
+  final ValueChanged<int> onRemove;
+  final VoidCallback onChanged;
+  final String? errorText;
+
+  static const _methods = [
+    ('cash', 'Cash', Icons.payments_outlined),
+    ('card', 'Card', Icons.credit_card_outlined),
+    ('transfer', 'Transfer', Icons.account_balance_outlined),
+    ('cheque', 'Cheque', Icons.receipt_outlined),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final remaining = plan.price - total;
+    final allAllocated = remaining == 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Summary bar ──────────────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            color: accentColor.withValues(alpha: 0.08),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.payments_outlined, size: 15, color: accentColor),
+              const SizedBox(width: 8),
+              Text(
+                '${context.l10n.tr('Total')}: ${plan.price} ${plan.currency}',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: accentColor),
+              ),
+              const Spacer(),
+              if (!allAllocated)
+                Text(
+                  '${context.l10n.tr('Remaining')}: $remaining ${plan.currency}',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: remaining > 0 ? Colors.orange : Colors.red),
+                )
+              else
+                Row(
+                  children: [
+                    Icon(Icons.check_circle_outline,
+                        size: 14, color: Colors.green.shade600),
+                    const SizedBox(width: 4),
+                    Text(context.l10n.tr('Fully allocated'),
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.green.shade600)),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        if (errorText != null) ...[
+          const SizedBox(height: 6),
+          Text(errorText!,
+              style:
+                  TextStyle(color: cs.error, fontSize: 12)),
+        ],
+        const SizedBox(height: 12),
+        // ── Instalment rows ──────────────────────────────────────────────
+        ...instalments.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final draft = entry.value;
+          return _InstalmentRow(
+            index: idx,
+            draft: draft,
+            currency: plan.currency,
+            methods: _methods,
+            accentColor: accentColor,
+            canRemove: instalments.length > 1,
+            onRemove: () => onRemove(idx),
+            onChanged: onChanged,
+          );
+        }),
+        const SizedBox(height: 10),
+        // ── Add button ───────────────────────────────────────────────────
+        OutlinedButton.icon(
+          onPressed: onAdd,
+          icon: const Icon(Icons.add, size: 16),
+          label: Text(context.l10n.tr('Add Instalment'),
+              style: const TextStyle(fontSize: 13)),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: accentColor,
+            side: BorderSide(color: accentColor.withValues(alpha: 0.5)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InstalmentRow extends StatefulWidget {
+  const _InstalmentRow({
+    required this.index,
+    required this.draft,
+    required this.currency,
+    required this.methods,
+    required this.accentColor,
+    required this.canRemove,
+    required this.onRemove,
+    required this.onChanged,
+  });
+
+  final int index;
+  final _InstalmentDraft draft;
+  final String currency;
+  final List<(String, String, IconData)> methods;
+  final Color accentColor;
+  final bool canRemove;
+  final VoidCallback onRemove;
+  final VoidCallback onChanged;
+
+  @override
+  State<_InstalmentRow> createState() => _InstalmentRowState();
+}
+
+class _InstalmentRowState extends State<_InstalmentRow> {
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: widget.draft.dueDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 1)),
+      lastDate: DateTime.now().add(const Duration(days: 730)),
+    );
+    if (picked != null) {
+      setState(() => widget.draft.dueDate = picked);
+      widget.onChanged();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final draft = widget.draft;
+    final fmt = DateFormat('d MMM yyyy');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: cs.outlineVariant),
+        color: cs.surfaceContainerLow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ──────────────────────────────────────────────────
+          Row(
+            children: [
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                    color: widget.accentColor, shape: BoxShape.circle),
+                child: Center(
+                  child: Text('${widget.index + 1}',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                context.l10n.tr('Instalment ${widget.index + 1}'),
+                style: const TextStyle(
+                    fontWeight: FontWeight.w600, fontSize: 13),
+              ),
+              const Spacer(),
+              if (widget.canRemove)
+                IconButton(
+                  icon: Icon(Icons.close, size: 16, color: cs.error),
+                  tooltip: context.l10n.tr('Remove'),
+                  onPressed: widget.onRemove,
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // ── Amount + Date row ────────────────────────────────────────
+          Row(
+            children: [
+              // Amount
+              Expanded(
+                child: TextField(
+                  controller: draft.amountController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.tr('Amount'),
+                    suffixText: widget.currency,
+                    isDense: true,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onChanged: (_) => widget.onChanged(),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Due date
+              Expanded(
+                child: InkWell(
+                  onTap: _pickDate,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: context.l10n.tr('Due Date'),
+                      isDense: true,
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      suffixIcon: const Icon(Icons.calendar_today, size: 16),
+                    ),
+                    child: Text(fmt.format(draft.dueDate),
+                        style: const TextStyle(fontSize: 13)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // ── Payment method chips ──────────────────────────────────────
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: widget.methods.map((m) {
+              final selected = draft.method == m.$1;
+              return ChoiceChip(
+                avatar: Icon(m.$3,
+                    size: 14,
+                    color: selected ? Colors.white : cs.onSurfaceVariant),
+                label: Text(context.l10n.tr(m.$2),
+                    style: TextStyle(
+                        fontSize: 11,
+                        color:
+                            selected ? Colors.white : cs.onSurfaceVariant)),
+                selected: selected,
+                onSelected: (_) {
+                  setState(() => draft.method = m.$1);
+                  widget.onChanged();
+                },
+                selectedColor: widget.accentColor,
+                visualDensity: VisualDensity.compact,
+              );
+            }).toList(),
+          ),
+          // ── Paid today toggle ────────────────────────────────────────
+          const SizedBox(height: 6),
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+            value: draft.paid,
+            title: Text(context.l10n.tr('Mark as paid today'),
+                style: const TextStyle(fontSize: 12)),
+            onChanged: (v) {
+              setState(() => draft.paid = v ?? false);
+              widget.onChanged();
+            },
+            activeColor: widget.accentColor,
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _StepLabel extends StatelessWidget {
   const _StepLabel({required this.step, required this.label});

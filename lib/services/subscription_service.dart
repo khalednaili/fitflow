@@ -4,6 +4,20 @@ import 'package:fit_flow/utils/crash_logger.dart';
 import '../models/membership_plan.dart';
 import '../models/user_subscription.dart';
 
+/// Pairs a pending instalment with its parent subscription — used by
+/// [SubscriptionService.streamPendingInstalments].
+class _InstalmentWithSubscription {
+  const _InstalmentWithSubscription({
+    required this.subscription,
+    required this.instalment,
+  });
+  final UserSubscription subscription;
+  final ScheduledInstalment instalment;
+}
+
+/// Public alias so UI code can import this type.
+typedef InstalmentWithSubscription = _InstalmentWithSubscription;
+
 class SubscriptionService {
   SubscriptionService({
     this.gymId = '',
@@ -310,6 +324,10 @@ class SubscriptionService {
   /// user doc in a single [WriteBatch].
   ///
   /// Throws if the member already has an **active** subscription for this plan.
+  ///
+  /// Pass [instalmentSchedule] to record a multi-part payment plan.
+  /// The first instalment marked [paid] is automatically added to
+  /// [paymentHistory] and counted in [amountPaid].
   Future<void> assignOfferAtomic({
     required String userId,
     required String planId,
@@ -321,6 +339,7 @@ class SubscriptionService {
     String initialPaymentMethod = 'cash',
     String initialPaymentNotes = '',
     DateTime? initialPaymentDate,
+    List<ScheduledInstalment> instalmentSchedule = const [],
   }) async {
     final docId = '${userId}_$planId';
     final now = DateTime.now();
@@ -339,17 +358,41 @@ class SubscriptionService {
       }
     }
 
-    final safeInitialAmountPaid = initialAmountPaid.clamp(0, totalAmount);
-    final paymentHistory = safeInitialAmountPaid > 0
-        ? <Map<String, dynamic>>[
-            <String, dynamic>{
-              'amount': safeInitialAmountPaid,
-              'date': Timestamp.fromDate(initialPaymentDate ?? now),
-              'method': initialPaymentMethod,
-              'notes': initialPaymentNotes,
-            },
-          ]
-        : <Map<String, dynamic>>[];
+    // ── Resolve payment history & amountPaid ──────────────────────────────
+    // If using an instalment plan, any instalment already marked paid on
+    // creation (e.g. first instalment paid today) seeds paymentHistory.
+    final List<Map<String, dynamic>> paymentHistory;
+    final int amountPaid;
+
+    if (instalmentSchedule.isNotEmpty) {
+      final paidNow =
+          instalmentSchedule.where((i) => i.paid).toList();
+      amountPaid = paidNow.fold(0, (sum, i) => sum + i.amount)
+          .clamp(0, totalAmount);
+      paymentHistory = paidNow
+          .map((i) => <String, dynamic>{
+                'amount': i.amount,
+                'date': Timestamp.fromDate(i.paidAt ?? now),
+                'method': i.method,
+                'notes': i.notes.isEmpty
+                    ? 'Instalment 1'
+                    : i.notes,
+              })
+          .toList();
+    } else {
+      final safe = initialAmountPaid.clamp(0, totalAmount);
+      amountPaid = safe;
+      paymentHistory = safe > 0
+          ? [
+              <String, dynamic>{
+                'amount': safe,
+                'date': Timestamp.fromDate(initialPaymentDate ?? now),
+                'method': initialPaymentMethod,
+                'notes': initialPaymentNotes,
+              }
+            ]
+          : [];
+    }
 
     // ── Atomic batch: subscription doc + user doc ─────────────────────────
     final batch = _firestore.batch();
@@ -361,12 +404,14 @@ class SubscriptionService {
         'userId': userId,
         'planId': planId,
         'totalAmount': totalAmount,
-        'amountPaid': safeInitialAmountPaid,
+        'amountPaid': amountPaid,
         'currency': currency,
         'status': 'active',
         'startDate': Timestamp.fromDate(startDate),
         'endDate': Timestamp.fromDate(endDate),
         'paymentHistory': paymentHistory,
+        'instalmentSchedule':
+            instalmentSchedule.map((i) => i.toMap()).toList(),
         'updatedAt': Timestamp.now(),
       },
     );
@@ -383,6 +428,106 @@ class SubscriptionService {
     );
 
     await batch.commit();
+  }
+
+  /// Marks a scheduled instalment as paid (transaction-safe).
+  ///
+  /// Updates the instalment's `paid`/`paidAt`/`paidBy` fields, increments
+  /// `amountPaid`, and appends an entry to `paymentHistory`.
+  Future<void> markInstalmentPaid({
+    required String subscriptionId,
+    required String instalmentId,
+    String paidBy = '',
+  }) async {
+    final subRef = _firestore
+        .collection('user_subscriptions')
+        .doc(subscriptionId);
+
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(subRef);
+      if (!snap.exists) throw Exception('Subscription not found.');
+
+      final data = snap.data()!;
+      final currentAmountPaid =
+          (data['amountPaid'] as num? ?? 0).toInt();
+      final totalAmount = (data['totalAmount'] as num? ?? 0).toInt();
+      final scheduleData =
+          (data['instalmentSchedule'] ?? []) as List<dynamic>;
+
+      final now = Timestamp.now();
+      int paidAmount = 0;
+      final updatedSchedule = scheduleData.map((raw) {
+        final m = Map<String, dynamic>.from(raw as Map);
+        if (m['id'] == instalmentId) {
+          if (m['paid'] == true) {
+            throw Exception('This instalment is already marked as paid.');
+          }
+          paidAmount = (m['amount'] as num? ?? 0).toInt();
+          return {
+            ...m,
+            'paid': true,
+            'paidAt': now,
+            'paidBy': paidBy,
+          };
+        }
+        return m;
+      }).toList();
+
+      if (paidAmount == 0) {
+        throw Exception('Instalment not found.');
+      }
+
+      final newAmountPaid =
+          (currentAmountPaid + paidAmount).clamp(0, totalAmount);
+      final historyData =
+          (data['paymentHistory'] ?? []) as List<dynamic>;
+
+      // Find instalment index for label
+      final idx = scheduleData.indexWhere(
+          (raw) => (raw as Map)['id'] == instalmentId);
+      final label = idx >= 0 ? 'Instalment ${idx + 1}' : 'Instalment';
+
+      tx.update(subRef, {
+        'instalmentSchedule': updatedSchedule,
+        'amountPaid': newAmountPaid,
+        'paymentHistory': [
+          ...historyData,
+          {
+            'amount': paidAmount,
+            'date': now,
+            'method': (scheduleData.firstWhere(
+                    (raw) => (raw as Map)['id'] == instalmentId)
+                as Map)['method'] ?? 'cash',
+            'notes': label,
+          },
+        ],
+        'updatedAt': now,
+      });
+    });
+  }
+
+  /// Stream all instalment schedules for the gym with pending (unpaid)
+  /// instalments, for the admin payment calendar.
+  Stream<List<_InstalmentWithSubscription>> streamPendingInstalments() {
+    return _userSubscriptionsQuery
+        .where('gymId', isEqualTo: gymId)
+        .snapshots()
+        .map((snap) {
+      final result = <_InstalmentWithSubscription>[];
+      for (final doc in snap.docs) {
+        final sub = UserSubscription.fromSnapshot(doc);
+        if (!_matchesGymId(sub.gymId)) continue;
+        for (final inst in sub.instalmentSchedule) {
+          if (!inst.paid) {
+            result.add(_InstalmentWithSubscription(
+                subscription: sub, instalment: inst));
+          }
+        }
+      }
+      result.sort((a, b) =>
+          a.instalment.dueDate.compareTo(b.instalment.dueDate));
+      return result;
+    });
   }
 
   Future<void> recordPayment({

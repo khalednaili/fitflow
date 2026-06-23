@@ -518,4 +518,247 @@ void main() {
       expect(snap.data()!['status'], 'active');
     });
   });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 10. Instalment schedule — assignOfferAtomic with schedule
+  // ══════════════════════════════════════════════════════════════════════════
+  group('10 • instalment schedule — assignOfferAtomic', () {
+    const userId = 'u10';
+    const planId = 'plan_inst';
+    final subId = '${userId}_$planId';
+    final now = DateTime(2025, 1, 15);
+
+    final schedule = [
+      ScheduledInstalment(
+        id: 'inst_1',
+        amount: 40,
+        dueDate: now,
+        method: 'cash',
+        notes: 'First',
+        paid: true,
+        paidAt: now,
+      ),
+      ScheduledInstalment(
+        id: 'inst_2',
+        amount: 30,
+        dueDate: DateTime(2025, 2, 15),
+        method: 'card',
+        notes: 'Second',
+        paid: false,
+      ),
+      ScheduledInstalment(
+        id: 'inst_3',
+        amount: 30,
+        dueDate: DateTime(2025, 3, 15),
+        method: 'cheque',
+        notes: 'Third',
+        paid: false,
+      ),
+    ];
+
+    setUp(() => db.createUserDoc(userId));
+
+    test('stores instalmentSchedule in Firestore', () async {
+      await sut.assignOfferAtomic(
+        userId: userId,
+        planId: planId,
+        totalAmount: 100,
+        currency: 'DZD',
+        startDate: now,
+        endDate: now.add(const Duration(days: 90)),
+        instalmentSchedule: schedule,
+      );
+
+      final snap =
+          await db.collection('user_subscriptions').doc(subId).get();
+      final stored =
+          (snap.data()!['instalmentSchedule'] as List<dynamic>);
+      expect(stored.length, 3);
+      expect((stored[0] as Map)['id'], 'inst_1');
+      expect((stored[1] as Map)['id'], 'inst_2');
+      expect((stored[2] as Map)['id'], 'inst_3');
+    });
+
+    test('seeds amountPaid from pre-paid instalments', () async {
+      await sut.assignOfferAtomic(
+        userId: userId,
+        planId: planId,
+        totalAmount: 100,
+        currency: 'DZD',
+        startDate: now,
+        endDate: now.add(const Duration(days: 90)),
+        instalmentSchedule: schedule,
+      );
+
+      final snap =
+          await db.collection('user_subscriptions').doc(subId).get();
+      expect(snap.data()!['amountPaid'], 40);
+    });
+
+    test('seeds paymentHistory from pre-paid instalments', () async {
+      await sut.assignOfferAtomic(
+        userId: userId,
+        planId: planId,
+        totalAmount: 100,
+        currency: 'DZD',
+        startDate: now,
+        endDate: now.add(const Duration(days: 90)),
+        instalmentSchedule: schedule,
+      );
+
+      final snap =
+          await db.collection('user_subscriptions').doc(subId).get();
+      final history =
+          (snap.data()!['paymentHistory'] as List<dynamic>);
+      expect(history.length, 1);
+      expect((history[0] as Map)['amount'], 40);
+      expect((history[0] as Map)['method'], 'cash');
+    });
+
+    test('no pre-paid instalments → amountPaid is 0 and history empty',
+        () async {
+      final unpaidSchedule = schedule
+          .map((i) => ScheduledInstalment(
+                id: i.id,
+                amount: i.amount,
+                dueDate: i.dueDate,
+                method: i.method,
+                paid: false,
+              ))
+          .toList();
+
+      await sut.assignOfferAtomic(
+        userId: userId,
+        planId: planId,
+        totalAmount: 100,
+        currency: 'DZD',
+        startDate: now,
+        endDate: now.add(const Duration(days: 90)),
+        instalmentSchedule: unpaidSchedule,
+      );
+
+      final snap =
+          await db.collection('user_subscriptions').doc(subId).get();
+      expect(snap.data()!['amountPaid'], 0);
+      expect((snap.data()!['paymentHistory'] as List).isEmpty, true);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 11. markInstalmentPaid
+  // ══════════════════════════════════════════════════════════════════════════
+  group('11 • markInstalmentPaid', () {
+    const userId = 'u11';
+    const planId = 'plan_mark';
+    final subId = '${userId}_$planId';
+
+    setUp(() async {
+      await db.collection('user_subscriptions').doc(subId).set({
+        'gymId': '',
+        'userId': userId,
+        'planId': planId,
+        'totalAmount': 100,
+        'amountPaid': 0,
+        'currency': 'DZD',
+        'status': 'active',
+        'paymentHistory': [],
+        'instalmentSchedule': [
+          {
+            'id': 'inst_a',
+            'amount': 50,
+            'dueDate': Timestamp.fromDate(DateTime(2025, 1, 10)),
+            'method': 'cash',
+            'notes': 'First',
+            'paid': false,
+          },
+          {
+            'id': 'inst_b',
+            'amount': 50,
+            'dueDate': Timestamp.fromDate(DateTime(2025, 2, 10)),
+            'method': 'card',
+            'notes': 'Second',
+            'paid': false,
+          },
+        ],
+      });
+    });
+
+    test('marks the correct instalment as paid', () async {
+      await sut.markInstalmentPaid(
+          subscriptionId: subId, instalmentId: 'inst_a');
+
+      final snap =
+          await db.collection('user_subscriptions').doc(subId).get();
+      final sched =
+          (snap.data()!['instalmentSchedule'] as List<dynamic>);
+      expect((sched[0] as Map)['paid'], true);
+      expect((sched[0] as Map)['paidAt'], isNotNull);
+      expect((sched[1] as Map)['paid'], false);
+    });
+
+    test('increments amountPaid by the instalment amount', () async {
+      await sut.markInstalmentPaid(
+          subscriptionId: subId, instalmentId: 'inst_a');
+
+      final snap =
+          await db.collection('user_subscriptions').doc(subId).get();
+      expect(snap.data()!['amountPaid'], 50);
+    });
+
+    test('appends entry to paymentHistory', () async {
+      await sut.markInstalmentPaid(
+          subscriptionId: subId, instalmentId: 'inst_a');
+
+      final snap =
+          await db.collection('user_subscriptions').doc(subId).get();
+      final history =
+          (snap.data()!['paymentHistory'] as List<dynamic>);
+      expect(history.length, 1);
+      expect((history[0] as Map)['amount'], 50);
+      expect((history[0] as Map)['method'], 'cash');
+      expect((history[0] as Map)['notes'], 'Instalment 1');
+    });
+
+    test('throws if instalment is already paid', () async {
+      await sut.markInstalmentPaid(
+          subscriptionId: subId, instalmentId: 'inst_a');
+
+      expect(
+        () => sut.markInstalmentPaid(
+            subscriptionId: subId, instalmentId: 'inst_a'),
+        throwsException,
+      );
+    });
+
+    test('throws if instalment id not found', () async {
+      expect(
+        () => sut.markInstalmentPaid(
+            subscriptionId: subId, instalmentId: 'nonexistent'),
+        throwsException,
+      );
+    });
+
+    test('throws if subscription does not exist', () async {
+      expect(
+        () => sut.markInstalmentPaid(
+            subscriptionId: 'bad_id', instalmentId: 'inst_a'),
+        throwsException,
+      );
+    });
+
+    test('two sequential markInstalmentPaid accumulate amountPaid',
+        () async {
+      await sut.markInstalmentPaid(
+          subscriptionId: subId, instalmentId: 'inst_a');
+      await sut.markInstalmentPaid(
+          subscriptionId: subId, instalmentId: 'inst_b');
+
+      final snap =
+          await db.collection('user_subscriptions').doc(subId).get();
+      expect(snap.data()!['amountPaid'], 100);
+      final history =
+          (snap.data()!['paymentHistory'] as List<dynamic>);
+      expect(history.length, 2);
+    });
+  });
 }
