@@ -61,6 +61,11 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
     return '${c.title} (${f.format(c.startTime)} - ${f.format(c.endTime)})';
   }
 
+  String _classPillLabel(GymClass c) {
+    final f = DateFormat('HH:mm');
+    return '${f.format(c.startTime)} • ${c.title}';
+  }
+
   Future<void> _toggleCheckIn(Booking booking) async {
     if (_selectedClass == null) return;
     final key = booking.userId;
@@ -183,13 +188,22 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
             children: [
               // ── Top header ──────────────────────────────────────────────
               _buildTopBar(dateFmt, isToday, dayClasses, reconciled),
+              if (classSnap.connectionState == ConnectionState.waiting)
+                const LinearProgressIndicator(
+                  minHeight: 2,
+                  backgroundColor: _surface,
+                  valueColor: AlwaysStoppedAnimation<Color>(_accent),
+                ),
+              if (reconciled != null) _buildStatsBar(reconciled),
               // ── Section headers row ─────────────────────────────────────
-              if (reconciled != null)
-                _buildSectionHeaders(reconciled),
+              if (reconciled != null) _buildSectionHeaders(reconciled),
               // ── Main content ─────────────────────────────────────────────
               Expanded(
                 child: reconciled == null
-                    ? _buildNoSelection(dayClasses.isEmpty)
+                    ? (classSnap.connectionState == ConnectionState.waiting &&
+                            !classSnap.hasData
+                        ? const _WhiteboardLoadingSkeleton()
+                        : _buildNoSelection(dayClasses.isEmpty))
                     : _buildWhiteboardContent(reconciled),
               ),
             ],
@@ -201,9 +215,8 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
 
   // ── Top bar: date + class selector ───────────────────────────────────────
 
-  Widget _buildTopBar(
-      DateFormat dateFmt, bool isToday, List<GymClass> dayClasses,
-      GymClass? currentClass) {
+  Widget _buildTopBar(DateFormat dateFmt, bool isToday,
+      List<GymClass> dayClasses, GymClass? currentClass) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: const BoxDecoration(
@@ -226,22 +239,21 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
                   _selectedClass = null;
                 }),
                 onNext: () => setState(() {
-                  _selectedDate =
-                      _selectedDate.add(const Duration(days: 1));
+                  _selectedDate = _selectedDate.add(const Duration(days: 1));
                   _selectedClass = null;
                 }),
               ),
               const SizedBox(width: 16),
               // Class dropdown
               Expanded(
-                child: _ClassDropdown(
+                child: _ClassPillSelector(
                   classes: dayClasses,
                   selected: currentClass,
                   onChanged: (c) => setState(() {
                     _selectedClass = c;
                     _loadingMap.clear();
                   }),
-                  timeLabel: _timeLabel,
+                  timeLabel: _classPillLabel,
                 ),
               ),
               const SizedBox(width: 12),
@@ -275,8 +287,7 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
                   : dateFmt.format(_selectedDate),
               onTap: _pickDate,
               onPrev: () => setState(() {
-                _selectedDate =
-                    _selectedDate.subtract(const Duration(days: 1));
+                _selectedDate = _selectedDate.subtract(const Duration(days: 1));
                 _selectedClass = null;
               }),
               onNext: () => setState(() {
@@ -285,18 +296,74 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
               }),
             ),
             const SizedBox(height: 8),
-            _ClassDropdown(
+            _ClassPillSelector(
               classes: dayClasses,
               selected: _selectedClass,
               onChanged: (c) => setState(() {
                 _selectedClass = c;
                 _loadingMap.clear();
               }),
-              timeLabel: _timeLabel,
+              timeLabel: _classPillLabel,
             ),
           ],
         );
       }),
+    );
+  }
+
+  Widget _buildStatsBar(GymClass gymClass) {
+    return StreamBuilder<List<Booking>>(
+      stream: _bookingService.streamBookingsForClass(gymClass.id),
+      builder: (context, snap) {
+        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+          return const _StatsBarSkeleton();
+        }
+
+        final bookings = snap.data ?? [];
+        final checkedIn = bookings.where((b) => b.checkedIn).length;
+        final pending = bookings.length - checkedIn;
+
+        return Container(
+          margin: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _card,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _border),
+          ),
+          child: Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _StatChip(
+                icon: Icons.people_outline,
+                label: 'Total',
+                value: '${bookings.length}',
+                color: Colors.white,
+              ),
+              _StatChip(
+                icon: Icons.check_circle,
+                label: 'Checked In',
+                value: '$checkedIn',
+                color: _accent,
+              ),
+              _StatChip(
+                icon: Icons.schedule_outlined,
+                label: 'Pending',
+                value: '$pending',
+                color: const Color(0xFFF59E0B),
+              ),
+              if (gymClass.capacity > 0)
+                _StatChip(
+                  icon: Icons.event_seat_outlined,
+                  label: 'Capacity',
+                  value: '${bookings.length}/${gymClass.capacity}',
+                  color: _textSub,
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -306,9 +373,7 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
     return StreamBuilder<List<Booking>>(
       stream: _bookingService.streamBookingsForClass(gymClass.id),
       builder: (context, snap) {
-        final bookings = snap.data ?? [];
-        final checkedIn = bookings.where((b) => b.checkedIn).length;
-        final pending = bookings.where((b) => !b.checkedIn).toList();
+        final pending = (snap.data ?? []).where((b) => !b.checkedIn).toList();
 
         return Container(
           decoration: const BoxDecoration(
@@ -320,68 +385,29 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
             if (!wide) return const SizedBox.shrink();
             return Row(
               children: [
-                // Left: Workout label
                 SizedBox(
                   width: constraints.maxWidth * 0.40,
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    child: const Text(
-                      'Workout',
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
+                    child: const _PanelHeaderTitle(
+                      title: 'Workout',
+                      subtitle: 'Daily programming',
                     ),
                   ),
                 ),
-                // Right: Whiteboard label + stats + Check In All
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 12),
                     child: Row(
                       children: [
-                        const Text(
-                          'Whiteboard',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800),
-                        ),
-                        const SizedBox(width: 10),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: _accent.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '$checkedIn / ${bookings.length}',
-                            style: const TextStyle(
-                                color: _accent,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700),
+                        const Expanded(
+                          child: _PanelHeaderTitle(
+                            title: 'Whiteboard',
+                            subtitle: 'Member attendance',
                           ),
                         ),
-                        const Spacer(),
-                        // Default Sorting label
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.sort_outlined,
-                                size: 14, color: _textSub),
-                            const SizedBox(width: 4),
-                            Text(
-                              context.l10n.tr('Default Sorting'),
-                              style: const TextStyle(
-                                  color: _textSub, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(width: 12),
-                        // Check In All
                         if (pending.isNotEmpty)
                           FilledButton.icon(
                             onPressed: () => _checkInAll(pending),
@@ -394,9 +420,9 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
                               textStyle: const TextStyle(
                                   fontSize: 11, fontWeight: FontWeight.w700),
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 8),
+                                  horizontal: 12, vertical: 10),
                               shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(7)),
+                                  borderRadius: BorderRadius.circular(9)),
                             ),
                           ),
                       ],
@@ -431,6 +457,13 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
             return LayoutBuilder(builder: (context, constraints) {
               final wide = constraints.maxWidth >= 760;
 
+              if ((wodSnap.connectionState == ConnectionState.waiting &&
+                      !wodSnap.hasData) ||
+                  (bookSnap.connectionState == ConnectionState.waiting &&
+                      !bookSnap.hasData)) {
+                return _WhiteboardLoadingSkeleton(wide: wide);
+              }
+
               if (wide) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -447,7 +480,7 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
                     Expanded(
                       child: _InlineMemberPanel(
                         bookings: bookings,
-                        gymClass: gymClass,
+                        classLabel: _timeLabel(gymClass),
                         loadingMap: _loadingMap,
                         onToggle: _toggleCheckIn,
                       ),
@@ -486,7 +519,7 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
                         ),
                         _InlineMemberPanel(
                           bookings: bookings,
-                          gymClass: gymClass,
+                          classLabel: _timeLabel(gymClass),
                           loadingMap: _loadingMap,
                           onToggle: _toggleCheckIn,
                         ),
@@ -514,8 +547,8 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
               color: _accent.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.dashboard_outlined,
-                size: 36, color: _accent),
+            child:
+                const Icon(Icons.dashboard_outlined, size: 36, color: _accent),
           ),
           const SizedBox(height: 20),
           Text(
@@ -572,8 +605,7 @@ class _DateChip extends StatelessWidget {
         GestureDetector(
           onTap: onTap,
           child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
               color: const Color(0xFF0D2920),
               borderRadius: BorderRadius.circular(8),
@@ -599,8 +631,7 @@ class _DateChip extends StatelessWidget {
                     color: _textSub.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.close,
-                      size: 10, color: _textSub),
+                  child: const Icon(Icons.close, size: 10, color: _textSub),
                 ),
               ],
             ),
@@ -618,11 +649,11 @@ class _DateChip extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _ClassDropdown
+// _ClassPillSelector
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _ClassDropdown extends StatelessWidget {
-  const _ClassDropdown({
+class _ClassPillSelector extends StatelessWidget {
+  const _ClassPillSelector({
     required this.classes,
     required this.selected,
     required this.onChanged,
@@ -636,13 +667,15 @@ class _ClassDropdown extends StatelessWidget {
 
   static const _border = _AdminWhiteboardTabState._border;
   static const _textSub = _AdminWhiteboardTabState._textSub;
+  static const _accent = _AdminWhiteboardTabState._accent;
+  static const _surface = _AdminWhiteboardTabState._surface;
+  static const _card = _AdminWhiteboardTabState._card;
 
   @override
   Widget build(BuildContext context) {
     if (classes.isEmpty) {
       return Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: const Color(0xFF0D2920),
           borderRadius: BorderRadius.circular(8),
@@ -654,35 +687,342 @@ class _ClassDropdown extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      height: 52,
+      padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D2920),
-        borderRadius: BorderRadius.circular(8),
+        color: _surface,
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _border),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<GymClass>(
-          value: selected,
-          dropdownColor: const Color(0xFF112820),
-          style: const TextStyle(color: Colors.white, fontSize: 13),
-          icon: const Icon(Icons.keyboard_arrow_down,
-              color: _textSub, size: 18),
-          hint: const Text('Select class',
-              style: TextStyle(color: _textSub, fontSize: 13)),
-          isExpanded: true,
-          items: classes.map((c) {
-            return DropdownMenuItem<GymClass>(
-              value: c,
-              child: Text(
-                timeLabel(c),
-                style: const TextStyle(
-                    color: Colors.white, fontSize: 13),
-                overflow: TextOverflow.ellipsis,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: classes.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final gymClass = classes[index];
+          final isSelected = selected?.id == gymClass.id;
+          return InkWell(
+            borderRadius: BorderRadius.circular(999),
+            onTap: () => onChanged(gymClass),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: isSelected ? _accent : _card,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: isSelected
+                      ? _accent
+                      : Colors.white.withValues(alpha: 0.06),
+                ),
               ),
-            );
-          }).toList(),
-          onChanged: onChanged,
+              child: Text(
+                timeLabel(gymClass),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _PanelHeaderTitle extends StatelessWidget {
+  const _PanelHeaderTitle({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+              color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800),
         ),
+        const SizedBox(height: 2),
+        Text(
+          subtitle,
+          style: const TextStyle(color: _textSub, fontSize: 11),
+        ),
+      ],
+    );
+  }
+
+  static const _textSub = _AdminWhiteboardTabState._textSub;
+}
+
+class _StatChip extends StatelessWidget {
+  const _StatChip({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: _AdminWhiteboardTabState._surface,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: _AdminWhiteboardTabState._border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+                color: _textSub, fontSize: 11, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            value,
+            style: TextStyle(
+                color: color, fontSize: 12, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static const _textSub = _AdminWhiteboardTabState._textSub;
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        label,
+        style:
+            TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
+class _StatsBarSkeleton extends StatelessWidget {
+  const _StatsBarSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _AdminWhiteboardTabState._card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _AdminWhiteboardTabState._border),
+      ),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: const [
+          _SkeletonBox(width: 118, height: 36),
+          _SkeletonBox(width: 128, height: 36),
+          _SkeletonBox(width: 116, height: 36),
+          _SkeletonBox(width: 122, height: 36),
+        ],
+      ),
+    );
+  }
+}
+
+class _WhiteboardLoadingSkeleton extends StatelessWidget {
+  const _WhiteboardLoadingSkeleton({this.wide = false});
+
+  final bool wide;
+
+  @override
+  Widget build(BuildContext context) {
+    if (wide) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: const [
+          SizedBox(
+            width: 340,
+            child: _PanelLoadingSkeleton(lines: 8, showButton: true),
+          ),
+          Expanded(child: _MemberLoadingSkeleton()),
+        ],
+      );
+    }
+
+    return const Column(
+      children: [
+        LinearProgressIndicator(
+          minHeight: 2,
+          backgroundColor: _AdminWhiteboardTabState._surface,
+          valueColor:
+              AlwaysStoppedAnimation<Color>(_AdminWhiteboardTabState._accent),
+        ),
+        Expanded(child: _PanelLoadingSkeleton(lines: 8, showButton: true)),
+      ],
+    );
+  }
+}
+
+class _PanelLoadingSkeleton extends StatelessWidget {
+  const _PanelLoadingSkeleton({required this.lines, this.showButton = false});
+
+  final int lines;
+  final bool showButton;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (showButton) ...[
+            const _SkeletonBox(width: double.infinity, height: 42),
+            const SizedBox(height: 18),
+          ],
+          const _SkeletonBox(width: 84, height: 12),
+          const SizedBox(height: 10),
+          ...List.generate(
+            lines,
+            (index) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _SkeletonBox(
+                width: index.isEven ? double.infinity : 220,
+                height: index % 3 == 0 ? 54 : 14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemberLoadingSkeleton extends StatelessWidget {
+  const _MemberLoadingSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: const BoxDecoration(
+            color: _AdminWhiteboardTabState._surface,
+            border: Border(
+              bottom: BorderSide(color: _AdminWhiteboardTabState._border),
+            ),
+          ),
+          child: const Row(
+            children: [
+              Expanded(flex: 5, child: _SkeletonBox(width: 110, height: 12)),
+              Expanded(flex: 5, child: _SkeletonBox(width: 120, height: 12)),
+              SizedBox(width: 90, child: _SkeletonBox(width: 70, height: 12)),
+              SizedBox(width: 140, child: _SkeletonBox(width: 100, height: 12)),
+              SizedBox(width: 32),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: 6,
+            itemBuilder: (context, index) => Container(
+              height: 72,
+              decoration: BoxDecoration(
+                color: index.isOdd
+                    ? _AdminWhiteboardTabState._surface
+                    : Colors.transparent,
+                border: const Border(
+                  left: BorderSide(color: Color(0xFFF59E0B), width: 3),
+                  bottom: BorderSide(color: _AdminWhiteboardTabState._border),
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: const Row(
+                children: [
+                  _SkeletonBox(width: 34, height: 22),
+                  SizedBox(width: 10),
+                  _SkeletonCircle(size: 32),
+                  SizedBox(width: 10),
+                  Expanded(
+                      flex: 5, child: _SkeletonBox(width: 120, height: 12)),
+                  Expanded(
+                      flex: 5, child: _SkeletonBox(width: 150, height: 12)),
+                  SizedBox(
+                      width: 90, child: _SkeletonBox(width: 70, height: 12)),
+                  SizedBox(
+                      width: 140, child: _SkeletonBox(width: 110, height: 28)),
+                  SizedBox(width: 32),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SkeletonBox extends StatelessWidget {
+  const _SkeletonBox({required this.width, required this.height});
+
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+      ),
+    );
+  }
+}
+
+class _SkeletonCircle extends StatelessWidget {
+  const _SkeletonCircle({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        shape: BoxShape.circle,
       ),
     );
   }
@@ -709,8 +1049,8 @@ class _InlineWodPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration:
-          const BoxDecoration(border: Border(right: BorderSide(color: _border))),
+      decoration: const BoxDecoration(
+          border: Border(right: BorderSide(color: _border))),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -767,26 +1107,32 @@ class _WodScrollContent extends StatelessWidget {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       children: [
         if (wod!.warmUp.isNotEmpty) ...[
-          _WbLabel('Warm Up:'),
+          const _WbLabel('WARM UP'),
           _WbText(wod!.warmUp),
-          const SizedBox(height: 14),
+          const SizedBox(height: 18),
         ],
         if (wod!.parts.isNotEmpty)
           ...wod!.parts.asMap().entries.map((e) => _WbPart(e.value, e.key))
         else ...[
+          const _WbLabel('WORKOUT'),
           if (wod!.format.isNotEmpty)
-            Text(wod!.format,
-                style: const TextStyle(
-                    color: Colors.white70, fontSize: 12)),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _WbMetaChips(values: [
+                wod!.format,
+                if (wod!.timeCap.isNotEmpty) wod!.timeCap,
+              ]),
+            ),
           if (wod!.description.isNotEmpty) _WbText(wod!.description),
+          if (wod!.description.isNotEmpty) const SizedBox(height: 10),
           ...wod!.exercises.map((ex) => _WbExercise(ex)),
         ],
         if (wod!.coolDown.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          _WbLabel('Cool Down:'),
+          const SizedBox(height: 18),
+          const _WbLabel('COOL DOWN'),
           _WbText(wod!.coolDown),
         ],
       ],
@@ -800,23 +1146,37 @@ class _WbLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 4, bottom: 3),
+        padding: const EdgeInsets.only(bottom: 8),
         child: Text(text,
             style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w700)),
+                color: _textSub,
+                fontSize: 11,
+                letterSpacing: 1.4,
+                fontWeight: FontWeight.w800)),
       );
+
+  static const _textSub = _AdminWhiteboardTabState._textSub;
 }
 
 class _WbText extends StatelessWidget {
   const _WbText(this.text);
   final String text;
 
+  static const _border = _AdminWhiteboardTabState._border;
+
   @override
-  Widget build(BuildContext context) => Text(text,
-      style: const TextStyle(
-          color: Color(0xFFD1FAE5), fontSize: 13, height: 1.55));
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: _AdminWhiteboardTabState._card,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _border),
+        ),
+        child: Text(text,
+            style: const TextStyle(
+                color: Color(0xFFD1FAE5), fontSize: 13, height: 1.6)),
+      );
 }
 
 class _WbPart extends StatelessWidget {
@@ -825,42 +1185,93 @@ class _WbPart extends StatelessWidget {
   final int index;
 
   static const _accent = _AdminWhiteboardTabState._accent;
-  static const _textSub = _AdminWhiteboardTabState._textSub;
 
   @override
   Widget build(BuildContext context) {
+    final partLabel = 'PART ${String.fromCharCode(65 + index)}'
+        '${part.title.isNotEmpty ? ': ${part.title.toUpperCase()}' : ''}';
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+        decoration: BoxDecoration(
+          color: _AdminWhiteboardTabState._card,
+          borderRadius: BorderRadius.circular(12),
+          border: const Border(
+            left: BorderSide(color: _accent, width: 3),
+            top: BorderSide(color: _AdminWhiteboardTabState._border),
+            right: BorderSide(color: _AdminWhiteboardTabState._border),
+            bottom: BorderSide(color: _AdminWhiteboardTabState._border),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Text(
-              'Part ${String.fromCharCode(65 + index)}: ',
+              partLabel,
               style: const TextStyle(
                   color: _accent,
-                  fontSize: 13,
+                  fontSize: 12,
+                  letterSpacing: 1.0,
                   fontWeight: FontWeight.w800),
             ),
-            Expanded(
-              child: Text(
-                part.title,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700),
-              ),
-            ),
-          ]),
-          if (part.timeCap.isNotEmpty)
-            Text(part.timeCap,
-                style: const TextStyle(color: _textSub, fontSize: 11)),
-          if (part.description.isNotEmpty) _WbText(part.description),
-          ...part.exercises.map((ex) => _WbExercise(ex)),
-        ],
+            if (part.format.isNotEmpty || part.timeCap.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _WbMetaChips(values: [
+                if (part.format.isNotEmpty) part.format,
+                if (part.timeCap.isNotEmpty) part.timeCap,
+              ]),
+            ],
+            if (part.description.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(part.description,
+                  style: const TextStyle(
+                      color: Colors.white70, fontSize: 13, height: 1.55)),
+            ],
+            if (part.exercises.isNotEmpty) const SizedBox(height: 10),
+            ...part.exercises.map((ex) => _WbExercise(ex)),
+          ],
+        ),
       ),
     );
   }
+}
+
+class _WbMetaChips extends StatelessWidget {
+  const _WbMetaChips({required this.values});
+
+  final List<String> values;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: values
+          .where((value) => value.trim().isNotEmpty)
+          .map(
+            (value) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.04),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              child: Text(
+                value,
+                style: const TextStyle(
+                    color: _textSub, fontSize: 11, fontWeight: FontWeight.w700),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  static const _textSub = _AdminWhiteboardTabState._textSub;
 }
 
 class _WbExercise extends StatelessWidget {
@@ -868,20 +1279,68 @@ class _WbExercise extends StatelessWidget {
   final WodExercise ex;
 
   static const _accent = _AdminWhiteboardTabState._accent;
+  static const _textSub = _AdminWhiteboardTabState._textSub;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('• ', style: const TextStyle(color: _accent, fontSize: 13)),
-          Expanded(
-            child: Text(
-              '${ex.name}${ex.shortLabel.isNotEmpty ? '  ${ex.shortLabel}' : ''}',
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-            ),
+  Widget build(BuildContext context) {
+    final repLabel = <String>[
+      if (ex.sets.isNotEmpty) '${ex.sets} sets',
+      if (ex.reps.isNotEmpty) ex.reps,
+      if (ex.weight.isNotEmpty) ex.weight,
+    ].join(' · ');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: 6,
+          height: 6,
+          margin: const EdgeInsets.only(top: 7),
+          decoration: const BoxDecoration(
+            color: _accent,
+            shape: BoxShape.circle,
           ),
-        ]),
-      );
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              RichText(
+                text: TextSpan(
+                  children: [
+                    if (repLabel.isNotEmpty)
+                      TextSpan(
+                        text: '$repLabel  ',
+                        style: const TextStyle(
+                            color: _accent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    TextSpan(
+                      text: ex.name,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+              if (ex.notes.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  ex.notes,
+                  style: const TextStyle(
+                      color: _textSub, fontSize: 12, height: 1.45),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -891,43 +1350,38 @@ class _WbExercise extends StatelessWidget {
 class _InlineMemberPanel extends StatelessWidget {
   const _InlineMemberPanel({
     required this.bookings,
-    required this.gymClass,
+    required this.classLabel,
     required this.loadingMap,
     required this.onToggle,
   });
 
   final List<Booking> bookings;
-  final GymClass gymClass;
+  final String classLabel;
   final Map<String, bool> loadingMap;
   final Future<void> Function(Booking) onToggle;
 
   static const _border = _AdminWhiteboardTabState._border;
   static const _textSub = _AdminWhiteboardTabState._textSub;
+  static const _surface = _AdminWhiteboardTabState._surface;
 
   @override
   Widget build(BuildContext context) {
-    final sorted = [...bookings]
-      ..sort((a, b) {
+    final sorted = [...bookings]..sort((a, b) {
         if (a.checkedIn == b.checkedIn) return 0;
         return a.checkedIn ? 1 : -1;
       });
-
-    final timeFmt = DateFormat('HH:mm');
-    final classLabel =
-        '${gymClass.title} (${timeFmt.format(gymClass.startTime)} - ${timeFmt.format(gymClass.endTime)})';
 
     return Column(
       children: [
         // Column headers
         Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: const BoxDecoration(
+            color: _surface,
             border: Border(bottom: BorderSide(color: _border)),
           ),
           child: Row(
             children: [
-              const SizedBox(width: 28), // info icon space
               const Expanded(
                 flex: 5,
                 child: Text('Name',
@@ -957,7 +1411,7 @@ class _InlineMemberPanel extends StatelessWidget {
                     textAlign: TextAlign.center),
               ),
               const SizedBox(
-                width: 90,
+                width: 140,
                 child: Text('Attendance',
                     style: TextStyle(
                         fontSize: 11,
@@ -966,7 +1420,7 @@ class _InlineMemberPanel extends StatelessWidget {
                         letterSpacing: 0.5),
                     textAlign: TextAlign.center),
               ),
-              const SizedBox(width: 32), // ⋮ menu space
+              const SizedBox(width: 32),
             ],
           ),
         ),
@@ -977,26 +1431,37 @@ class _InlineMemberPanel extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.group_off_outlined,
-                      color: Colors.white12, size: 40),
-                  const SizedBox(height: 10),
-                  const Text('No bookings yet',
-                      style:
-                          TextStyle(color: Colors.white38, fontSize: 13)),
+                  Container(
+                    width: 84,
+                    height: 84,
+                    decoration: BoxDecoration(
+                      color: _AdminWhiteboardTabState._card,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _border),
+                    ),
+                    child: const Icon(Icons.event_busy_outlined,
+                        color: Colors.white24, size: 42),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text('No bookings for this class',
+                      style: TextStyle(color: Colors.white70, fontSize: 14)),
+                  const SizedBox(height: 6),
+                  const Text('Bookings will appear here once members reserve.',
+                      style: TextStyle(color: _textSub, fontSize: 12)),
                 ],
               ),
             ),
           )
         else
           Expanded(
-            child: ListView.separated(
+            child: ListView.builder(
               padding: EdgeInsets.zero,
               itemCount: sorted.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1, color: _border),
               itemBuilder: (_, i) => _InlineMemberRow(
                 booking: sorted[i],
                 classLabel: classLabel,
+                memberNumber: i + 1,
+                rowIndex: i,
                 isLoading: loadingMap[sorted[i].userId] == true,
                 onTap: () => onToggle(sorted[i]),
               ),
@@ -1011,17 +1476,23 @@ class _InlineMemberRow extends StatelessWidget {
   const _InlineMemberRow({
     required this.booking,
     required this.classLabel,
+    required this.memberNumber,
+    required this.rowIndex,
     required this.isLoading,
     required this.onTap,
   });
 
   final Booking booking;
   final String classLabel;
+  final int memberNumber;
+  final int rowIndex;
   final bool isLoading;
   final VoidCallback onTap;
 
   static const _checked = Color(0xFF16A34A);
-  static const _pending = Color(0xFFD97706);
+  static const _pending = Color(0xFFF59E0B);
+  static const _border = _AdminWhiteboardTabState._border;
+  static const _surface = _AdminWhiteboardTabState._surface;
   static const _textSub = _AdminWhiteboardTabState._textSub;
 
   String get _initials {
@@ -1035,119 +1506,150 @@ class _InlineMemberRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final checked = booking.checkedIn;
     final statusColor = checked ? _checked : _pending;
+    final baseColor = rowIndex.isOdd ? _surface : Colors.transparent;
+    final rowColor = checked
+        ? Color.alphaBlend(
+            _checked.withValues(alpha: 0.08),
+            baseColor == Colors.transparent ? Colors.transparent : baseColor,
+          )
+        : baseColor;
 
-    return Container(
-      color: checked
-          ? const Color(0xFF14532D).withValues(alpha: 0.10)
-          : Colors.transparent,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      child: Row(
-        children: [
-          // Info icon
-          Icon(Icons.info_outline, size: 16, color: Colors.white24),
-          const SizedBox(width: 8),
-          // Avatar + name
-          Expanded(
-            flex: 5,
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor:
-                      statusColor.withValues(alpha: 0.18),
-                  child: Text(_initials,
-                      style: TextStyle(
-                          color: statusColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700)),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(booking.memberName,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis),
-                      if (booking.isDropIn)
-                        const Text('Drop-in',
-                            style: TextStyle(
-                                color: Color(0xFFA78BFA),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ),
-              ],
+    return Material(
+      color: rowColor,
+      child: InkWell(
+        onTap: isLoading ? null : onTap,
+        hoverColor: Colors.white.withValues(alpha: 0.03),
+        splashColor: statusColor.withValues(alpha: 0.10),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(color: statusColor, width: 3),
+              bottom: const BorderSide(color: _border),
             ),
           ),
-          // Class
-          Expanded(
-            flex: 5,
-            child: Text(classLabel,
-                style:
-                    const TextStyle(color: _textSub, fontSize: 12),
-                overflow: TextOverflow.ellipsis),
-          ),
-          // Results — Log Result link
-          SizedBox(
-            width: 90,
-            child: Center(
-              child: Text(
-                'Log Result',
-                style: TextStyle(
-                    color: Colors.white38,
-                    fontSize: 12,
-                    decoration: TextDecoration.underline,
-                    decorationColor: Colors.white24),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 5,
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.08)),
+                      ),
+                      child: Text(
+                        '#$memberNumber',
+                        style: const TextStyle(
+                            color: _textSub,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    CircleAvatar(
+                      radius: 16,
+                      backgroundColor: statusColor.withValues(alpha: 0.18),
+                      child: Text(_initials,
+                          style: TextStyle(
+                              color: statusColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(booking.memberName,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis),
+                          if (booking.isDropIn)
+                            const Text('Drop-in',
+                                style: TextStyle(
+                                    color: Color(0xFFA78BFA),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ),
-          // Attendance toggle
-          SizedBox(
-            width: 90,
-            child: isLoading
-                ? const Center(
-                    child: SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white38)),
-                  )
-                : Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      GestureDetector(
-                        onTap: onTap,
-                        child: Icon(
-                          checked
-                              ? Icons.check_circle
-                              : Icons.check_circle_outline,
-                          color: checked ? _checked : Colors.white24,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(
-                        checked
-                            ? Icons.visibility
-                            : Icons.visibility_off_outlined,
-                        color: checked ? Colors.white24 : _textSub,
-                        size: 18,
-                      ),
-                    ],
+              Expanded(
+                flex: 5,
+                child: Text(classLabel,
+                    style: const TextStyle(color: _textSub, fontSize: 12),
+                    overflow: TextOverflow.ellipsis),
+              ),
+              SizedBox(
+                width: 90,
+                child: Center(
+                  child: Text(
+                    'Log Result',
+                    style: TextStyle(
+                        color: Colors.white38,
+                        fontSize: 12,
+                        decoration: TextDecoration.underline,
+                        decorationColor: Colors.white24),
                   ),
+                ),
+              ),
+              SizedBox(
+                width: 140,
+                child: isLoading
+                    ? const Center(
+                        child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white38)),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 220),
+                            transitionBuilder: (child, animation) =>
+                                ScaleTransition(
+                              scale: animation,
+                              child: FadeTransition(
+                                opacity: animation,
+                                child: child,
+                              ),
+                            ),
+                            child: Icon(
+                              checked
+                                  ? Icons.check_circle
+                                  : Icons.check_circle_outline,
+                              key: ValueKey<bool>(checked),
+                              color: checked ? _checked : Colors.white24,
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          _StatusPill(
+                            label: checked ? 'Checked In' : 'Pending',
+                            color: statusColor,
+                          ),
+                        ],
+                      ),
+              ),
+              SizedBox(
+                width: 32,
+                child: Icon(Icons.more_vert, color: Colors.white24, size: 18),
+              ),
+            ],
           ),
-          // ⋮ menu
-          SizedBox(
-            width: 32,
-            child: Icon(Icons.more_vert, color: Colors.white24, size: 18),
-          ),
-        ],
+        ),
       ),
     );
   }
