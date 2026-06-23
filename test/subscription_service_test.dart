@@ -174,8 +174,7 @@ void main() {
     });
 
     test('throws when member already has an active subscription', () async {
-      await db.createSubDoc(
-          userId: userId, planId: planId, status: 'active');
+      await db.createSubDoc(userId: userId, planId: planId, status: 'active');
 
       await expectLater(
         sut.assignOfferAtomic(
@@ -239,8 +238,11 @@ void main() {
     final subId = '${userId}_$planId';
 
     setUp(() => db.createSubDoc(
-        userId: userId, planId: planId, status: 'active',
-        totalAmount: 200, amountPaid: 50));
+        userId: userId,
+        planId: planId,
+        status: 'active',
+        totalAmount: 200,
+        amountPaid: 50));
 
     test('throws when subscription does not exist', () async {
       await expectLater(
@@ -249,8 +251,8 @@ void main() {
             amount: 50,
             method: 'cash',
             notes: ''),
-        throwsA(isA<Exception>().having(
-            (e) => e.toString(), 'message', contains('not found'))),
+        throwsA(isA<Exception>()
+            .having((e) => e.toString(), 'message', contains('not found'))),
       );
     });
 
@@ -277,15 +279,18 @@ void main() {
       await expectLater(
         sut.recordPayment(
             subscriptionId: subId, amount: 200, method: 'cash', notes: ''),
-        throwsA(isA<Exception>().having(
-            (e) => e.toString(), 'message', contains('exceeds'))),
+        throwsA(isA<Exception>()
+            .having((e) => e.toString(), 'message', contains('exceeds'))),
       );
     });
 
     test('throws when subscription is already fully paid', () async {
       await db.createSubDoc(
-          userId: 'u3_full', planId: 'plan_full', status: 'active',
-          totalAmount: 100, amountPaid: 100);
+          userId: 'u3_full',
+          planId: 'plan_full',
+          status: 'active',
+          totalAmount: 100,
+          amountPaid: 100);
 
       await expectLater(
         sut.recordPayment(
@@ -293,8 +298,8 @@ void main() {
             amount: 1,
             method: 'cash',
             notes: ''),
-        throwsA(isA<Exception>().having(
-            (e) => e.toString(), 'message', contains('fully paid'))),
+        throwsA(isA<Exception>()
+            .having((e) => e.toString(), 'message', contains('fully paid'))),
       );
     });
   });
@@ -308,17 +313,17 @@ void main() {
     final subId = '${userId}_$planId';
 
     setUp(() => db.createSubDoc(
-        userId: userId, planId: planId, status: 'active',
-        totalAmount: 300, amountPaid: 100));
+        userId: userId,
+        planId: planId,
+        status: 'active',
+        totalAmount: 300,
+        amountPaid: 100));
 
     test('increments amountPaid correctly', () async {
       await sut.recordPayment(
           subscriptionId: subId, amount: 80, method: 'cash', notes: '');
 
-      final snap = await db
-          .collection('user_subscriptions')
-          .doc(subId)
-          .get();
+      final snap = await db.collection('user_subscriptions').doc(subId).get();
       expect(snap.data()!['amountPaid'], 180);
     });
 
@@ -329,10 +334,7 @@ void main() {
           method: 'transfer',
           notes: 'monthly');
 
-      final snap = await db
-          .collection('user_subscriptions')
-          .doc(subId)
-          .get();
+      final snap = await db.collection('user_subscriptions').doc(subId).get();
       final history = snap.data()!['paymentHistory'] as List;
       expect(history, hasLength(1));
       expect(history.first['amount'], 50);
@@ -346,10 +348,7 @@ void main() {
       await sut.recordPayment(
           subscriptionId: subId, amount: 70, method: 'card', notes: 'p2');
 
-      final snap = await db
-          .collection('user_subscriptions')
-          .doc(subId)
-          .get();
+      final snap = await db.collection('user_subscriptions').doc(subId).get();
       expect(snap.data()!['amountPaid'], 220); // 100 + 50 + 70
       final history = snap.data()!['paymentHistory'] as List;
       expect(history, hasLength(2));
@@ -362,10 +361,7 @@ void main() {
             subscriptionId: subId, amount: 200, method: 'cash', notes: ''),
         completes,
       );
-      final snap = await db
-          .collection('user_subscriptions')
-          .doc(subId)
-          .get();
+      final snap = await db.collection('user_subscriptions').doc(subId).get();
       expect(snap.data()!['amountPaid'], 300);
     });
   });
@@ -374,7 +370,7 @@ void main() {
   // 5. paymentStatus computed getter
   // ══════════════════════════════════════════════════════════════════════════
   group('5 • paymentStatus getter', () {
-    UserSubscription _sub({required int total, required int paid}) =>
+    UserSubscription sub({required int total, required int paid}) =>
         UserSubscription(
           id: 'x',
           userId: 'u',
@@ -389,21 +385,21 @@ void main() {
         );
 
     test('returns "paid" when amountPaid == totalAmount', () {
-      expect(_sub(total: 100, paid: 100).paymentStatus, 'paid');
+      expect(sub(total: 100, paid: 100).paymentStatus, 'paid');
     });
 
     test('returns "paid" when totalAmount is zero', () {
-      expect(_sub(total: 0, paid: 0).paymentStatus, 'paid');
+      expect(sub(total: 0, paid: 0).paymentStatus, 'paid');
     });
 
     test('returns "partial" when 0 < amountPaid < totalAmount', () {
-      expect(_sub(total: 100, paid: 50).paymentStatus, 'partial');
-      expect(_sub(total: 100, paid: 1).paymentStatus, 'partial');
-      expect(_sub(total: 100, paid: 99).paymentStatus, 'partial');
+      expect(sub(total: 100, paid: 50).paymentStatus, 'partial');
+      expect(sub(total: 100, paid: 1).paymentStatus, 'partial');
+      expect(sub(total: 100, paid: 99).paymentStatus, 'partial');
     });
 
     test('returns "unpaid" when amountPaid is zero', () {
-      expect(_sub(total: 100, paid: 0).paymentStatus, 'unpaid');
+      expect(sub(total: 100, paid: 0).paymentStatus, 'unpaid');
     });
   });
 
@@ -459,23 +455,17 @@ void main() {
       await sut.updateSubscriptionStatus(
           subscriptionId: subId, status: 'cancelled');
 
-      final snap = await db
-          .collection('user_subscriptions')
-          .doc(subId)
-          .get();
+      final snap = await db.collection('user_subscriptions').doc(subId).get();
       expect(snap.data()!['status'], 'cancelled');
     });
 
     test('re-activates a cancelled subscription', () async {
-      await db.createSubDoc(
-          userId: 'u7b', planId: planId, status: 'cancelled');
+      await db.createSubDoc(userId: 'u7b', planId: planId, status: 'cancelled');
       await sut.updateSubscriptionStatus(
           subscriptionId: 'u7b_$planId', status: 'active');
 
-      final snap = await db
-          .collection('user_subscriptions')
-          .doc('u7b_$planId')
-          .get();
+      final snap =
+          await db.collection('user_subscriptions').doc('u7b_$planId').get();
       expect(snap.data()!['status'], 'active');
     });
   });
@@ -496,10 +486,7 @@ void main() {
     test('deletes subscription doc', () async {
       await sut.unassignOffer(subscriptionId: subId, userId: userId);
 
-      final snap = await db
-          .collection('user_subscriptions')
-          .doc(subId)
-          .get();
+      final snap = await db.collection('user_subscriptions').doc(subId).get();
       expect(snap.exists, isFalse);
     });
 
@@ -519,17 +506,14 @@ void main() {
     const planId = 'plan_h';
     final subId = '${userId}_$planId';
 
-    setUp(() => db.createSubDoc(
-        userId: userId, planId: planId, status: 'cancelled'));
+    setUp(() =>
+        db.createSubDoc(userId: userId, planId: planId, status: 'cancelled'));
 
     test('updates endDate and re-activates', () async {
       final newEnd = DateTime(2026, 6, 30);
       await sut.extendOffer(subscriptionId: subId, newEndDate: newEnd);
 
-      final snap = await db
-          .collection('user_subscriptions')
-          .doc(subId)
-          .get();
+      final snap = await db.collection('user_subscriptions').doc(subId).get();
       expect((snap.data()!['endDate'] as Timestamp).toDate(), newEnd);
       expect(snap.data()!['status'], 'active');
     });

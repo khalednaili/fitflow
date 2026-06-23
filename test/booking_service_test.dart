@@ -152,6 +152,7 @@ extension _Setup on FakeFirebaseFirestore {
     int lateCancellationMinutes = 0,
     bool preventOverlappingBookings = false,
     bool preventSameClassTypePerDay = false,
+    bool hideClassesWithoutSubscription = false,
   }) =>
       collection('settings').doc('bookingRules').set({
         'maxBookingsPerDay': maxBookingsPerDay,
@@ -159,6 +160,7 @@ extension _Setup on FakeFirebaseFirestore {
         'lateCancellationMinutes': lateCancellationMinutes,
         'preventOverlappingBookings': preventOverlappingBookings,
         'preventSameClassTypePerDay': preventSameClassTypePerDay,
+        'hideClassesWithoutSubscription': hideClassesWithoutSubscription,
       });
 }
 
@@ -1431,6 +1433,81 @@ void main() {
         ),
         completes,
       );
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 17. HIDE CLASSES WITHOUT SUBSCRIPTION — setting getter/setter
+  // ══════════════════════════════════════════════════════════════════════════
+  group('17 • hideClassesWithoutSubscription setting', () {
+    test('returns false by default when no rule document exists', () async {
+      final result = await sut.getHideClassesWithoutSubscription();
+      expect(result, isFalse);
+    });
+
+    test('returns false when stored value is false', () async {
+      await db.setBookingRules(hideClassesWithoutSubscription: false);
+      final result = await sut.getHideClassesWithoutSubscription();
+      expect(result, isFalse);
+    });
+
+    test('returns true when stored value is true', () async {
+      await db.setBookingRules(hideClassesWithoutSubscription: true);
+      final result = await sut.getHideClassesWithoutSubscription();
+      expect(result, isTrue);
+    });
+
+    test('setHideClassesWithoutSubscription(true) persists to Firestore',
+        () async {
+      await sut.setHideClassesWithoutSubscription(true);
+
+      final snap = await db
+          .collection('settings')
+          .doc('bookingRules')
+          .get();
+      expect(snap.data()!['hideClassesWithoutSubscription'], isTrue);
+    });
+
+    test('setHideClassesWithoutSubscription(false) persists to Firestore',
+        () async {
+      // First set to true, then disable
+      await sut.setHideClassesWithoutSubscription(true);
+      await sut.setHideClassesWithoutSubscription(false);
+
+      final snap = await db
+          .collection('settings')
+          .doc('bookingRules')
+          .get();
+      expect(snap.data()!['hideClassesWithoutSubscription'], isFalse);
+    });
+
+    test('set does not overwrite unrelated rules (merge behaviour)', () async {
+      // Store an existing rule first
+      await db.setBookingRules(maxBookingsPerDay: 5);
+
+      // Set the new flag — should not wipe maxBookingsPerDay
+      await sut.setHideClassesWithoutSubscription(true);
+
+      final snap = await db
+          .collection('settings')
+          .doc('bookingRules')
+          .get();
+      expect(snap.data()!['hideClassesWithoutSubscription'], isTrue);
+      expect(snap.data()!['maxBookingsPerDay'], 5);
+    });
+
+    test('cache is invalidated after set — subsequent get reads new value',
+        () async {
+      // Prime the cache with false
+      final before = await sut.getHideClassesWithoutSubscription();
+      expect(before, isFalse);
+
+      // Update — should invalidate cache
+      await sut.setHideClassesWithoutSubscription(true);
+
+      // Next get must return the updated value
+      final after = await sut.getHideClassesWithoutSubscription();
+      expect(after, isTrue);
     });
   });
 }
