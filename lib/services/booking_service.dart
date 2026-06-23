@@ -193,7 +193,23 @@ class BookingService {
       },
       SetOptions(merge: true),
     );
-    _rulesCache = null; // invalidate cache
+    _rulesCache = null;
+  }
+
+  Future<bool> getHideClassesWithoutSubscription() async {
+    final rules = await _getBookingRules();
+    return (rules['hideClassesWithoutSubscription'] ?? false) as bool;
+  }
+
+  Future<void> setHideClassesWithoutSubscription(bool value) async {
+    await _firestore.collection('settings').doc('bookingRules').set(
+      <String, dynamic>{
+        'hideClassesWithoutSubscription': value,
+        'gymId': gymId,
+      },
+      SetOptions(merge: true),
+    );
+    _rulesCache = null;
   }
 
   /// Stream all late-cancellation penalty records for a user.

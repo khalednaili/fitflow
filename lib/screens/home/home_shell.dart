@@ -64,14 +64,14 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   List<Widget> _buildScreens(
-      bool showAdminTab, bool showCoachTab, String gymId) {
+      bool showAdminTab, bool showCoachTab, String gymId, AppUser? appUser) {
     final showScanTab = !showAdminTab && !showCoachTab;
     final screens = <Widget>[
       DashboardScreen(
         gymId: gymId,
         onGoToClasses: () => setState(() => _index = 1),
       ),
-      ClassesScreen(gymId: gymId),
+      ClassesScreen(gymId: gymId, appUser: appUser),
       WodScreen(gymId: gymId),
       MyBookingsScreen(gymId: gymId),
       ProfileScreen(gymId: gymId),
@@ -212,7 +212,7 @@ class _HomeShellState extends State<HomeShell> {
     final isWide = MediaQuery.sizeOf(context).width >= 600;
 
     if (currentUserId == null) {
-      final screens = _buildScreens(false, false, '');
+      final screens = _buildScreens(false, false, '', null);
       final navItems = _buildNavItems(false, false, l10n);
       final selectedIndex = _index.clamp(0, screens.length - 1);
       return _buildScaffold(
@@ -244,7 +244,7 @@ class _HomeShellState extends State<HomeShell> {
 
         final showCoachTab = _isCoach(appUser);
         final screens =
-            _buildScreens(false, showCoachTab, appUser?.gymId ?? '');
+            _buildScreens(false, showCoachTab, appUser?.gymId ?? '', appUser);
         final navItems = _buildNavItems(false, showCoachTab, l10n);
 
         // On first load, coaches should land on the Coach portal tab, not the member dashboard.

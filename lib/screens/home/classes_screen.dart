@@ -3,17 +3,20 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../l10n/app_localizations.dart';
+import '../../models/app_user.dart';
 import '../../models/gym_class.dart';
 import '../../models/personal_training.dart';
 import '../../services/booking_service.dart';
 import '../../services/class_service.dart';
 import '../../services/personal_training_service.dart';
 import 'class_details_screen.dart';
+import 'membership_screen.dart';
 
 class ClassesScreen extends StatefulWidget {
-  const ClassesScreen({super.key, this.gymId = ''});
+  const ClassesScreen({super.key, this.gymId = '', this.appUser});
 
   final String gymId;
+  final AppUser? appUser;
 
   @override
   State<ClassesScreen> createState() => _ClassesScreenState();
@@ -21,12 +24,12 @@ class ClassesScreen extends StatefulWidget {
 
 class _ClassesScreenState extends State<ClassesScreen> {
   late final _classService = ClassService(gymId: widget.gymId);
+  late final _bookingService = BookingService(gymId: widget.gymId);
   late DateTime _selectedDay;
   late DateTime _weekStart;
-  int _minAdvanceMinutes = 0; // booking window rule (0 = disabled)
+  int _minAdvanceMinutes = 0;
+  bool _hideWithoutSub = false;
 
-  // Cached stream — stable across setState calls so StreamBuilder never
-  // cancels/recreates the Firestore listener on day/week navigation.
   late final Stream<List<GymClass>> _upcomingClassesStream;
 
   @override
@@ -36,8 +39,11 @@ class _ClassesScreenState extends State<ClassesScreen> {
     _selectedDay = DateTime(now.year, now.month, now.day);
     _weekStart = _startOfWeek(_selectedDay);
     _upcomingClassesStream = _classService.streamUpcomingClasses();
-    BookingService(gymId: widget.gymId).getMinAdvanceBookingMinutes().then((v) {
+    _bookingService.getMinAdvanceBookingMinutes().then((v) {
       if (mounted) setState(() => _minAdvanceMinutes = v);
+    });
+    _bookingService.getHideClassesWithoutSubscription().then((v) {
+      if (mounted) setState(() => _hideWithoutSub = v);
     });
   }
 
@@ -98,6 +104,13 @@ class _ClassesScreenState extends State<ClassesScreen> {
       );
     }
 
+    // ── Subscription gate ──────────────────────────────────────────────────
+    final hasActiveSub = widget.appUser != null &&
+        widget.appUser!.subscriptionStatus == 'active';
+    if (_hideWithoutSub && !hasActiveSub) {
+      return _NoSubscriptionGate(gymId: widget.gymId);
+    }
+    // ──────────────────────────────────────────────────────────────────────
     final screenW = MediaQuery.sizeOf(context).width;
     final isTablet = screenW >= 700;
     final isDesktop = screenW >= 1050;
@@ -1524,6 +1537,94 @@ class _StatusBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Subscription gate — shown when hideClassesWithoutSubscription is enabled
+// and the current member has no active subscription.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _NoSubscriptionGate extends StatelessWidget {
+  const _NoSubscriptionGate({required this.gymId});
+
+  final String gymId;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
+
+    return Scaffold(
+      backgroundColor: cs.surfaceContainerLowest,
+      appBar: AppBar(
+        title: Text(l10n.tr('Classes'),
+            style: const TextStyle(
+                fontWeight: FontWeight.w800, fontSize: 20)),
+        backgroundColor: cs.surface,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withValues(alpha: 0.3),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.lock_outline_rounded,
+                  size: 56,
+                  color: cs.primary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                l10n.tr('Subscription required'),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: cs.onSurface,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                l10n.tr(
+                    'You need an active membership to view and book classes. Contact your gym or browse available offers.'),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: cs.onSurfaceVariant,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              FilledButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => MembershipScreen(gymId: gymId),
+                  ),
+                ),
+                icon: const Icon(Icons.card_membership_outlined, size: 18),
+                label: Text(l10n.tr('View membership offers')),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24, vertical: 14),
+                  textStyle: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
