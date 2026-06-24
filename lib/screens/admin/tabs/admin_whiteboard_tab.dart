@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -17,8 +18,14 @@ import '../class_whiteboard_screen.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 class AdminWhiteboardTab extends StatefulWidget {
-  const AdminWhiteboardTab({super.key, required this.gymId});
+  const AdminWhiteboardTab({
+    super.key,
+    required this.gymId,
+    this.firestore,
+  });
   final String gymId;
+  // Optional override for dependency injection in tests.
+  final FirebaseFirestore? firestore;
 
   @override
   State<AdminWhiteboardTab> createState() => _AdminWhiteboardTabState();
@@ -34,10 +41,12 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
   static const _red = Color(0xFFEF4444);
   static const _textSub = Color(0xFF9CA3AF);
 
-  late final ClassService _classService = ClassService(gymId: widget.gymId);
-  late final WodService _wodService = WodService(gymId: widget.gymId);
+  late final ClassService _classService =
+      ClassService(gymId: widget.gymId, firestore: widget.firestore);
+  late final WodService _wodService =
+      WodService(gymId: widget.gymId, firestore: widget.firestore);
   late final BookingService _bookingService =
-      BookingService(gymId: widget.gymId);
+      BookingService(gymId: widget.gymId, firestore: widget.firestore);
 
   DateTime _selectedDate = _today();
   GymClass? _selectedClass;
@@ -1193,59 +1202,72 @@ class _WbPart extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 18),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
-        decoration: BoxDecoration(
-          color: _AdminWhiteboardTabState._card,
-          borderRadius: BorderRadius.circular(12),
-          border: const Border(
-            left: BorderSide(color: _accent, width: 3),
-            top: BorderSide(color: _AdminWhiteboardTabState._border),
-            right: BorderSide(color: _AdminWhiteboardTabState._border),
-            bottom: BorderSide(color: _AdminWhiteboardTabState._border),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: _AdminWhiteboardTabState._card,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: _AdminWhiteboardTabState._border),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              partLabel,
-              style: const TextStyle(
-                  color: _accent,
-                  fontSize: 12,
-                  letterSpacing: 1.0,
-                  fontWeight: FontWeight.w800),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Accent left strip
+                Container(width: 3, color: _accent),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(11, 14, 14, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          partLabel,
+                          style: const TextStyle(
+                              color: _accent,
+                              fontSize: 12,
+                              letterSpacing: 1.0,
+                              fontWeight: FontWeight.w800),
+                        ),
+                        if (part.measure.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            'Measure: ${part.measure}',
+                            style: const TextStyle(
+                                color: _AdminWhiteboardTabState._textSub,
+                                fontSize: 11),
+                          ),
+                        ],
+                        if (part.format.isNotEmpty || part.timeCap.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          _WbMetaChips(values: [
+                            if (part.format.isNotEmpty) part.format,
+                            if (part.timeCap.isNotEmpty) part.timeCap,
+                          ]),
+                        ],
+                        if (part.description.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Text(part.description,
+                              style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 13,
+                                  height: 1.55)),
+                        ],
+                        if (part.exercises.isNotEmpty) const SizedBox(height: 10),
+                        ...part.exercises.map((ex) => _WbExercise(ex)),
+                        // ── Scales (Rx / Intermediate / Scaled) ──────────
+                        if (part.scales.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          ...part.scales.map((s) => _WbScale(s)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-            if (part.measure.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Measure: ${part.measure}',
-                style: const TextStyle(
-                    color: _AdminWhiteboardTabState._textSub,
-                    fontSize: 11),
-              ),
-            ],
-            if (part.format.isNotEmpty || part.timeCap.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _WbMetaChips(values: [
-                if (part.format.isNotEmpty) part.format,
-                if (part.timeCap.isNotEmpty) part.timeCap,
-              ]),
-            ],
-            if (part.description.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(part.description,
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 13, height: 1.55)),
-            ],
-            if (part.exercises.isNotEmpty) const SizedBox(height: 10),
-            ...part.exercises.map((ex) => _WbExercise(ex)),
-            // ── Scales (Rx / Intermediate / Scaled) ────────────────────
-            if (part.scales.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              ...part.scales.map((s) => _WbScale(s)),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -1667,7 +1689,7 @@ class _InlineMemberRow extends StatelessWidget {
                 ),
               ),
               SizedBox(
-                width: 140,
+                width: 160,
                 child: isLoading
                     ? const Center(
                         child: SizedBox(
