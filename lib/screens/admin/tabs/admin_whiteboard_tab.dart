@@ -1216,6 +1216,15 @@ class _WbPart extends StatelessWidget {
                   letterSpacing: 1.0,
                   fontWeight: FontWeight.w800),
             ),
+            if (part.measure.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Measure: ${part.measure}',
+                style: const TextStyle(
+                    color: _AdminWhiteboardTabState._textSub,
+                    fontSize: 11),
+              ),
+            ],
             if (part.format.isNotEmpty || part.timeCap.isNotEmpty) ...[
               const SizedBox(height: 10),
               _WbMetaChips(values: [
@@ -1231,6 +1240,11 @@ class _WbPart extends StatelessWidget {
             ],
             if (part.exercises.isNotEmpty) const SizedBox(height: 10),
             ...part.exercises.map((ex) => _WbExercise(ex)),
+            // ── Scales (Rx / Intermediate / Scaled) ────────────────────
+            if (part.scales.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ...part.scales.map((s) => _WbScale(s)),
+            ],
           ],
         ),
       ),
@@ -1339,6 +1353,55 @@ class _WbExercise extends StatelessWidget {
           ),
         ),
       ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _WbScale — renders a single scale block (Rx / Intermediate / Scaled)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _WbScale extends StatelessWidget {
+  const _WbScale(this.scale);
+  final WodScale scale;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Scale label pill (Rx, Intermediate, Scaled…)
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFF7C3AED).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: const Color(0xFF7C3AED).withValues(alpha: 0.3)),
+            ),
+            child: Text(
+              '— ${scale.label} —',
+              style: const TextStyle(
+                  color: Color(0xFFA78BFA),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (scale.description.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(scale.description,
+                style: const TextStyle(
+                    color: Colors.white70, fontSize: 13, height: 1.5)),
+          ],
+          if (scale.exercises.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            ...scale.exercises.map((ex) => _WbExercise(ex)),
+          ],
+        ],
+      ),
     );
   }
 }
