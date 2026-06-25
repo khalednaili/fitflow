@@ -248,9 +248,9 @@ exports.superAdminToggleGymStatus = functions.https.onCall(async (data, context)
 // Deletes every Firestore document scoped to the gym, then removes all
 // Firebase Auth accounts that belonged to that gym (members + admin).
 // ---------------------------------------------------------------------------
-exports.superAdminDeleteGym = functions
-  .runWith({timeoutSeconds: 540, memory: '512MB'})
-  .https.onCall(async (data, context) => {
+exports.superAdminDeleteGym = functions.https.onCall(
+  {timeoutSeconds: 540, memory: '512MB'},
+  async (data, context) => {
     await assertRole(context, 'super_admin');
 
     const gymId = (data.gymId || '').trim();
@@ -402,9 +402,9 @@ exports.sendAnnouncementNotification = functions.https.onCall(async (data, conte
 // Skips super_admin user docs.
 // Call once as super_admin, then this function will be removed.
 // ---------------------------------------------------------------------------
-exports.migrateAllToGym = functions
-  .runWith({ timeoutSeconds: 540, memory: '512MB' })
-  .https.onCall(async (data, context) => {
+exports.migrateAllToGym = functions.https.onCall(
+  {timeoutSeconds: 540, memory: '512MB'},
+  async (data, context) => {
     await assertRole(context, 'super_admin');
     const { gymId } = data;
     if (!gymId) throw new functions.https.HttpsError('invalid-argument', 'gymId required');

@@ -46,6 +46,7 @@ class _ClassWhiteboardScreenState extends State<ClassWhiteboardScreen>
   late final Stream<List<WodEntry>> _wodStream = _wodService.streamForDate(
     widget.gymClass.startTime,
     classTypeId: widget.gymClass.classTypeId,
+    classTypeName: widget.gymClass.title,
   );
 
   final Map<String, bool> _loadingMap = {};

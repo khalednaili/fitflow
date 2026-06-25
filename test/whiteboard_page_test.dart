@@ -66,6 +66,7 @@ Future<void> _seedWod(
   FakeFirebaseFirestore db, {
   String id = 'wod1',
   String classTypeId = 'wod',
+  String classTypeName = '',
   String warmUp = 'Jog 400m',
   String coolDown = 'Stretching',
   List<Map<String, dynamic>> parts = const [],
@@ -77,6 +78,7 @@ Future<void> _seedWod(
     'title': 'Test WOD',
     'description': '',
     'classTypeId': classTypeId,
+    'classTypeName': classTypeName,
     'date': Timestamp.fromDate(day),
     'warmUp': warmUp,
     'coolDown': coolDown,
@@ -383,5 +385,164 @@ void main() {
       find.textContaining('No WOD', findRichText: true),
       findsAtLeastNWidgets(1),
     );
+  });
+
+  // ── 13. Regression: WOD updates when switching between classes ────────────
+  //
+  // Before the fix, the WOD StreamBuilder had no `key`, so Flutter reused its
+  // state in-place when the class changed. The old WOD data lingered when
+  // classTypeId was empty/shared, making the panel appear frozen.
+
+  testWidgets('WOD panel updates when a different class is selected',
+      (tester) async {
+    // Two classes with distinct classTypeIds → distinct WODs.
+    await _seedClass(db,
+        id: 'c1', title: 'Morning WOD', hour: 7, classTypeId: 'type_a');
+    await _seedClass(db,
+        id: 'c2', title: 'Evening FBB', hour: 18, classTypeId: 'type_b');
+    await _seedWod(db,
+        id: 'wod_a', classTypeId: 'type_a', warmUp: 'WOD-A warm-up');
+    await _seedWod(db,
+        id: 'wod_b', classTypeId: 'type_b', warmUp: 'WOD-B warm-up');
+
+    await tester.pumpWidget(_wrap(tester,
+      AdminWhiteboardTab(gymId: 'gym1', firestore: db),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+
+    // Auto-selects the first class (Morning WOD at 07:00) — WOD-A must show.
+    expect(find.textContaining('WOD-A warm-up'), findsAtLeastNWidgets(1));
+    expect(find.textContaining('WOD-B warm-up'), findsNothing);
+
+    // Tap the Evening FBB pill to switch classes.
+    await tester.tap(find.textContaining('Evening FBB').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+
+    // After switching, WOD-B must show and WOD-A must be gone.
+    expect(find.textContaining('WOD-B warm-up'), findsAtLeastNWidgets(1));
+    expect(find.textContaining('WOD-A warm-up'), findsNothing);
+  });
+
+  // ── 14. Regression: no infinite rebuild loop on stream emission ───────────
+  //
+  // Before the fix, reconciled != _selectedClass used object identity. Every
+  // Firestore emission produced new GymClass instances → always unequal →
+  // addPostFrameCallback + setState every frame → pumpAndSettle never settles.
+
+  testWidgets('widget settles without infinite rebuild loop', (tester) async {
+    await _seedClass(db);
+
+    await tester.pumpWidget(_wrap(tester,
+      AdminWhiteboardTab(gymId: 'gym1', firestore: db),
+    ));
+
+    // pumpAndSettle will time-out (throw) if the ID-comparison fix is absent
+    // and the widget keeps scheduling frames indefinitely.
+    await tester.pumpAndSettle(const Duration(milliseconds: 50));
+    expect(find.byType(AdminWhiteboardTab), findsOneWidget);
+  });
+
+  // ── 15. Regression: WOD clears when switching to a class with no WOD ──────
+  //
+  // EMOM class has no classTypeId set. The new classTypeName fallback queries
+  // by title — "EMOM" — which finds no WOD (WOD doc has classTypeName "WOD").
+
+  testWidgets(
+      'WOD panel shows no-WOD placeholder when class has no classTypeId (EMOM regression)',
+      (tester) async {
+    await _seedClass(db,
+        id: 'c1', title: 'WOD', hour: 7, classTypeId: 'wod_type_id');
+    await _seedClass(db,
+        id: 'c2', title: 'EMOM', hour: 21, classTypeId: '');
+    await _seedWod(db,
+        id: 'wod_a',
+        classTypeId: 'wod_type_id',
+        classTypeName: 'WOD',
+        warmUp: 'WOD warm-up text');
+    // No WOD seeded with classTypeName='EMOM'.
+
+    await tester.pumpWidget(_wrap(tester,
+      AdminWhiteboardTab(gymId: 'gym1', firestore: db),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+
+    expect(find.textContaining('WOD warm-up text'), findsAtLeastNWidgets(1));
+
+    await tester.tap(find.textContaining('EMOM').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+
+    expect(find.textContaining('WOD warm-up text'), findsNothing);
+    expect(
+      find.textContaining('No WOD', findRichText: true),
+      findsAtLeastNWidgets(1),
+    );
+  });
+
+  // ── 16. Real-world: class missing classTypeId, matched via classTypeName ───
+  //
+  // Firebase data shows ALL gym classes have classTypeId field ABSENT.
+  // WODs carry both classTypeId (Firestore ID) and classTypeName ("WOD",
+  // "EMOM"…). The fix: when classTypeId is empty, fall back to filtering by
+  // classTypeName = class.title so each class sees its own workout.
+
+  testWidgets(
+      'WOD panel loads correct workout via classTypeName when class has no classTypeId',
+      (tester) async {
+    // Classes as they exist in real Firebase: classTypeId field absent (= '').
+    await _seedClass(db, id: 'c1', title: 'WOD',  hour: 7,  classTypeId: '');
+    await _seedClass(db, id: 'c2', title: 'EMOM', hour: 21, classTypeId: '');
+
+    // WODs as they exist in real Firebase: classTypeId = real Firestore ID,
+    // classTypeName = human-readable type name.
+    await _seedWod(db,
+        id: 'wod_real',
+        classTypeId: 'SPRwqwq5ECglC3LloD1A',
+        classTypeName: 'WOD',
+        warmUp: 'Real WOD warm-up');
+    await _seedWod(db,
+        id: 'emom_real',
+        classTypeId: 'ntj96UmzgaL1Pa7kUU46',
+        classTypeName: 'EMOM',
+        warmUp: 'Real EMOM warm-up');
+
+    await tester.pumpWidget(_wrap(tester,
+      AdminWhiteboardTab(gymId: 'gym1', firestore: db),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+
+    // WOD class auto-selected (earlier hour) → shows WOD warm-up only.
+    expect(find.textContaining('Real WOD warm-up'), findsAtLeastNWidgets(1));
+    expect(find.textContaining('Real EMOM warm-up'), findsNothing);
+
+    // Switch to EMOM → shows EMOM warm-up, WOD warm-up gone.
+    await tester.tap(find.textContaining('EMOM').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump();
+
+    expect(find.textContaining('Real EMOM warm-up'), findsAtLeastNWidgets(1));
+    expect(find.textContaining('Real WOD warm-up'), findsNothing);
   });
 }

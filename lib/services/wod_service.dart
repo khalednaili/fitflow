@@ -30,15 +30,28 @@ class WodService {
 
   // ── WOD streams ────────────────────────────────────────────────────────────
 
-  /// Stream WODs for a given date, optionally filtered by [classTypeId].
-  /// When [classTypeId] is empty/null all WODs for that day are returned.
-  Stream<List<WodEntry>> streamForDate(DateTime date,
-      {String classTypeId = ''}) {
+  /// Stream WODs for a given date.
+  ///
+  /// Matching priority (first non-empty wins):
+  /// 1. [classTypeId] non-empty → filter Firestore by `classTypeId` field.
+  /// 2. [classTypeName] non-empty → filter Firestore by `classTypeName` field.
+  ///    Used when gym classes don't have `classTypeId` stored but WODs do carry
+  ///    the human-readable type name (e.g. "WOD", "EMOM", "FBB").
+  /// 3. Both empty → all WODs for that day (legacy / member-facing behaviour).
+  Stream<List<WodEntry>> streamForDate(
+    DateTime date, {
+    String classTypeId = '',
+    String classTypeName = '',
+  }) {
     final day = DateTime(date.year, date.month, date.day);
     var query = _wodQuery.where('date', isEqualTo: Timestamp.fromDate(day));
+
     if (classTypeId.isNotEmpty) {
       query = query.where('classTypeId', isEqualTo: classTypeId);
+    } else if (classTypeName.isNotEmpty) {
+      query = query.where('classTypeName', isEqualTo: classTypeName);
     }
+
     return query.snapshots().map((s) {
       final list = s.docs
           .map(WodEntry.fromSnapshot)

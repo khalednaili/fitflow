@@ -31,7 +31,8 @@ class AdminWhiteboardTab extends StatefulWidget {
   State<AdminWhiteboardTab> createState() => _AdminWhiteboardTabState();
 }
 
-class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
+class _AdminWhiteboardTabState extends State<AdminWhiteboardTab>
+    with TickerProviderStateMixin {
   // ── colour palette (matches ClassWhiteboardScreen) ──────────────────────
   static const _bg = Color(0xFF0A1F1A);
   static const _surface = Color(0xFF0D2920);
@@ -48,9 +49,29 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
   late final BookingService _bookingService =
       BookingService(gymId: widget.gymId, firestore: widget.firestore);
 
+  // Cached once so the outer StreamBuilder never changes its stream identity
+  // on a setState rebuild, which would cause it to re-subscribe and push the
+  // WOD/booking child StreamBuilders through another waiting→active cycle
+  // showing stale data instead of the newly-selected class's workout.
+  late final Stream<List<GymClass>> _classStream;
+
   DateTime _selectedDate = _today();
   GymClass? _selectedClass;
   final Map<String, bool> _loadingMap = {};
+  late TabController _narrowTabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _classStream = _classService.streamAllClasses();
+    _narrowTabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _narrowTabController.dispose();
+    super.dispose();
+  }
 
   static DateTime _today() {
     final n = DateTime.now();
@@ -170,7 +191,7 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
     return Material(
       color: _bg,
       child: StreamBuilder<List<GymClass>>(
-        stream: _classService.streamAllClasses(),
+        stream: _classStream,
         builder: (context, classSnap) {
           final allClasses = classSnap.data ?? [];
           final dayClasses = _forDate(allClasses);
@@ -186,7 +207,9 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
             reconciled = dayClasses.first;
           }
 
-          if (reconciled != _selectedClass) {
+          // Compare by ID to avoid infinite rebuilds: stream emissions produce
+          // new GymClass instances that are never identical by reference.
+          if (reconciled?.id != _selectedClass?.id) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) setState(() => _selectedClass = reconciled);
             });
@@ -450,15 +473,23 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
 
   Widget _buildWhiteboardContent(GymClass gymClass) {
     return StreamBuilder<List<WodEntry>>(
+      // Key on gymClass.id so the StreamBuilder is fully recreated (not just
+      // updated in-place) whenever the selected class changes. Without this,
+      // Flutter reuses the existing state and the old WOD data lingers until
+      // the new Firestore snapshot arrives — or never clears when classTypeId
+      // is empty/shared across classes.
+      key: ValueKey('wod_${gymClass.id}'),
       stream: _wodService.streamForDate(
         gymClass.startTime,
         classTypeId: gymClass.classTypeId,
+        classTypeName: gymClass.title,
       ),
       builder: (context, wodSnap) {
         final wod =
             (wodSnap.data?.isNotEmpty == true) ? wodSnap.data!.first : null;
 
         return StreamBuilder<List<Booking>>(
+          key: ValueKey('bookings_${gymClass.id}'),
           stream: _bookingService.streamBookingsForClass(gymClass.id),
           builder: (context, bookSnap) {
             final bookings = bookSnap.data ?? [];
@@ -499,27 +530,28 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
               }
 
               // Narrow: stacked with toggle
-              return DefaultTabController(
-                length: 2,
-                child: Column(
-                  children: [
-                    Container(
-                      color: _card,
-                      child: TabBar(
-                        labelColor: _accent,
-                        unselectedLabelColor: _textSub,
-                        indicatorColor: _accent,
-                        dividerColor: _border,
-                        tabs: [
-                          Tab(text: context.l10n.tr('Workout')),
-                          Tab(
-                              text:
-                                  '${context.l10n.tr('Members')} (${bookings.length})'),
-                        ],
-                      ),
+              return Column(
+                children: [
+                  Container(
+                    color: _card,
+                    child: TabBar(
+                      controller: _narrowTabController,
+                      labelColor: _accent,
+                      unselectedLabelColor: _textSub,
+                      indicatorColor: _accent,
+                      dividerColor: _border,
+                      tabs: [
+                        Tab(text: context.l10n.tr('Workout')),
+                        Tab(
+                            text:
+                                '${context.l10n.tr('Members')} (${bookings.length})'),
+                      ],
                     ),
-                    Expanded(
-                      child: TabBarView(children: [
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _narrowTabController,
+                      children: [
                         _InlineWodPanel(
                           wod: wod,
                           gymClass: gymClass,
@@ -532,10 +564,10 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab> {
                           loadingMap: _loadingMap,
                           onToggle: _toggleCheckIn,
                         ),
-                      ]),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               );
             });
           },
