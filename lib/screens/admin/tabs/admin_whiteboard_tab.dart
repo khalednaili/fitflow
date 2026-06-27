@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../l10n/app_localizations.dart';
+import '../../../models/app_user.dart';
 import '../../../models/booking.dart';
 import '../../../models/gym_class.dart';
 import '../../../models/wod_entry.dart';
 import '../../../services/booking_service.dart';
 import '../../../services/class_service.dart';
+import '../../../services/member_service.dart';
 import '../../../services/wod_service.dart';
 import '../../../utils/crash_logger.dart';
 import '../class_whiteboard_screen.dart';
@@ -168,6 +170,19 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab>
     }
   }
 
+  Future<void> _showAddBookingDialog() async {
+    if (_selectedClass == null) return;
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _AddBookingDialog(
+        gymClass: _selectedClass!,
+        bookingService: _bookingService,
+        gymId: widget.gymId,
+        firestore: widget.firestore,
+      ),
+    );
+  }
+
   void _openTrainerView(WodEntry wod) {
     if (_selectedClass == null) return;
     final fmt = DateFormat('EEEE, d MMMM yyyy');
@@ -292,7 +307,7 @@ class _AdminWhiteboardTabState extends State<AdminWhiteboardTab>
               // Add Bookings button
               if (currentClass != null)
                 FilledButton.icon(
-                  onPressed: () {}, // placeholder — open booking dialog
+                  onPressed: _showAddBookingDialog,
                   icon: const Icon(Icons.add, size: 16),
                   label: Text(context.l10n.tr('Add Bookings')),
                   style: FilledButton.styleFrom(
@@ -1773,7 +1788,516 @@ class _InlineMemberRow extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _TrainerViewProxy — routes to the Trainer View screen from the hub
+// _AddBookingDialog — admin manually books a member into a selected class
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AddBookingDialog extends StatefulWidget {
+  const _AddBookingDialog({
+    required this.gymClass,
+    required this.bookingService,
+    required this.gymId,
+    this.firestore,
+  });
+
+  final GymClass gymClass;
+  final BookingService bookingService;
+  final String gymId;
+  final FirebaseFirestore? firestore;
+
+  @override
+  State<_AddBookingDialog> createState() => _AddBookingDialogState();
+}
+
+class _AddBookingDialogState extends State<_AddBookingDialog> {
+  static const _bg = Color(0xFF0A1F1A);
+  static const _surface = Color(0xFF0D2920);
+  static const _card = Color(0xFF112820);
+  static const _border = Color(0xFF1A3530);
+  static const _accent = Color(0xFF10B981);
+  static const _textSub = Color(0xFF9CA3AF);
+
+  late final MemberService _memberService =
+      MemberService(gymId: widget.gymId, firestore: widget.firestore);
+
+  AppUser? _selectedMember;
+  bool _forceBook = false;
+  bool _saving = false;
+  String? _error;
+  String _search = '';
+
+  Future<void> _save() async {
+    if (_selectedMember == null) {
+      setState(() => _error = context.l10n.tr('Please select a member.'));
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      if (_forceBook) {
+        final adminId = FirebaseAuth.instance.currentUser?.uid ?? 'admin';
+        await widget.bookingService.forceBookAndCheckIn(
+          classId: widget.gymClass.id,
+          userId: _selectedMember!.id,
+          adminId: adminId,
+        );
+      } else {
+        await widget.bookingService.bookClass(
+          classId: widget.gymClass.id,
+          userId: _selectedMember!.id,
+          bypassDailyLimit: true,
+        );
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.l10n.tr(
+              '${_selectedMember!.displayName.isNotEmpty ? _selectedMember!.displayName : _selectedMember!.email} '
+              'booked into ${widget.gymClass.title}',
+            ),
+          ),
+          backgroundColor: _accent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    } catch (e, s) {
+      await CrashLogger.log(e, s, reason: 'addBookingDialog');
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = e.toString().replaceFirst('Exception: ', '');
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final classFmt = DateFormat('EEE d MMM • HH:mm');
+
+    return Dialog(
+      backgroundColor: _bg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Header ──────────────────────────────────────────────────────
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _accent.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.person_add_rounded,
+                      color: _accent, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.l10n.tr('Add Booking'),
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800),
+                      ),
+                      Text(
+                        context.l10n.tr('Book a member into this class'),
+                        style:
+                            TextStyle(fontSize: 12, color: _textSub),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  onPressed: _saving ? null : () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded, color: _textSub),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // ── Class info ───────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: _card,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _border),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.fitness_center_outlined,
+                      color: _accent, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.gymClass.title,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14),
+                        ),
+                        Text(
+                          classFmt.format(widget.gymClass.startTime),
+                          style:
+                              TextStyle(color: _textSub, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (widget.gymClass.capacity > 0)
+                    StreamBuilder<List<Booking>>(
+                      stream: widget.bookingService
+                          .streamBookingsForClass(widget.gymClass.id),
+                      builder: (context, snap) {
+                        final count = snap.data?.length ?? 0;
+                        final full = count >= widget.gymClass.capacity;
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: full
+                                ? const Color(0xFFEF4444).withValues(alpha: 0.15)
+                                : _accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '$count/${widget.gymClass.capacity}',
+                            style: TextStyle(
+                              color: full
+                                  ? const Color(0xFFEF4444)
+                                  : _accent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Member search ────────────────────────────────────────────────
+            Text(
+              context.l10n.tr('Member'),
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: context.l10n.tr('Search members…'),
+                hintStyle: TextStyle(color: _textSub, fontSize: 14),
+                prefixIcon: const Icon(Icons.search, color: _textSub, size: 20),
+                filled: true,
+                fillColor: _surface,
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: _accent),
+                ),
+              ),
+              onChanged: (v) => setState(() {
+                _search = v.toLowerCase();
+                _selectedMember = null;
+              }),
+            ),
+            const SizedBox(height: 8),
+            StreamBuilder<List<AppUser>>(
+              stream: _memberService.streamMembers(),
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting &&
+                    !snap.hasData) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: _accent,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                final allMembers = snap.data ?? <AppUser>[];
+                final filtered = _search.isEmpty
+                    ? allMembers
+                    : allMembers.where((m) {
+                        final name = m.displayName.toLowerCase();
+                        final email = m.email.toLowerCase();
+                        return name.contains(_search) ||
+                            email.contains(_search);
+                      }).toList();
+
+                if (filtered.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      _search.isEmpty
+                          ? context.l10n.tr('No members found.')
+                          : context.l10n.tr('No members match "$_search".')
+,
+                      style:
+                          TextStyle(color: _textSub, fontSize: 13),
+                    ),
+                  );
+                }
+
+                return Container(
+                  constraints: const BoxConstraints(maxHeight: 220),
+                  decoration: BoxDecoration(
+                    color: _surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _border),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) =>
+                          Divider(height: 1, color: _border),
+                      itemBuilder: (context, index) {
+                        final member = filtered[index];
+                        final isSelected = _selectedMember?.id == member.id;
+                        final label = member.displayName.isNotEmpty
+                            ? member.displayName
+                            : member.email;
+                        final sub = member.displayName.isNotEmpty
+                            ? member.email
+                            : '';
+                        return InkWell(
+                          onTap: () =>
+                              setState(() => _selectedMember = member),
+                          child: Container(
+                            color: isSelected
+                                ? _accent.withValues(alpha: 0.15)
+                                : Colors.transparent,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        label,
+                                        style: TextStyle(
+                                          color: isSelected
+                                              ? _accent
+                                              : Colors.white,
+                                          fontWeight: isSelected
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      if (sub.isNotEmpty)
+                                        Text(
+                                          sub,
+                                          style: TextStyle(
+                                              color: _textSub,
+                                              fontSize: 11),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                if (isSelected)
+                                  const Icon(Icons.check_circle_rounded,
+                                      color: _accent, size: 18),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // ── Force Book toggle ────────────────────────────────────────────
+            GestureDetector(
+              onTap: () => setState(() => _forceBook = !_forceBook),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: _forceBook
+                      ? const Color(0xFFEF4444).withValues(alpha: 0.08)
+                      : _card,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _forceBook
+                        ? const Color(0xFFEF4444).withValues(alpha: 0.35)
+                        : _border,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.admin_panel_settings_outlined,
+                      size: 18,
+                      color: _forceBook
+                          ? const Color(0xFFEF4444)
+                          : _textSub,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.l10n.tr('Force Book'),
+                            style: TextStyle(
+                              color: _forceBook
+                                  ? const Color(0xFFEF4444)
+                                  : Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                          Text(
+                            context.l10n.tr(
+                                'Bypass capacity, offer & limit checks and immediately check in'),
+                            style: TextStyle(color: _textSub, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: _forceBook,
+                      onChanged: (v) => setState(() => _forceBook = v),
+                      activeColor: const Color(0xFFEF4444),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline,
+                        color: Color(0xFFEF4444), size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(
+                            color: Color(0xFFEF4444), fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 24),
+
+            // ── Action buttons ───────────────────────────────────────────────
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed:
+                        _saving ? null : () => Navigator.of(context).pop(),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _textSub,
+                      side: const BorderSide(color: _border),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: Text(context.l10n.tr('Cancel')),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: (_saving || _selectedMember == null) ? null : _save,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _forceBook
+                          ? const Color(0xFFEF4444)
+                          : _accent,
+                      disabledBackgroundColor: _border,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : Text(
+                            _forceBook
+                                ? context.l10n.tr('Force Book')
+                                : context.l10n.tr('Book Member'),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _TrainerViewProxy extends StatelessWidget {
