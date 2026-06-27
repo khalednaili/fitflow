@@ -7,6 +7,8 @@ import '../../services/notification_service.dart';
 import '../notifications/notifications_screen.dart';
 import 'admin_calendar_screen.dart';
 import 'admin_dashboard_screen.dart' show BookingSettingsDialog;
+import 'export_data_screen.dart';
+import 'import_data_screen.dart';
 import 'payment_calendar_screen.dart';
 import 'tabs/admin_attendance_tab.dart';
 import 'tabs/admin_checkin_tab.dart';
@@ -544,6 +546,8 @@ class _AdminShellState extends State<AdminShell> {
             ),
           ),
           _buildSidebarBookingSettings(showLabels: showLabels),
+          _buildSidebarImportData(showLabels: showLabels),
+          _buildSidebarExportData(showLabels: showLabels),
           _buildSidebarPaymentCalendar(showLabels: showLabels),
           _buildSidebarLogout(showLabels: showLabels),
         ],
@@ -675,6 +679,78 @@ class _AdminShellState extends State<AdminShell> {
                   padding: EdgeInsets.all(16),
                   child: Center(
                       child: Icon(Icons.tune_outlined,
+                          size: 18, color: Color(0xFF6B7280))),
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildSidebarImportData({required bool showLabels}) {
+    void openImport() => showDialog<void>(
+          context: context,
+          builder: (_) =>
+              ImportDataDialog(gymId: widget.appUser?.gymId ?? ''),
+        );
+
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Color(0xFF1A3530))),
+      ),
+      child: showLabels
+          ? ListTile(
+              dense: true,
+              leading: const Icon(Icons.upload_file_outlined,
+                  size: 18, color: Color(0xFF6B7280)),
+              title: Text(context.l10n.tr('Import Data'),
+                  style:
+                      const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
+              onTap: openImport,
+            )
+          : Tooltip(
+              message: context.l10n.tr('Import Data'),
+              child: InkWell(
+                onTap: openImport,
+                child: const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                      child: Icon(Icons.upload_file_outlined,
+                          size: 18, color: Color(0xFF6B7280))),
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildSidebarExportData({required bool showLabels}) {
+    void openExport() => showDialog<void>(
+          context: context,
+          builder: (_) =>
+              ExportDataDialog(gymId: widget.appUser?.gymId ?? ''),
+        );
+
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Color(0xFF1A3530))),
+      ),
+      child: showLabels
+          ? ListTile(
+              dense: true,
+              leading: const Icon(Icons.download_outlined,
+                  size: 18, color: Color(0xFF6B7280)),
+              title: Text(context.l10n.tr('Export Data'),
+                  style:
+                      const TextStyle(color: Color(0xFF9CA3AF), fontSize: 13)),
+              onTap: openExport,
+            )
+          : Tooltip(
+              message: context.l10n.tr('Export Data'),
+              child: InkWell(
+                onTap: openExport,
+                child: const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Center(
+                      child: Icon(Icons.download_outlined,
                           size: 18, color: Color(0xFF6B7280))),
                 ),
               ),

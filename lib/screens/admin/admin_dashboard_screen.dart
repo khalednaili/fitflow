@@ -7,6 +7,8 @@ import '../../services/booking_service.dart';
 import '../../services/class_service.dart';
 import '../../services/member_service.dart';
 import 'admin_calendar_screen.dart';
+import 'export_data_screen.dart';
+import 'import_data_screen.dart';
 import 'tabs/admin_attendance_tab.dart';
 import 'tabs/admin_checkin_tab.dart';
 import 'tabs/admin_classes_tab.dart';
@@ -472,6 +474,50 @@ class _AdminBannerState extends State<_AdminBanner> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(Icons.tune_outlined,
+                        color: Colors.white, size: 18),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // ── Import data button ─────────────────────────────────────
+              Tooltip(
+                message: context.l10n.tr('Import Data'),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (_) =>
+                        ImportDataDialog(gymId: _classService.gymId),
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.upload_file_outlined,
+                        color: Colors.white, size: 18),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              // ── Export data button ─────────────────────────────────────
+              Tooltip(
+                message: context.l10n.tr('Export Data'),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () => showDialog<void>(
+                    context: context,
+                    builder: (_) =>
+                        ExportDataDialog(gymId: _classService.gymId),
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.download_outlined,
                         color: Colors.white, size: 18),
                   ),
                 ),
