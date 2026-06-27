@@ -128,7 +128,8 @@ class _AdminOffersTabState extends State<AdminOffersTab> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('"${offer.name}" ${l10n.tr('duplicated as inactive copy.')}'),
+          content: Text(
+              '"${offer.name}" ${l10n.tr('duplicated as inactive copy.')}'),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -217,12 +218,14 @@ class _AdminOffersTabState extends State<AdminOffersTab> {
                                   ),
                                   ButtonSegment(
                                     value: 'active',
-                                    icon: const Icon(Icons.check_circle_outline, size: 14),
+                                    icon: const Icon(Icons.check_circle_outline,
+                                        size: 14),
                                     label: Text(l10n.tr('Active')),
                                   ),
                                   ButtonSegment(
                                     value: 'inactive',
-                                    icon: const Icon(Icons.circle_outlined, size: 14),
+                                    icon: const Icon(Icons.circle_outlined,
+                                        size: 14),
                                     label: Text(l10n.tr('Inactive')),
                                   ),
                                 ],
@@ -337,8 +340,10 @@ class _AdminOffersTabState extends State<AdminOffersTab> {
                             const SizedBox(height: 8),
                             Text(
                               allOffers.isEmpty
-                                  ? l10n.tr('Create your first membership offer to get started.')
-                                  : l10n.tr('Try adjusting your search or filter.'),
+                                  ? l10n.tr(
+                                      'Create your first membership offer to get started.')
+                                  : l10n.tr(
+                                      'Try adjusting your search or filter.'),
                               textAlign: TextAlign.center,
                               style: TextStyle(color: cs.onSurfaceVariant),
                             ),
@@ -761,24 +766,21 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
   bool _validate() {
     bool ok = true;
     setState(() {
-      _nameError =
-          _nameController.text.trim().isEmpty
-              ? context.l10n.tr('Offer name is required')
-              : null;
+      _nameError = _nameController.text.trim().isEmpty
+          ? context.l10n.tr('Offer name is required')
+          : null;
       final c = int.tryParse(_checkinsController.text.trim());
-      _checkinsError =
-          (c == null || c <= 0)
-              ? context.l10n.tr('Enter a positive number of sessions')
-              : null;
+      _checkinsError = (c == null || c <= 0)
+          ? context.l10n.tr('Enter a positive number of sessions')
+          : null;
       final d = int.tryParse(_durationValueController.text.trim());
       _durationError = (d == null || d <= 0)
           ? context.l10n.tr('Duration must be a positive number of days')
           : null;
       final p = int.tryParse(_priceController.text.trim());
-      _priceError =
-          (p == null || p < 0)
-              ? context.l10n.tr('Enter a valid price (e.g. 29.99)')
-              : null;
+      _priceError = (p == null || p < 0)
+          ? context.l10n.tr('Enter a valid price (e.g. 29.99)')
+          : null;
       if (_nameError != null ||
           _checkinsError != null ||
           _durationError != null ||
@@ -827,7 +829,7 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
           durationValue: durationValue,
           durationUnit: _durationUnit,
           price: price,
-          currency: 'USD',
+          currency: 'TND',
         );
       } else {
         await _subscriptionService.createCheckinOffer(
@@ -841,7 +843,7 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
           durationValue: durationValue,
           durationUnit: _durationUnit,
           price: price,
-          currency: 'USD',
+          currency: 'TND',
         );
       }
 
@@ -956,7 +958,8 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
                   children: [
                     // ── Section: Offer Type ──────────────────────────────
                     _SectionLabel(
-                        icon: Icons.category_outlined, label: l10n.tr('Offer Type')),
+                        icon: Icons.category_outlined,
+                        label: l10n.tr('Offer Type')),
                     const SizedBox(height: 10),
                     ...(_offerTypeChoices(l10n).map((choice) {
                       final selected = _offerType == choice.value;
@@ -1058,7 +1061,8 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
                       maxLines: 2,
                       decoration: InputDecoration(
                         labelText: l10n.tr('Description (optional)'),
-                        hintText: l10n.tr('Short description shown to members…'),
+                        hintText:
+                            l10n.tr('Short description shown to members…'),
                         prefixIcon: const Icon(Icons.notes_outlined),
                         alignLabelWithHint: true,
                       ),
@@ -1068,7 +1072,8 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
 
                     // ── Section: Sessions ────────────────────────────────
                     _SectionLabel(
-                        icon: Icons.fitness_center_outlined, label: l10n.tr('Sessions')),
+                        icon: Icons.fitness_center_outlined,
+                        label: l10n.tr('Sessions')),
                     const SizedBox(height: 10),
                     _StepperField(
                       controller: _checkinsController,
@@ -1170,7 +1175,8 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
 
                     // ── Section: Pricing ─────────────────────────────────
                     _SectionLabel(
-                        icon: Icons.payments_outlined, label: l10n.tr('Pricing')),
+                        icon: Icons.payments_outlined,
+                        label: l10n.tr('Pricing')),
                     const SizedBox(height: 10),
                     TextField(
                       controller: _priceController,
@@ -1185,7 +1191,7 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
                         labelText: l10n.tr('Price *'),
                         hintText: '0',
                         prefixIcon: const Icon(Icons.attach_money_outlined),
-                        suffixText: 'USD',
+                        suffixText: 'TND',
                         errorText: _priceError,
                       ),
                     ),
@@ -1220,7 +1226,8 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
                                         color: typeColor),
                                   ),
                                   TextSpan(
-                                    text: l10n.tr('  ·  auto-set from offer type'),
+                                    text: l10n
+                                        .tr('  ·  auto-set from offer type'),
                                   ),
                                 ],
                               ),
@@ -1283,7 +1290,9 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
                             )
                           : const Icon(Icons.check_circle_outline),
                       label: Text(_saving
-                          ? (widget.offer != null ? l10n.tr('Saving…') : l10n.tr('Creating…'))
+                          ? (widget.offer != null
+                              ? l10n.tr('Saving…')
+                              : l10n.tr('Creating…'))
                           : (widget.offer != null
                               ? l10n.tr('Save Changes')
                               : l10n.tr('Create Offer'))),
@@ -1528,7 +1537,7 @@ class _LivePreviewCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'USD',
+                    'TND',
                     style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
                   ),
                 ],
