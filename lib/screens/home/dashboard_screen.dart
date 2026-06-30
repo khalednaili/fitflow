@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:fit_flow/utils/crash_logger.dart';
+import 'package:fit_flow/utils/app_time.dart';
 import '../../models/app_user.dart';
 import '../../models/gym_class.dart';
 import '../../models/user_subscription.dart';
@@ -190,21 +191,17 @@ class _DashboardBody extends StatelessWidget {
 
   // Classes in the current calendar week (Mon–Sun)
   List<GymClass> _classesThisWeek() {
-    final now = DateTime.now();
-    final monday = now.subtract(Duration(days: now.weekday - 1));
-    final weekStart = DateTime(monday.year, monday.month, monday.day);
-    final weekEnd = weekStart.add(Duration(days: 7));
+    // Bucketed in the gym's timezone (defaults to device offset).
+    final clock = GymClock();
     return upcomingBookedClasses
-        .where((c) =>
-            c.startTime.isAfter(weekStart) && c.startTime.isBefore(weekEnd))
+        .where((c) => clock.isInGymWeek(c.startTime))
         .toList();
   }
 
   int _classesThisMonth() {
-    final now = DateTime.now();
+    final clock = GymClock();
     return upcomingBookedClasses
-        .where((c) =>
-            c.startTime.year == now.year && c.startTime.month == now.month)
+        .where((c) => clock.isInGymMonth(c.startTime))
         .length;
   }
 

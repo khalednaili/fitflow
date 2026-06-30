@@ -9,6 +9,7 @@ import '../../models/personal_training.dart';
 import '../../services/booking_service.dart';
 import '../../services/class_service.dart';
 import '../../services/personal_training_service.dart';
+import '../../utils/app_time.dart';
 import '../../utils/currency.dart';
 import 'class_details_screen.dart';
 import 'membership_screen.dart';
@@ -438,9 +439,14 @@ class _DayClassListState extends State<_DayClassList> {
         return StreamBuilder<List<PersonalTraining>>(
           stream: _ptStream,
           builder: (context, ptSnap) {
+            if (classSnap.hasError || ptSnap.hasError) {
+              return _DayErrorState(
+                onRetry: () => setState(() {}),
+              );
+            }
             if (classSnap.connectionState == ConnectionState.waiting ||
                 ptSnap.connectionState == ConnectionState.waiting) {
-              return Center(child: CircularProgressIndicator());
+              return const _DayLoadingSkeleton();
             }
 
             final classes = (classSnap.data ?? <GymClass>[])
@@ -512,11 +518,28 @@ class _DayClassListState extends State<_DayClassList> {
                       );
                     }
 
-                    // Mobile/tablet: single column
+                    // Mobile/tablet: single column, grouped by time of day.
+                    final clock = GymClock();
+                    final rows = <Object>[];
+                    SchedulePeriod? lastPeriod;
+                    for (final item in items) {
+                      final p = clock.gymPeriodOf(item.startTime);
+                      if (p != lastPeriod) {
+                        rows.add(p);
+                        lastPeriod = p;
+                      }
+                      rows.add(item);
+                    }
                     return ListView.builder(
-                      padding: EdgeInsets.only(top: 12, bottom: 24),
-                      itemCount: items.length,
-                      itemBuilder: (_, i) => buildItem(items[i]),
+                      padding: EdgeInsets.only(top: 4, bottom: 24),
+                      itemCount: rows.length,
+                      itemBuilder: (_, i) {
+                        final row = rows[i];
+                        if (row is SchedulePeriod) {
+                          return _PeriodHeader(period: row);
+                        }
+                        return buildItem(row as _DayItem);
+                      },
                     );
                   },
                 );
@@ -814,6 +837,154 @@ class _EmptyDayState extends StatelessWidget {
   }
 }
 
+// ── Time-of-day section header ────────────────────────────────────────────────
+
+class _PeriodHeader extends StatelessWidget {
+  const _PeriodHeader({required this.period});
+  final SchedulePeriod period;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final (IconData icon, String label) = switch (period) {
+      SchedulePeriod.morning => (
+          Icons.wb_twilight_rounded,
+          context.l10n.tr('Morning')
+        ),
+      SchedulePeriod.afternoon => (
+          Icons.wb_sunny_outlined,
+          context.l10n.tr('Afternoon')
+        ),
+      SchedulePeriod.evening => (
+          Icons.nightlight_outlined,
+          context.l10n.tr('Evening')
+        ),
+    };
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: cs.onSurfaceVariant),
+          const SizedBox(width: 7),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Divider(
+                height: 1, color: cs.outlineVariant.withValues(alpha: 0.6)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Loading skeleton (shown while the day's classes load) ─────────────────────
+
+class _DayLoadingSkeleton extends StatelessWidget {
+  const _DayLoadingSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    Widget bar(double w, double h) => Container(
+          width: w,
+          height: h,
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(6),
+          ),
+        );
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+      itemCount: 4,
+      itemBuilder: (_, __) => Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: cs.outlineVariant),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              bar(46, 46),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    bar(150, 14),
+                    const SizedBox(height: 8),
+                    bar(90, 11),
+                  ],
+                ),
+              ),
+            ]),
+            const SizedBox(height: 16),
+            bar(double.infinity, 38),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Error state ───────────────────────────────────────────────────────────────
+
+class _DayErrorState extends StatelessWidget {
+  const _DayErrorState({required this.onRetry});
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.cloud_off_rounded,
+                size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.5)),
+            const SizedBox(height: 16),
+            Text(
+              context.l10n.tr("Couldn't load classes"),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              context.l10n.tr('Check your connection and try again.'),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.tonalIcon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: Text(context.l10n.tr('Retry')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ClassCard extends StatefulWidget {
   const _ClassCard({
     required this.gymClass,
@@ -1086,6 +1257,13 @@ class _ClassCardState extends State<_ClassCard> {
       }
     }
 
+    // Past classes: show a clear "ended" state rather than a dead Cancel button.
+    if (isPast) {
+      buttonLabel = context.l10n.tr('Class ended');
+      buttonIcon = Icons.check_circle_outline;
+      btnBg = Colors.grey.shade300;
+      btnFg = Colors.grey.shade700;
+    }
     if (_isWorking || isPast) onPressed = null;
 
     return MouseRegion(

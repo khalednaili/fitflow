@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart' show TimeOfDay;
 
 import '../models/gym_class.dart';
+import '../utils/app_time.dart';
 
 class ClassService {
   ClassService({
@@ -31,22 +32,24 @@ class ClassService {
 
   Stream<List<GymClass>> streamClasses() {
     return _classesQuery.snapshots().map((q) {
-      final classes = q.docs
+      // Returns a mutable list so callers may sort/filter in place safely.
+      return q.docs
           .map((doc) => GymClass.fromSnapshot(doc))
           .where((gymClass) => _matchesGymId(gymClass.gymId))
           .toList();
-      return List<GymClass>.unmodifiable(classes);
     });
   }
 
   Stream<List<GymClass>> streamUpcomingClasses() {
-    final now = DateTime.now();
     // Single-field gymId filter only — sort/filter client-side to avoid
     // requiring a composite (gymId + startTime) index.
     return _classesQuery.snapshots().map((query) {
+      // `now` is evaluated per emission (not at stream creation) so a
+      // long-lived stream doesn't keep showing classes that have since passed.
+      final clock = GymClock();
       final list = query.docs
           .map((doc) => GymClass.fromSnapshot(doc))
-          .where((c) => _matchesGymId(c.gymId) && !c.startTime.isBefore(now))
+          .where((c) => _matchesGymId(c.gymId) && clock.isUpcoming(c.startTime))
           .toList()
         ..sort((a, b) => a.startTime.compareTo(b.startTime));
       return list;
@@ -468,11 +471,17 @@ class ClassService {
         .orderBy('startTime')
         .snapshots()
         .map((query) {
-      final classes = query.docs
+      // The server-side startTime filter is fixed at query-build time; re-apply
+      // a fresh client-side check so already-finished classes drop out of a
+      // long-lived stream. Returns a mutable list.
+      final clock = GymClock();
+      return query.docs
           .map((doc) => GymClass.fromSnapshot(doc))
-          .where((c) => _matchesGymId(c.gymId) && classIds.contains(c.id))
+          .where((c) =>
+              _matchesGymId(c.gymId) &&
+              classIds.contains(c.id) &&
+              clock.isUpcoming(c.startTime))
           .toList();
-      return List<GymClass>.unmodifiable(classes);
     });
   }
 

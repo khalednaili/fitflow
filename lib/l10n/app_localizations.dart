@@ -489,6 +489,14 @@ class AppLocalizations {
     'Register a non-member guest': 'Register a non-member guest',
     'Book a member as a drop-in guest': 'Book a member as a drop-in guest',
     'Search members…': 'Search members…',
+    'Class ended': 'Class ended',
+    'Morning': 'Morning',
+    'Afternoon': 'Afternoon',
+    'Evening': 'Evening',
+    "Couldn't load classes": "Couldn't load classes",
+    'Check your connection and try again.':
+        'Check your connection and try again.',
+    'Retry': 'Retry',
     'No members found.': 'No members found.',
     "Couldn't load members. Please try again.":
         "Couldn't load members. Please try again.",
@@ -1526,6 +1534,14 @@ class AppLocalizations {
     'Book a member as a drop-in guest':
         'Réserver un membre en tant que drop-in',
     'Search members…': 'Rechercher des membres…',
+    'Class ended': 'Cours terminé',
+    'Morning': 'Matin',
+    'Afternoon': 'Après-midi',
+    'Evening': 'Soir',
+    "Couldn't load classes": 'Impossible de charger les cours',
+    'Check your connection and try again.':
+        'Vérifiez votre connexion et réessayez.',
+    'Retry': 'Réessayer',
     'No members found.': 'Aucun membre trouvé.',
     "Couldn't load members. Please try again.":
         'Impossible de charger les membres. Veuillez réessayer.',
