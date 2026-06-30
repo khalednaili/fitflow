@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/membership_plan.dart';
 import '../../models/user_subscription.dart';
 import '../../services/subscription_service.dart';
+import '../../utils/currency.dart';
 
 class RecordPaymentScreen extends StatefulWidget {
   const RecordPaymentScreen({
@@ -547,7 +548,7 @@ class _OfferSelector extends StatelessWidget {
                         Text(
                           isPaid
                               ? context.l10n.tr('Fully paid')
-                              : '${context.l10n.tr('Remaining')}: ${sub.remainingAmount} ${sub.currency}',
+                              : '${context.l10n.tr('Remaining')}: ${Currency.format(sub.remainingAmount, sub.currency)}',
                           style: TextStyle(
                             fontSize: 12,
                             color: isPaid
@@ -639,14 +640,14 @@ class _BalanceCard extends StatelessWidget {
             children: [
               _BalanceStat(
                 label: context.l10n.tr('Total'),
-                value: '${subscription.totalAmount} ${subscription.currency}',
+                value: Currency.format(subscription.totalAmount, subscription.currency),
                 color: cs.onSurface,
                 icon: Icons.receipt_outlined,
               ),
               const SizedBox(width: 8),
               _BalanceStat(
                 label: context.l10n.tr('Paid'),
-                value: '${subscription.amountPaid} ${subscription.currency}',
+                value: Currency.format(subscription.amountPaid, subscription.currency),
                 color: Colors.green.shade600,
                 icon: Icons.check_circle_outline,
               ),
@@ -654,7 +655,7 @@ class _BalanceCard extends StatelessWidget {
               _BalanceStat(
                 label: context.l10n.tr('Remaining'),
                 value:
-                    '${subscription.remainingAmount} ${subscription.currency}',
+                    Currency.format(subscription.remainingAmount, subscription.currency),
                 color: isPaid ? Colors.green.shade600 : Colors.orange.shade700,
                 icon: isPaid ? Icons.verified_outlined : Icons.pending_outlined,
               ),
@@ -751,7 +752,7 @@ class _AmountInput extends StatelessWidget {
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
             decoration: InputDecoration(
-              prefixText: '${subscription.currency}  ',
+              prefixText: '${Currency.normalize(subscription.currency)}  ',
               prefixStyle: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
@@ -827,11 +828,11 @@ class _AmountInput extends StatelessWidget {
                   Expanded(
                     child: Text(
                       isOverpay
-                          ? '${context.l10n.tr('Amount exceeds remaining balance of')} $remaining ${subscription.currency}'
+                          ? '${context.l10n.tr('Amount exceeds remaining balance of')} ${Currency.format(remaining, subscription.currency)}'
                           : afterPayment == 0
                               ? context.l10n
                                   .tr('Fully paid after this payment 🎉')
-                              : '${context.l10n.tr('Remaining after payment')}: $afterPayment ${subscription.currency}',
+                              : '${context.l10n.tr('Remaining after payment')}: ${Currency.format(afterPayment, subscription.currency)}',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
@@ -854,13 +855,13 @@ class _AmountInput extends StatelessWidget {
                 if (remaining > 0)
                   _QuickChip(
                     label:
-                        '${context.l10n.tr('Pay all')}  $remaining ${subscription.currency}',
+                        '${context.l10n.tr('Pay all')}  ${Currency.format(remaining, subscription.currency)}',
                     onTap: onFillRemaining,
                   ),
                 if (remaining > 1)
                   _QuickChip(
                     label:
-                        '${context.l10n.tr('Half')}  ${(remaining / 2).round()} ${subscription.currency}',
+                        '${context.l10n.tr('Half')}  ${Currency.format((remaining / 2).round(), subscription.currency)}',
                     onTap: () {
                       controller.text = '${(remaining / 2).round()}';
                     },
@@ -1049,7 +1050,7 @@ class _SubmitButton extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text(
                     canSubmit
-                        ? '${context.l10n.tr('Record Payment')}  •  $amount $currency'
+                        ? '${context.l10n.tr('Record Payment')}  •  ${Currency.format(amount, currency)}'
                         : context.l10n.tr('Enter an amount to continue'),
                     style: const TextStyle(
                         fontSize: 15,
@@ -1210,7 +1211,7 @@ class _InstalmentScheduleCardState extends State<_InstalmentScheduleCard> {
                             ),
                             const SizedBox(width: 4),
                             Text(
-                              '${inst.amount} ${widget.subscription.currency}',
+                              Currency.format(inst.amount, widget.subscription.currency),
                               style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 13),
@@ -1277,7 +1278,7 @@ class _InstalmentScheduleCardState extends State<_InstalmentScheduleCard> {
                                     title: Text(
                                         context.l10n.tr('Mark as Paid')),
                                     content: Text(
-                                      '${context.l10n.tr('Confirm payment of')} ${inst.amount} ${widget.subscription.currency} ${context.l10n.tr('for instalment')} ${idx + 1}?',
+                                      '${context.l10n.tr('Confirm payment of')} ${Currency.format(inst.amount, widget.subscription.currency)} ${context.l10n.tr('for instalment')} ${idx + 1}?',
                                     ),
                                     actions: [
                                       TextButton(
@@ -1467,7 +1468,7 @@ class _PaymentHistory extends StatelessWidget {
                                     Colors.green.withValues(alpha: 0.25)),
                           ),
                           child: Text(
-                            '+${p.amount} ${subscription.currency}',
+                            '+${Currency.format(p.amount, subscription.currency)}',
                             style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w800,

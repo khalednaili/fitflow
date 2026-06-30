@@ -4,6 +4,7 @@ import '../../../l10n/app_localizations.dart';
 
 import '../../../models/membership_plan.dart';
 import '../../../services/subscription_service.dart';
+import '../../../utils/currency.dart';
 
 class _OfferTypeChoice {
   const _OfferTypeChoice({
@@ -548,7 +549,7 @@ class _OfferPlanCard extends StatelessWidget {
                   ),
                   // Price
                   Text(
-                    '${offer.price} ${offer.currency}',
+                    Currency.format(offer.price, offer.currency),
                     style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 18,
@@ -779,7 +780,7 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
           : null;
       final p = int.tryParse(_priceController.text.trim());
       _priceError = (p == null || p < 0)
-          ? context.l10n.tr('Enter a valid price (e.g. 29.99)')
+          ? context.l10n.tr('Enter a valid whole-number price (e.g. 30)')
           : null;
       if (_nameError != null ||
           _checkinsError != null ||
@@ -829,7 +830,7 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
           durationValue: durationValue,
           durationUnit: _durationUnit,
           price: price,
-          currency: 'TND',
+          currency: Currency.defaultCode,
         );
       } else {
         await _subscriptionService.createCheckinOffer(
@@ -843,7 +844,7 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
           durationValue: durationValue,
           durationUnit: _durationUnit,
           price: price,
-          currency: 'TND',
+          currency: Currency.defaultCode,
         );
       }
 
@@ -1191,7 +1192,7 @@ class _OfferEditorDialogState extends State<_OfferEditorDialog> {
                         labelText: l10n.tr('Price *'),
                         hintText: '0',
                         prefixIcon: const Icon(Icons.attach_money_outlined),
-                        suffixText: 'TND',
+                        suffixText: Currency.defaultCode,
                         errorText: _priceError,
                       ),
                     ),
@@ -1529,7 +1530,7 @@ class _LivePreviewCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '\$$displayPrice',
+                    displayPrice,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
@@ -1537,7 +1538,7 @@ class _LivePreviewCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'TND',
+                    Currency.defaultCode,
                     style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
                   ),
                 ],

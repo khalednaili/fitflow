@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:fit_flow/utils/crash_logger.dart';
+import 'package:fit_flow/utils/currency.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/app_user.dart';
 import '../../models/booking.dart';
@@ -137,7 +138,7 @@ class _ClassDetailsScreenState extends State<ClassDetailsScreen> {
         title: Text(context.l10n.tr('Drop-in Booking')),
         content: Text(
           '${context.l10n.tr("You'll be booked as a drop-in for")} ${widget.gymClass.title}. '
-          '${context.l10n.tr('The drop-in fee is')} €${price % 1 == 0 ? price.toInt() : price.toStringAsFixed(2)}. '
+          '${context.l10n.tr('The drop-in fee is')} ${Currency.format(price, null)}. '
           '${context.l10n.tr('Payment is collected at the front desk.')}',
         ),
         actions: [
@@ -164,7 +165,7 @@ class _ClassDetailsScreenState extends State<ClassDetailsScreen> {
       );
       if (!mounted) return;
       _snack(
-        '${context.l10n.tr('Booked as drop-in! Please pay')} €${price % 1 == 0 ? price.toInt() : price.toStringAsFixed(2)} ${context.l10n.tr('at the front desk.')}',
+        '${context.l10n.tr('Booked as drop-in! Please pay')} ${Currency.format(price, null)} ${context.l10n.tr('at the front desk.')}',
       );
     } catch (e, s) {
       await CrashLogger.log(e, s, reason: 'bookDropIn');
@@ -2013,8 +2014,7 @@ class _DropInBookButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final price = gymClass.dropInPrice;
-    final priceLabel =
-        '€${price % 1 == 0 ? price.toInt() : price.toStringAsFixed(2)}';
+    final priceLabel = Currency.format(price, null);
 
     return SizedBox(
       width: double.infinity,

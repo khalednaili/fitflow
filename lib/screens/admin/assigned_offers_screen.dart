@@ -6,6 +6,7 @@ import '../../models/membership_plan.dart';
 import '../../models/user_subscription.dart';
 import '../../services/member_service.dart';
 import '../../services/subscription_service.dart';
+import '../../utils/currency.dart';
 import '../../widgets/user_avatar.dart';
 import 'member_detail_screen.dart';
 import 'record_payment_screen.dart';
@@ -666,14 +667,14 @@ class _WideRow extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        '${sub.amountPaid} ${sub.currency}',
+                        Currency.format(sub.amountPaid, sub.currency),
                         style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                             color: Colors.green.shade700),
                       ),
                       Text(
-                        ' / ${sub.totalAmount} ${sub.currency}',
+                        ' / ${Currency.format(sub.totalAmount, sub.currency)}',
                         style:
                             TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
                       ),
@@ -908,7 +909,7 @@ class _NarrowCard extends StatelessWidget {
                         Row(
                           children: [
                             Text(
-                              '${context.l10n.tr('Paid')}: ${sub.amountPaid} ${sub.currency}',
+                              '${context.l10n.tr('Paid')}: ${Currency.format(sub.amountPaid, sub.currency)}',
                               style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
@@ -917,7 +918,7 @@ class _NarrowCard extends StatelessWidget {
                             if (sub.remainingAmount > 0) ...[
                               const SizedBox(width: 6),
                               Text(
-                                '${context.l10n.tr('Due')}: ${sub.remainingAmount} ${sub.currency}',
+                                '${context.l10n.tr('Due')}: ${Currency.format(sub.remainingAmount, sub.currency)}',
                                 style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,

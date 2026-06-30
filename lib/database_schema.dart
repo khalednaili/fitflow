@@ -211,9 +211,9 @@ abstract class AttendanceSchema {}
 /// | `billingCycle`    | `String`  | `'recurrent'` · `'one_time'`                                  |
 /// | `durationValue`   | `int`     | Positive duration quantity (e.g. `3`, `5`, `12`)              |
 /// | `durationUnit`    | `String`  | `'day'` · `'week'` · `'month'` · `'year'`                     |
-/// | `price`           | `int`     | Price in minor currency units (e.g. cents)                     |
+/// | `price`           | `int`     | Price in whole currency units (e.g. `50` = 50 TND, not cents)   |
 /// | `priceMonthly`    | `int`     | Alias for `price` — kept for backward compatibility            |
-/// | `currency`        | `String`  | ISO 4217 currency code (e.g. `'EUR'`, `'USD'`)                 |
+/// | `currency`        | `String`  | ISO 4217 currency code (default `'TND'`)                       |
 /// | `description`     | `String`  | Longer description shown to members                            |
 /// | `active`          | `bool`    | Only active plans are shown to members                         |
 /// | `stripePriceId`   | `String`  | Stripe Price ID (empty when Stripe is not used)                |
@@ -268,9 +268,9 @@ abstract class SubscriptionsSchema {}
 /// |------------------|-------------------|------------------------------------------------------|
 /// | `userId`         | `String`          | ref → `users/{id}`                                   |
 /// | `planId`         | `String`          | ref → `membership_plans/{id}`                        |
-/// | `totalAmount`    | `int`             | Full price in minor currency units                   |
-/// | `amountPaid`     | `int`             | Amount paid so far in minor currency units           |
-/// | `currency`       | `String`          | ISO 4217 currency code                               |
+/// | `totalAmount`    | `int`             | Full price in whole currency units (not cents)       |
+/// | `amountPaid`     | `int`             | Amount paid so far in whole currency units           |
+/// | `currency`       | `String`          | ISO 4217 currency code (default `'TND'`)             |
 /// | `status`         | `String`          | `'pending'` · `'completed'` · `'cancelled'`          |
 /// | `startDate`      | `Timestamp?`      | Subscription validity start                          |
 /// | `endDate`        | `Timestamp?`      | Subscription validity end (`null` = open-ended)      |
@@ -281,7 +281,7 @@ abstract class SubscriptionsSchema {}
 ///
 /// | Field    | Type        | Description                                          |
 /// |----------|-------------|------------------------------------------------------|
-/// | `amount` | `int`       | Payment amount in minor currency units               |
+/// | `amount` | `int`       | Payment amount in whole currency units               |
 /// | `date`   | `Timestamp` | Date the payment was recorded                        |
 /// | `method` | `String`    | `'cash'` · `'card'` · `'transfer'` · …              |
 /// | `notes`  | `String`    | Optional free-text note                              |

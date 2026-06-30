@@ -346,6 +346,18 @@ class BookingService {
         (classData['endTime'] as Timestamp?)?.toDate() ??
             classStartTime.add(const Duration(hours: 1));
     final classTypeId = (classData['classTypeId'] ?? '') as String;
+    final dropInPrice = ((classData['dropInPrice'] ?? 0) as num).toDouble();
+
+    // ── Drop-in gate (server-side, not just UI) ───────────────────────────────
+    if (isDropIn) {
+      final dropInEnabled = (classData['dropInEnabled'] ?? false) as bool;
+      if (!dropInEnabled) {
+        throw Exception('This class does not allow drop-in bookings.');
+      }
+      if (dropInPrice <= 0) {
+        throw Exception('This class has no drop-in price set.');
+      }
+    }
 
     bool hasAnyValidAssignedOffer = false;
     for (final doc in userSubscriptionsQuery.docs) {
@@ -453,8 +465,9 @@ class BookingService {
     }
 
     // ── Overlapping time-slot check ───────────────────────────────────────────
-    if (!isDropIn &&
-        (rules['preventOverlappingBookings'] ?? false) as bool) {
+    // Applies to drop-ins too: attending two overlapping classes is physically
+    // impossible regardless of how the booking was paid for.
+    if ((rules['preventOverlappingBookings'] ?? false) as bool) {
       for (final doc in allBookingsSnap.docs) {
         final data = doc.data();
         final existingStart =
@@ -698,6 +711,7 @@ class BookingService {
           'memberName': memberName,
           'isDropIn': isDropIn,
           'dropInPaymentStatus': dropInPaymentStatus,
+          'dropInPrice': isDropIn ? dropInPrice : 0.0,
           'usedPlanId': usedPlanId,
           'classStartTime': Timestamp.fromDate(classStartTime),
           'classEndTime': Timestamp.fromDate(classEndTime),
@@ -720,6 +734,13 @@ class BookingService {
         'gymId': gymId,
         'createdAt': Timestamp.now(),
         'memberName': memberName,
+        // Preserve drop-in intent so a promotion doesn't silently turn a paid
+        // drop-in into a free regular booking.
+        if (isDropIn) ...{
+          'isDropIn': true,
+          'dropInPaymentStatus': dropInPaymentStatus,
+          'dropInPrice': dropInPrice,
+        },
       });
 
       transaction.update(classRef, <String, dynamic>{
@@ -757,6 +778,13 @@ class BookingService {
       throw Exception('No active booking found for this class.');
     }
     final bookingDocRef = bookingQuery.docs.first.reference;
+    final cancelledBooking = bookingQuery.docs.first.data();
+    // A paid drop-in that is cancelled needs a refund trail: the booking is
+    // deleted (freeing the spot), so without this record the money collected at
+    // the desk would have no reversal reference.
+    final needsRefundTrace =
+        (cancelledBooking['isDropIn'] ?? false) as bool &&
+            (cancelledBooking['dropInPaymentStatus'] ?? '') == 'paid';
 
     // Read class data for start time + title (needed for late-cancel check)
     final classSnapshot = await classRef.get();
@@ -802,6 +830,20 @@ class BookingService {
 
       transaction.delete(bookingDocRef);
 
+      if (needsRefundTrace) {
+        final refundRef = _firestore.collection('dropInRefunds').doc();
+        transaction.set(refundRef, <String, dynamic>{
+          'bookingId': bookingDocRef.id,
+          'userId': userId,
+          'classId': classId,
+          'gymId': gymId,
+          'memberName': (cancelledBooking['memberName'] ?? '') as String,
+          'amount': ((cancelledBooking['dropInPrice'] ?? 0) as num).toDouble(),
+          'status': 'pending', // pending → processed (refund issued at desk)
+          'createdAt': Timestamp.now(),
+        });
+      }
+
       if (firstWaitlistDoc != null) {
         final data = firstWaitlistDoc.data() as Map<String, dynamic>? ?? {};
         final waitlistUserId = (data['userId'] ?? '') as String;
@@ -815,6 +857,7 @@ class BookingService {
             'gymId': gymId,
             'createdAt': Timestamp.now(),
             'memberName': waitlistMemberName,
+            ..._promotedDropInFields(data),
           });
           transaction.delete(firstWaitlistDoc.reference);
 
@@ -1139,6 +1182,7 @@ class BookingService {
         'gymId': gymId,
         'memberName': memberName,
         'createdAt': Timestamp.now(),
+        ..._promotedDropInFields(entrySnap.data() ?? <String, dynamic>{}),
       });
       promotedClassTitle = (data['title'] ?? 'the class') as String;
     });
@@ -1350,9 +1394,30 @@ class BookingService {
     return {'status': 'success', 'classTitle': classTitle};
   }
 
+  /// Drop-in fields carried from a waitlist entry onto the booking created when
+  /// that entry is promoted. Returns an empty map for non-drop-in entries so a
+  /// regular promotion is unaffected.
+  Map<String, dynamic> _promotedDropInFields(Map<String, dynamic> entryData) {
+    final isDropIn = (entryData['isDropIn'] ?? false) as bool;
+    if (!isDropIn) return const <String, dynamic>{};
+    return <String, dynamic>{
+      'isDropIn': true,
+      'dropInPaymentStatus':
+          (entryData['dropInPaymentStatus'] ?? 'pending') as String,
+      'dropInPrice': ((entryData['dropInPrice'] ?? 0) as num).toDouble(),
+    };
+  }
+
   Future<void> markDropInPaid(String bookingId) async {
-    await _firestore.collection('bookings').doc(bookingId).update({
-      'dropInPaymentStatus': 'paid',
+    final bookingRef = _firestore.collection('bookings').doc(bookingId);
+    await _firestore.runTransaction((tx) async {
+      final snap = await tx.get(bookingRef);
+      if (!snap.exists) throw Exception('Booking not found.');
+      final isDropIn = (snap.data()?['isDropIn'] ?? false) as bool;
+      if (!isDropIn) {
+        throw Exception('This booking is not a drop-in.');
+      }
+      tx.update(bookingRef, {'dropInPaymentStatus': 'paid'});
     });
   }
 
@@ -1370,6 +1435,14 @@ class BookingService {
       final classSnap = await transaction.get(classRef);
       if (!classSnap.exists) throw Exception('Class not found.');
       final data = classSnap.data()!;
+      final dropInEnabled = (data['dropInEnabled'] ?? false) as bool;
+      final dropInPrice = ((data['dropInPrice'] ?? 0) as num).toDouble();
+      if (!dropInEnabled) {
+        throw Exception('This class does not allow drop-in bookings.');
+      }
+      if (dropInPrice <= 0) {
+        throw Exception('This class has no drop-in price set.');
+      }
       final booked = (data['bookedCount'] ?? 0) as int;
       final capacity = (data['capacity'] ?? 0) as int;
       if (booked >= capacity) throw Exception('This class is full.');
@@ -1387,6 +1460,7 @@ class BookingService {
         'guestEmail': guestEmail.trim().toLowerCase(),
         'isDropIn': true,
         'dropInPaymentStatus': dropInPaymentStatus,
+        'dropInPrice': dropInPrice,
         'checkedIn': false,
       });
     });
@@ -1598,6 +1672,7 @@ class BookingService {
         'gymId': gymId,
         'memberName': memberName,
         'createdAt': Timestamp.now(),
+        ..._promotedDropInFields(entrySnap.data() ?? <String, dynamic>{}),
       });
       promotedClassTitle = (data['title'] ?? 'the class') as String;
     });

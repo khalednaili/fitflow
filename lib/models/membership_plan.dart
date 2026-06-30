@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../utils/currency.dart';
+
 class MembershipPlan {
   const MembershipPlan({
     required this.id,
@@ -115,7 +117,7 @@ class MembershipPlan {
       durationUnit: (data['durationUnit'] ?? 'month') as String,
       price: (data['price'] ?? data['priceMonthly'] ?? 0) as int,
       priceMonthly: (data['priceMonthly'] ?? 0) as int,
-      currency: (data['currency'] ?? 'TND') as String,
+      currency: (data['currency'] ?? Currency.defaultCode) as String,
       description: (data['description'] ?? '') as String,
       active: (data['active'] ?? true) as bool,
       stripePriceId: (data['stripePriceId'] ?? '') as String,

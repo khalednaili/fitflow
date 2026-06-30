@@ -6,6 +6,7 @@ import '../../models/invoice.dart';
 import '../../services/billing_service.dart';
 import '../../services/invoice_pdf_service.dart';
 import '../../utils/crash_logger.dart';
+import '../../utils/currency.dart';
 
 /// Full-screen invoice view — looks like a printed invoice.
 /// Supports recording payments, changing status, and exporting to PDF.
@@ -629,7 +630,7 @@ class _EditItemsSheetState extends State<_EditItemsSheet> {
                           style: const TextStyle(fontWeight: FontWeight.w700)),
                       const Spacer(),
                       Text(
-                        '$currency $total',
+                        Currency.format(total, currency),
                         style: const TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 16,
@@ -726,7 +727,7 @@ class _EditItemRow extends StatelessWidget {
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
               hintText: l10n.tr('Amount'),
-              prefixText: '$currency ',
+              prefixText: '${Currency.normalize(currency)} ',
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -945,7 +946,7 @@ class _ItemsTable extends StatelessWidget {
                         style: const TextStyle(fontSize: 13)),
                   ),
                   Text(
-                    '${item.currency} ${item.amount}',
+                    Currency.format(item.amount, item.currency),
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 13),
                   ),
@@ -1085,7 +1086,7 @@ class _PaymentRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '$currency ${payment.amount}',
+                Currency.format(payment.amount, currency),
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
               ),
               Text(
@@ -1164,7 +1165,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
     }
     if (amount > widget.invoice.remainingAmount) {
       setState(() => _error =
-          l10n.tr('Amount exceeds balance due (${widget.invoice.currency} ${widget.invoice.remainingAmount})'));
+          l10n.tr('Amount exceeds balance due (${Currency.format(widget.invoice.remainingAmount, widget.invoice.currency)})'));
       return;
     }
 
@@ -1239,7 +1240,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
                           style: const TextStyle(
                               fontSize: 16, fontWeight: FontWeight.w800)),
                       Text(
-                        '${l10n.tr('Balance due')}: $currency $remaining',
+                        '${l10n.tr('Balance due')}: ${Currency.format(remaining, currency)}',
                         style: TextStyle(
                             fontSize: 12, color: Colors.grey.shade500),
                       ),
@@ -1272,7 +1273,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
                   autofocus: true,
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
-                    prefixText: '$currency ',
+                    prefixText: '${Currency.normalize(currency)} ',
                     hintText: remaining.toString(),
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10)),
@@ -1291,7 +1292,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
                   child: Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: ActionChip(
-                      label: Text(l10n.tr('Pay in full ($currency $remaining)')),
+                      label: Text(l10n.tr('Pay in full (${Currency.format(remaining, currency)})')),
                       avatar: const Icon(Icons.check_circle_outline, size: 16),
                       onPressed: () =>
                           setState(() => _amountCtrl.text = remaining.toString()),

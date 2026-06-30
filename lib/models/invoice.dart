@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../utils/currency.dart';
+
 /// A single line-item on an invoice (e.g. one membership plan).
 class InvoiceItem {
   const InvoiceItem({
@@ -22,7 +24,7 @@ class InvoiceItem {
   factory InvoiceItem.fromMap(Map<String, dynamic> map) => InvoiceItem(
         description: (map['description'] ?? '') as String,
         amount: (map['amount'] ?? 0) as int,
-        currency: (map['currency'] ?? 'EUR') as String,
+        currency: (map['currency'] ?? Currency.defaultCode) as String,
         taxRate: (map['taxRate'] ?? 0) as int,
       );
 
@@ -104,7 +106,7 @@ class Invoice {
   final String planName;
   final String currency;
 
-  /// Final billed amount (subtotal + tax − discount), in the smallest currency unit.
+  /// Final billed amount (subtotal + tax − discount), in whole currency units.
   final int totalAmount;
   final int amountPaid;
 
@@ -170,7 +172,7 @@ class Invoice {
       memberPhone: (data['memberPhone'] ?? '') as String,
       subscriptionId: (data['subscriptionId'] ?? '') as String,
       planName: (data['planName'] ?? '') as String,
-      currency: (data['currency'] ?? 'EUR') as String,
+      currency: (data['currency'] ?? Currency.defaultCode) as String,
       totalAmount: (data['totalAmount'] ?? 0) as int,
       amountPaid: (data['amountPaid'] ?? 0) as int,
       taxAmount: (data['taxAmount'] ?? 0) as int,

@@ -50,6 +50,8 @@ extension _Setup on FakeFirebaseFirestore {
     int bookedCount = 0,
     int waitlistCount = 0,
     String classTypeId = '',
+    bool dropInEnabled = false,
+    double dropInPrice = 0.0,
   }) =>
       collection('classes').doc(classId).set({
         'title': classId,
@@ -63,6 +65,8 @@ extension _Setup on FakeFirebaseFirestore {
         if (legacyRequiredOfferPlanId.isNotEmpty)
           'requiredOfferPlanId': legacyRequiredOfferPlanId,
         if (classTypeId.isNotEmpty) 'classTypeId': classTypeId,
+        'dropInEnabled': dropInEnabled,
+        'dropInPrice': dropInPrice,
       });
 
   Future<void> createUser({
@@ -103,12 +107,14 @@ extension _Setup on FakeFirebaseFirestore {
         'currency': 'EUR',
       });
 
-  Future<void> createBookingDoc({
+  Future<DocumentReference<Map<String, dynamic>>> createBookingDoc({
     required String userId,
     required String classId,
     required DateTime bookingDate,
     String usedPlanId = '',
     bool isDropIn = false,
+    String dropInPaymentStatus = 'pending',
+    double dropInPrice = 0.0,
     DateTime? classStartTime,
     DateTime? classEndTime,
     String classTypeId = '',
@@ -122,7 +128,8 @@ extension _Setup on FakeFirebaseFirestore {
             DateTime(bookingDate.year, bookingDate.month, bookingDate.day)),
         'memberName': 'Test User',
         'isDropIn': isDropIn,
-        'dropInPaymentStatus': 'pending',
+        'dropInPaymentStatus': dropInPaymentStatus,
+        'dropInPrice': dropInPrice,
         'usedPlanId': usedPlanId,
         if (classStartTime != null)
           'classStartTime': Timestamp.fromDate(classStartTime),
@@ -135,6 +142,9 @@ extension _Setup on FakeFirebaseFirestore {
     required String userId,
     required String classId,
     DateTime? createdAt,
+    bool isDropIn = false,
+    String dropInPaymentStatus = 'pending',
+    double dropInPrice = 0.0,
   }) =>
       collection('waitlists').add({
         'userId': userId,
@@ -144,6 +154,11 @@ extension _Setup on FakeFirebaseFirestore {
             ? Timestamp.fromDate(createdAt)
             : Timestamp.now(),
         'memberName': 'Test User',
+        if (isDropIn) ...{
+          'isDropIn': true,
+          'dropInPaymentStatus': dropInPaymentStatus,
+          'dropInPrice': dropInPrice,
+        },
       });
 
   Future<void> setBookingRules({
@@ -767,7 +782,9 @@ void main() {
       await db.createClass(
           classId: classId,
           startTime: _futureClass,
-          requiredOfferPlanIds: ['some_exclusive_plan']);
+          requiredOfferPlanIds: ['some_exclusive_plan'],
+          dropInEnabled: true,
+          dropInPrice: 15.0);
     });
 
     test('drop-in bypasses offer requirement — no subscription needed',
@@ -797,6 +814,80 @@ void main() {
       expect(snap.docs.first.data()['isDropIn'], isTrue);
       expect(snap.docs.first.data()['usedPlanId'], '');
       expect(snap.docs.first.data()['dropInPaymentStatus'], 'paid');
+    });
+
+    test('drop-in booking snapshots the class price onto the booking',
+        () async {
+      await sut.bookClass(
+          userId: userId,
+          classId: classId,
+          isDropIn: true,
+          bypassDailyLimit: true);
+      final snap = await db
+          .collection('bookings')
+          .where('userId', isEqualTo: userId)
+          .where('classId', isEqualTo: classId)
+          .get();
+      expect((snap.docs.first.data()['dropInPrice'] as num).toDouble(), 15.0);
+    });
+
+    test('drop-in is rejected when the class has drop-ins disabled', () async {
+      await db.createClass(
+          classId: 'no_dropin',
+          startTime: _futureClass,
+          dropInEnabled: false,
+          dropInPrice: 15.0);
+      await expectLater(
+        sut.bookClass(
+            userId: userId,
+            classId: 'no_dropin',
+            isDropIn: true,
+            bypassDailyLimit: true),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('drop-in is rejected when the class has no price set', () async {
+      await db.createClass(
+          classId: 'free_dropin',
+          startTime: _futureClass,
+          dropInEnabled: true,
+          dropInPrice: 0.0);
+      await expectLater(
+        sut.bookClass(
+            userId: userId,
+            classId: 'free_dropin',
+            isDropIn: true,
+            bypassDailyLimit: true),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('drop-in into a full class waitlists and preserves drop-in fields',
+        () async {
+      await db.createClass(
+          classId: 'full_dropin',
+          startTime: _futureClass,
+          capacity: 1,
+          bookedCount: 1,
+          dropInEnabled: true,
+          dropInPrice: 15.0);
+
+      final result = await sut.bookClass(
+          userId: userId,
+          classId: 'full_dropin',
+          isDropIn: true,
+          bypassDailyLimit: true);
+      expect(result, BookingResult.waitlisted);
+
+      final wl = await db
+          .collection('waitlists')
+          .where('userId', isEqualTo: userId)
+          .where('classId', isEqualTo: 'full_dropin')
+          .get();
+      expect(wl.docs, hasLength(1));
+      expect(wl.docs.first.data()['isDropIn'], isTrue);
+      expect((wl.docs.first.data()['dropInPrice'] as num).toDouble(), 15.0);
     });
   });
 
@@ -925,6 +1016,69 @@ void main() {
           await db.collection('late_cancellations').get();
       expect(penalties.docs, isEmpty);
     });
+
+    test('cancelling a PAID drop-in records a refund trace', () async {
+      await db.createClass(
+          classId: classId,
+          startTime: _futureClass,
+          capacity: 10,
+          bookedCount: 1);
+      await db.createBookingDoc(
+        userId: userId,
+        classId: classId,
+        bookingDate: _futureClass,
+        isDropIn: true,
+        dropInPaymentStatus: 'paid',
+        dropInPrice: 15.0,
+      );
+
+      await sut.cancelBooking(userId: userId, classId: classId);
+
+      final refunds = await db.collection('dropInRefunds').get();
+      expect(refunds.docs, hasLength(1));
+      final r = refunds.docs.first.data();
+      expect(r['userId'], userId);
+      expect(r['classId'], classId);
+      expect((r['amount'] as num).toDouble(), 15.0);
+      expect(r['status'], 'pending');
+    });
+
+    test('cancelling an UNPAID drop-in records no refund', () async {
+      await db.createClass(
+          classId: classId,
+          startTime: _futureClass,
+          capacity: 10,
+          bookedCount: 1);
+      await db.createBookingDoc(
+        userId: userId,
+        classId: classId,
+        bookingDate: _futureClass,
+        isDropIn: true,
+        dropInPaymentStatus: 'pending',
+        dropInPrice: 15.0,
+      );
+
+      await sut.cancelBooking(userId: userId, classId: classId);
+
+      final refunds = await db.collection('dropInRefunds').get();
+      expect(refunds.docs, isEmpty);
+    });
+
+    test('cancelling a regular (non-drop-in) booking records no refund',
+        () async {
+      await db.createClass(
+          classId: classId,
+          startTime: _futureClass,
+          capacity: 10,
+          bookedCount: 1);
+      await db.createBookingDoc(
+          userId: userId, classId: classId, bookingDate: _futureClass);
+
+      await sut.cancelBooking(userId: userId, classId: classId);
+
+      final refunds = await db.collection('dropInRefunds').get();
+      expect(refunds.docs, isEmpty);
+    });
   });
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -984,6 +1138,39 @@ void main() {
           await db.collection('classes').doc(classId).get();
       expect(classSnap.data()!['bookedCount'], 1);
       expect(classSnap.data()!['waitlistCount'], 0);
+    });
+
+    test('promoting a drop-in waitlister preserves its drop-in fields',
+        () async {
+      await db.createClass(
+          classId: classId,
+          startTime: _futureClass,
+          capacity: 1,
+          bookedCount: 1,
+          waitlistCount: 1);
+      await db.createBookingDoc(
+          userId: booker, classId: classId, bookingDate: _futureClass);
+      await db.createWaitlistEntry(
+        userId: waiter,
+        classId: classId,
+        isDropIn: true,
+        dropInPaymentStatus: 'pending',
+        dropInPrice: 15.0,
+      );
+
+      await sut.cancelBooking(userId: booker, classId: classId);
+
+      final waiterBookings = await db
+          .collection('bookings')
+          .where('userId', isEqualTo: waiter)
+          .where('classId', isEqualTo: classId)
+          .get();
+      expect(waiterBookings.docs, hasLength(1));
+      final b = waiterBookings.docs.first.data();
+      // Without the fix this would default to a free regular booking.
+      expect(b['isDropIn'], isTrue);
+      expect(b['dropInPaymentStatus'], 'pending');
+      expect((b['dropInPrice'] as num).toDouble(), 15.0);
     });
 
     test('when multiple waitlisters exist, the earliest-joined is promoted',
@@ -1102,6 +1289,40 @@ void main() {
   // ══════════════════════════════════════════════════════════════════════════
   // 15. PREVENT OVERLAPPING BOOKINGS
   // ══════════════════════════════════════════════════════════════════════════
+  group('14b • promoteFirstWaitlisted preserves drop-in fields', () {
+    test('admin promotion of a drop-in waitlister keeps the drop-in fields',
+        () async {
+      const classId = 'class_promo_dropin';
+      const waiter = 'u14b';
+      await db.createUser(userId: waiter);
+      await db.createClass(
+          classId: classId,
+          startTime: _futureClass,
+          capacity: 1,
+          bookedCount: 0,
+          waitlistCount: 1);
+      await db.createWaitlistEntry(
+        userId: waiter,
+        classId: classId,
+        isDropIn: true,
+        dropInPaymentStatus: 'pending',
+        dropInPrice: 20.0,
+      );
+
+      await sut.promoteFirstWaitlisted(classId);
+
+      final bookings = await db
+          .collection('bookings')
+          .where('userId', isEqualTo: waiter)
+          .where('classId', isEqualTo: classId)
+          .get();
+      expect(bookings.docs, hasLength(1));
+      final b = bookings.docs.first.data();
+      expect(b['isDropIn'], isTrue);
+      expect((b['dropInPrice'] as num).toDouble(), 20.0);
+    });
+  });
+
   group('15 • prevent overlapping bookings', () {
     const userId = 'u15';
 
@@ -1251,6 +1472,84 @@ void main() {
           bypassDailyLimit: true,
         ),
         completes,
+      );
+    });
+
+    test('overlap rule also blocks a drop-in booking', () async {
+      final base = _tomorrow.copyWith(
+          hour: 10, minute: 0, second: 0, microsecond: 0, millisecond: 0);
+      final existStart = base;
+      final existEnd = base.add(const Duration(hours: 1)); // 10:00–11:00
+
+      await db.createBookingDoc(
+        userId: userId,
+        classId: 'existing_class15e',
+        bookingDate: existStart,
+        classStartTime: existStart,
+        classEndTime: existEnd,
+      );
+
+      // Overlapping class, drop-in enabled and priced.
+      final newStart = base.add(const Duration(minutes: 30));
+      await db.createClass(
+        classId: 'class15e',
+        startTime: newStart,
+        endTime: newStart.add(const Duration(hours: 1)),
+        capacity: 10,
+        dropInEnabled: true,
+        dropInPrice: 15.0,
+      );
+      await db.setBookingRules(preventOverlappingBookings: true);
+
+      await expectLater(
+        sut.bookClass(
+          userId: userId,
+          classId: 'class15e',
+          isDropIn: true,
+          bypassDailyLimit: true,
+        ),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(),
+          'message',
+          contains('time slot'),
+        )),
+      );
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 15b. MARK DROP-IN PAID
+  // ══════════════════════════════════════════════════════════════════════════
+  group('15b • markDropInPaid', () {
+    test('marks an existing drop-in booking as paid', () async {
+      final ref = await db.createBookingDoc(
+        userId: 'u1',
+        classId: 'c1',
+        bookingDate: DateTime(2026, 6, 1),
+        isDropIn: true,
+      );
+      await sut.markDropInPaid(ref.id);
+      final snap = await db.collection('bookings').doc(ref.id).get();
+      expect(snap.data()!['dropInPaymentStatus'], 'paid');
+    });
+
+    test('throws when the booking does not exist', () async {
+      await expectLater(
+        sut.markDropInPaid('missing'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('throws when the booking is not a drop-in', () async {
+      final ref = await db.createBookingDoc(
+        userId: 'u1',
+        classId: 'c1',
+        bookingDate: DateTime(2026, 6, 1),
+        isDropIn: false,
+      );
+      await expectLater(
+        sut.markDropInPaid(ref.id),
+        throwsA(isA<Exception>()),
       );
     });
   });

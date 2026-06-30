@@ -1,0 +1,104 @@
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:fit_flow/utils/currency.dart';
+
+void main() {
+  group('Currency.defaultCode', () {
+    test('is TND (matches the documented schema default)', () {
+      expect(Currency.defaultCode, 'TND');
+    });
+  });
+
+  group('Currency.normalize', () {
+    test('returns the default for null', () {
+      expect(Currency.normalize(null), 'TND');
+    });
+
+    test('returns the default for empty or whitespace', () {
+      expect(Currency.normalize(''), 'TND');
+      expect(Currency.normalize('   '), 'TND');
+    });
+
+    test('upper-cases and trims a provided code', () {
+      expect(Currency.normalize('  eur '), 'EUR');
+    });
+
+    test('leaves a valid code untouched', () {
+      expect(Currency.normalize('USD'), 'USD');
+    });
+  });
+
+  group('Currency.symbol', () {
+    test('maps known codes to their symbol', () {
+      expect(Currency.symbol('EUR'), '€');
+      expect(Currency.symbol('USD'), '\$');
+      expect(Currency.symbol('GBP'), '£');
+    });
+
+    test('falls back to the code for unknown currencies', () {
+      expect(Currency.symbol('TND'), 'TND');
+      expect(Currency.symbol('JPY'), 'JPY');
+    });
+
+    test('falls back to the default code for empty input', () {
+      expect(Currency.symbol(''), 'TND');
+      expect(Currency.symbol(null), 'TND');
+    });
+  });
+
+  group('Currency.formatAmount', () {
+    test('drops decimals for whole numbers', () {
+      expect(Currency.formatAmount(50), '50');
+      expect(Currency.formatAmount(50.0), '50');
+    });
+
+    test('keeps two decimals for fractional values', () {
+      expect(Currency.formatAmount(50.5), '50.50');
+      expect(Currency.formatAmount(29.99), '29.99');
+    });
+
+    test('handles zero', () {
+      expect(Currency.formatAmount(0), '0');
+    });
+
+    test('formats negative amounts (e.g. overpaid balances)', () {
+      expect(Currency.formatAmount(-400), '-400');
+      expect(Currency.formatAmount(-12.5), '-12.50');
+    });
+  });
+
+  group('Currency.format', () {
+    test('appends the code, amount first', () {
+      expect(Currency.format(50, 'TND'), '50 TND');
+      expect(Currency.format(50, 'EUR'), '50 EUR');
+    });
+
+    test('uses the default code when none is given', () {
+      expect(Currency.format(50, null), '50 TND');
+      expect(Currency.format(50, ''), '50 TND');
+    });
+
+    test('formats fractional amounts', () {
+      expect(Currency.format(12.5, 'USD'), '12.50 USD');
+    });
+
+    test('formats a negative balance with its code', () {
+      expect(Currency.format(-400, 'TND'), '-400 TND');
+    });
+  });
+
+  group('Currency.formatSymbol', () {
+    test('prefixes a known symbol', () {
+      expect(Currency.formatSymbol(50, 'EUR'), '€50');
+      expect(Currency.formatSymbol(12.5, 'USD'), '\$12.50');
+    });
+
+    test('prefixes the code when no symbol is known', () {
+      expect(Currency.formatSymbol(50, 'TND'), 'TND50');
+    });
+
+    test('uses the default for empty input', () {
+      expect(Currency.formatSymbol(50, null), 'TND50');
+    });
+  });
+}

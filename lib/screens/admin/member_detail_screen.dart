@@ -9,6 +9,7 @@ import '../../models/booking.dart';
 import '../../models/invoice.dart';
 import '../../models/membership_plan.dart';
 import '../../models/user_subscription.dart';
+import '../../utils/currency.dart';
 import '../../services/billing_service.dart';
 import '../../services/booking_service.dart';
 import '../../services/member_service.dart';
@@ -1432,12 +1433,12 @@ class _SubscriptionTileState extends State<_SubscriptionTile> {
                       children: [
                         _SubStat(
                             label: 'Paid',
-                            value: '${sub.amountPaid} ${sub.currency}',
+                            value: Currency.format(sub.amountPaid, sub.currency),
                             color: Colors.green.shade600),
                         const SizedBox(height: 2),
                         _SubStat(
                             label: 'Remaining',
-                            value: '${sub.remainingAmount} ${sub.currency}',
+                            value: Currency.format(sub.remainingAmount, sub.currency),
                             color: sub.remainingAmount > 0
                                 ? Colors.orange.shade600
                                 : Colors.green.shade600),
@@ -3703,13 +3704,13 @@ class _MemberInvoiceCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${invoice.currency} ${invoice.totalAmount.toStringAsFixed(0)}',
+                    Currency.format(invoice.totalAmount, invoice.currency),
                     style: const TextStyle(
                         fontWeight: FontWeight.w800, fontSize: 14),
                   ),
                   if (outstanding > 0)
                     Text(
-                      '${context.l10n.tr('Due')}: ${invoice.currency} ${outstanding.toStringAsFixed(0)}',
+                      '${context.l10n.tr('Due')}: ${Currency.format(outstanding, invoice.currency)}',
                       style:
                           TextStyle(fontSize: 11, color: Colors.orange.shade600),
                     ),

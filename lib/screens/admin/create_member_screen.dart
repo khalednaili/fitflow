@@ -6,6 +6,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/membership_plan.dart';
 import '../../services/member_service.dart';
 import '../../services/subscription_service.dart';
+import '../../utils/currency.dart';
 import '../../widgets/role_widgets.dart';
 
 class CreateMemberScreen extends StatefulWidget {
@@ -903,7 +904,7 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
                         ),
                         Text(
                           _assignOffer && _selectedPlan != null
-                              ? '${_selectedPlan!.name}  ·  ${_selectedPlan!.price} ${_selectedPlan!.currency}'
+                              ? '${_selectedPlan!.name}  ·  ${Currency.format(_selectedPlan!.price, _selectedPlan!.currency)}'
                               : context.l10n.tr('Optional — enroll member in a plan right away'),
                           style: TextStyle(
                             fontSize: 11,
@@ -1035,7 +1036,7 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
                                               suffixText:
                                                   _selectedPlan?.currency ?? '',
                                               helperText:
-                                                  '${context.l10n.tr('Total')}: ${_selectedPlan?.price ?? 0} ${_selectedPlan?.currency ?? ''}',
+                                                  '${context.l10n.tr('Total')}: ${Currency.format(_selectedPlan?.price ?? 0, _selectedPlan?.currency)}',
                                             ),
                                           ),
                                         ),
@@ -1384,7 +1385,7 @@ class _PlanCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              '${plan.price} ${plan.currency}',
+              Currency.format(plan.price, plan.currency),
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,

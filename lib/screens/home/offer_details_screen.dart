@@ -8,6 +8,7 @@ import '../../models/membership_plan.dart';
 import '../../models/user_subscription.dart';
 import '../../services/booking_service.dart';
 import '../../l10n/app_localizations.dart';
+import '../../utils/currency.dart';
 
 // ── helpers (same as my_offers_screen) ───────────────────────────────────────
 
@@ -592,7 +593,7 @@ class _PaymentRow extends StatelessWidget {
       children: [
         Text(label, style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
         Text(
-          '$amount $currency',
+          Currency.format(amount, currency),
           style: TextStyle(
               fontSize: 14,
               fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
@@ -662,7 +663,7 @@ class _PaymentTimeline extends StatelessWidget {
                       Row(
                         children: [
                           Text(
-                            '${p.amount} ${subscription.currency}',
+                            Currency.format(p.amount, subscription.currency),
                             style: TextStyle(
                                 fontWeight: FontWeight.w700, fontSize: 15),
                           ),

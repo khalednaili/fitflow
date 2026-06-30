@@ -482,6 +482,9 @@ class AppLocalizations {
     'guest@example.com': 'guest@example.com',
     'Select a member': 'Select a member',
     'Drop-in fee': 'Drop-in fee',
+    'Drop-in Price': 'Drop-in Price',
+    'Drop-in price must be greater than 0':
+        'Drop-in price must be greater than 0',
     'Payment collected at desk': 'Payment collected at desk',
     'Book Drop-in': 'Book Drop-in',
     'Member created.': 'Member created.',
@@ -1509,6 +1512,9 @@ class AppLocalizations {
     'guest@example.com': 'invité@exemple.com',
     'Select a member': 'Sélectionnez un membre',
     'Drop-in fee': 'Tarif drop-in',
+    'Drop-in Price': 'Prix du drop-in',
+    'Drop-in price must be greater than 0':
+        'Le prix du drop-in doit être supérieur à 0',
     'Payment collected at desk': 'Paiement encaissé au comptoir',
     'Book Drop-in': 'Réserver un drop-in',
     'Member created.': 'Membre créé.',

@@ -6,6 +6,7 @@ import '../../models/app_user.dart';
 import '../../models/membership_plan.dart';
 import '../../services/member_service.dart';
 import '../../services/subscription_service.dart';
+import '../../utils/currency.dart';
 import 'member_detail_screen.dart';
 
 /// Admin screen — shows all pending (unpaid) instalments across every member,
@@ -452,7 +453,7 @@ class _SummaryChip extends StatelessWidget {
                   Text(
                     count == 0
                         ? context.l10n.tr('None')
-                        : '$count  ·  $amount $currency',
+                        : '$count  ·  ${Currency.format(amount, currency)}',
                     style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w800,
@@ -788,7 +789,7 @@ class _InstalmentTileState extends State<_InstalmentTile> {
                                 widget.statusColor.withValues(alpha: 0.25)),
                       ),
                       child: Text(
-                        '${inst.amount} ${sub.currency}',
+                        Currency.format(inst.amount, sub.currency),
                         style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w900,
@@ -968,7 +969,7 @@ class _InstalmentTileState extends State<_InstalmentTile> {
             ),
             _ConfirmRow(
               label: context.l10n.tr('Amount'),
-              value: '${inst.amount} ${sub.currency}',
+              value: Currency.format(inst.amount, sub.currency),
               bold: true,
             ),
             _ConfirmRow(
@@ -1176,7 +1177,7 @@ class _EditInstalmentSheetState extends State<_EditInstalmentSheet> {
                             style: const TextStyle(
                                 fontSize: 16, fontWeight: FontWeight.w800)),
                         Text(
-                          '${inst.amount} ${sub.currency}  ·  ${fmt.format(inst.dueDate)}',
+                          '${Currency.format(inst.amount, sub.currency)}  ·  ${fmt.format(inst.dueDate)}',
                           style: TextStyle(
                               fontSize: 12, color: cs.onSurfaceVariant),
                         ),

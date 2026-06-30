@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/membership_plan.dart';
 import '../../services/subscription_service.dart';
+import '../../utils/currency.dart';
 
 class MembershipScreen extends StatefulWidget {
   const MembershipScreen({super.key, this.gymId = ''});
@@ -319,7 +320,7 @@ class _PlanCardState extends State<_PlanCard> {
                   ),
                   SizedBox(width: 4),
                   Text(
-                    '${plan.currency}$billingSuffix',
+                    '${Currency.normalize(plan.currency)}$billingSuffix',
                     style: TextStyle(
                       fontSize: 14,
                       color: cs.onSurfaceVariant,

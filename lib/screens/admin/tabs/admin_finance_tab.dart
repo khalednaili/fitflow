@@ -8,6 +8,7 @@ import '../../../models/user_subscription.dart';
 import '../../../services/billing_service.dart';
 import '../../../services/member_service.dart';
 import '../../../services/subscription_service.dart';
+import '../../../utils/currency.dart';
 import '../member_detail_screen.dart';
 
 // ─────────────────────────────────────────────
@@ -419,21 +420,21 @@ class _KpiRow extends StatelessWidget {
             final cards = [
               _KpiCard(
                 label: 'Revenue Today',
-                value: loading || s == null ? null : '${s.revenueToday} $currency',
+                value: loading || s == null ? null : Currency.format(s.revenueToday, currency),
                 icon: Icons.today_rounded,
                 color: const Color(0xFF0F766E),
                 subtitle: loading ? null : 'vs ${s?.revenueLastMonth ?? 0} last month',
               ),
               _KpiCard(
                 label: 'This Month',
-                value: loading || s == null ? null : '${s.revenueThisMonth} $currency',
+                value: loading || s == null ? null : Currency.format(s.revenueThisMonth, currency),
                 icon: Icons.calendar_month_rounded,
                 color: const Color(0xFF2563EB),
                 subtitle: loading ? null : '${s?.newPaymentsThisMonth ?? 0} payments',
               ),
               _KpiCard(
                 label: 'Outstanding',
-                value: loading || s == null ? null : '${s.totalOutstanding} $currency',
+                value: loading || s == null ? null : Currency.format(s.totalOutstanding, currency),
                 icon: Icons.pending_actions_rounded,
                 color: const Color(0xFFDC2626),
                 subtitle: context.l10n.tr('Balance due'),
@@ -730,7 +731,7 @@ class _ActivityCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '$paid / $total $currency',
+                          '${Currency.format(paid, currency)} / ${Currency.format(total, currency)}',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -743,7 +744,7 @@ class _ActivityCard extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
-                          '$remaining $currency remaining',
+                          '${Currency.format(remaining, currency)} remaining',
                           style: const TextStyle(
                             fontSize: 10,
                             color: Color(0xFFDC2626),
@@ -875,7 +876,7 @@ class _OutstandingSection extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  '${sub.remainingAmount} $currency',
+                                  Currency.format(sub.remainingAmount, currency),
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w700,
                                     fontSize: 12,

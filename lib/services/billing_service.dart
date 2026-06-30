@@ -305,7 +305,16 @@ class BillingService {
       if (!snap.exists) throw Exception('Invoice $invoiceId not found');
 
       final current = Invoice.fromSnapshot(snap);
-      final newTotal = items.fold<int>(0, (acc, item) => acc + item.amount);
+      // Recompute totals tax-inclusively and preserve the existing flat
+      // discount (clamped to the new subtotal), mirroring createInvoice so the
+      // stored values keep the invariant
+      // totalAmount == subtotal + taxAmount - discountAmount.
+      final newSubtotal = items.fold<int>(0, (acc, item) => acc + item.amount);
+      final newTax = items.fold<int>(0, (acc, item) => acc + item.taxAmount);
+      final newDiscount =
+          current.discountAmount.clamp(0, newSubtotal + newTax);
+      final newTotal =
+          (newSubtotal + newTax - newDiscount).clamp(0, 999999999);
       final amountPaid = current.amountPaid;
       final newStatus = amountPaid >= newTotal
           ? InvoiceStatus.paid
@@ -319,6 +328,8 @@ class BillingService {
       tx.update(invoiceRef, <String, dynamic>{
         'items': items.map((i) => i.toMap()).toList(),
         'totalAmount': newTotal,
+        'taxAmount': newTax,
+        'discountAmount': newDiscount,
         'status': newStatus,
         'notes': updatedNotes,
         'updatedAt': Timestamp.fromDate(now),
@@ -337,6 +348,8 @@ class BillingService {
         currency: current.currency,
         totalAmount: newTotal,
         amountPaid: amountPaid,
+        taxAmount: newTax,
+        discountAmount: newDiscount,
         status: newStatus,
         issuedAt: current.issuedAt,
         dueDate: current.dueDate,
@@ -377,6 +390,11 @@ class BillingService {
     DateTime? date,
   }) async {
     assert(amount > 0, 'Payment amount must be positive');
+    // Runtime guard (asserts are stripped in release builds).
+    if (amount <= 0) {
+      throw ArgumentError.value(
+          amount, 'amount', 'Payment amount must be positive');
+    }
     final invoiceRef = _firestore.collection('invoices').doc(invoiceId);
     final paymentDate = date ?? DateTime.now();
     late Invoice updated;
@@ -389,6 +407,11 @@ class BillingService {
       if (current.isVoid) throw Exception('Cannot record payment on a voided invoice');
 
       final newAmountPaid = current.amountPaid + amount;
+      if (newAmountPaid > current.totalAmount) {
+        throw Exception(
+            'Payment of $amount exceeds the outstanding balance '
+            '(${current.remainingAmount})');
+      }
       final newStatus = newAmountPaid >= current.totalAmount
           ? InvoiceStatus.paid
           : InvoiceStatus.partial;
@@ -534,8 +557,11 @@ class BillingService {
     assert(items.isNotEmpty, 'Credit note must have at least one item');
 
     final now = DateTime.now();
-    final totalAmount = items.fold<int>(0, (s, i) => s + i.amount);
     final taxAmount = items.fold<int>(0, (s, i) => s + i.taxAmount);
+    // Tax-inclusive total, mirroring createInvoice so the credit note nets off
+    // cleanly against the original invoice (totalAmount == subtotal + tax).
+    final totalAmount =
+        items.fold<int>(0, (s, i) => s + i.amount) + taxAmount;
     final invoiceRef = _firestore.collection('invoices').doc();
     String invoiceNumber = '';
 

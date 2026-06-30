@@ -1,4 +1,5 @@
 import 'package:fit_flow/utils/crash_logger.dart';
+import 'package:fit_flow/utils/currency.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -1945,7 +1946,7 @@ class _OutstandingCell extends StatelessWidget {
     final currency =
         subscriptions.isNotEmpty ? subscriptions.first.currency : '';
     return Text(
-      '$currency ${outstanding.toStringAsFixed(0)}',
+      Currency.format(outstanding, currency),
       textAlign: TextAlign.center,
       style: const TextStyle(
         fontSize: 12,
@@ -2158,19 +2159,19 @@ class _SubscriptionDetailDialog extends StatelessWidget {
                                   _SubDetailRow(
                                     icon: Icons.payments_outlined,
                                     label: 'Total Amount',
-                                    value: '${sub.currency} ${sub.totalAmount}',
+                                    value: Currency.format(sub.totalAmount, sub.currency),
                                   ),
                                   _SubDetailRow(
                                     icon: Icons.check_circle_outline,
                                     label: 'Amount Paid',
-                                    value: '${sub.currency} ${sub.amountPaid}',
+                                    value: Currency.format(sub.amountPaid, sub.currency),
                                     valueColor: green,
                                   ),
                                   if (outstanding > 0)
                                     _SubDetailRow(
                                       icon: Icons.warning_amber_outlined,
                                       label: 'Outstanding',
-                                      value: '${sub.currency} $outstanding',
+                                      value: Currency.format(outstanding, sub.currency),
                                       valueColor: red,
                                       valueBold: true,
                                     ),

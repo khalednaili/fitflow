@@ -6,6 +6,7 @@ import '../../models/app_user.dart';
 import '../../models/membership_plan.dart';
 import '../../models/user_subscription.dart';
 import '../../services/subscription_service.dart';
+import '../../utils/currency.dart';
 import 'assign_offer_screen.dart';
 import 'record_payment_screen.dart';
 import 'widgets/set_user_password_dialog.dart';
@@ -248,7 +249,7 @@ class _SummaryBar extends StatelessWidget {
           if (totalOwed > 0)
             _Pill(
               label: context.l10n.tr('Balance due'),
-              value: '$totalOwed $currency',
+              value: Currency.format(totalOwed, currency),
               color: Colors.orange.shade600,
             ),
         ],
@@ -451,11 +452,11 @@ class _AssignedOfferCardState extends State<_AssignedOfferCard> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                '${sub.amountPaid} ${sub.currency} ${context.l10n.tr('paid')}',
+                                '${Currency.format(sub.amountPaid, sub.currency)} ${context.l10n.tr('paid')}',
                                 style: TextStyle(
                                     fontSize: 12, color: cs.onSurfaceVariant),
                               ),
-                              Text('${sub.totalAmount} ${sub.currency}',
+                              Text(Currency.format(sub.totalAmount, sub.currency),
                                   style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700)),
@@ -489,7 +490,7 @@ class _AssignedOfferCardState extends State<_AssignedOfferCard> {
                           border: Border.all(color: Colors.orange.shade200),
                         ),
                         child: Text(
-                          '${sub.remainingAmount}\n${sub.currency} ${context.l10n.tr('due')}',
+                          '${sub.remainingAmount}\n${Currency.normalize(sub.currency)} ${context.l10n.tr('due')}',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                               fontSize: 11,
@@ -623,7 +624,7 @@ class _AssignedOfferCardState extends State<_AssignedOfferCard> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      '${p.amount} ${sub.currency}',
+                                      Currency.format(p.amount, sub.currency),
                                       style: const TextStyle(
                                           fontWeight: FontWeight.w700,
                                           fontSize: 14),

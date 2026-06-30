@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../l10n/app_localizations.dart';
 import 'package:fit_flow/utils/crash_logger.dart';
+import 'package:fit_flow/utils/currency.dart';
 import '../../../models/app_user.dart';
 import '../../../models/class_type.dart';
 import '../../../models/gym_class.dart';
@@ -1041,7 +1042,7 @@ class _ClassCardState extends State<_ClassCard> {
                             if (gc.dropInEnabled)
                               _Tag(
                                 label:
-                                    '${l10n.tr('Drop-in')} €${gc.dropInPrice % 1 == 0 ? gc.dropInPrice.toInt() : gc.dropInPrice}',
+                                    '${l10n.tr('Drop-in')} ${Currency.format(gc.dropInPrice, null)}',
                                 color: const Color(0xFFEA580C),
                               ),
                           ],
@@ -1630,6 +1631,12 @@ class _ClassEditorDialogState extends State<_ClassEditorDialog> {
     }
     if (endMinutes <= startMinutes) {
       errors.add(l10n.tr('End time must be after start time'));
+    }
+    if (_dropInEnabled) {
+      final dropInPrice = double.tryParse(_dropInPriceController.text.trim());
+      if (dropInPrice == null || dropInPrice <= 0) {
+        errors.add(l10n.tr('Drop-in price must be greater than 0'));
+      }
     }
     if (_repeatWeekly && _repeatWeekdays.isEmpty) {
       errors.add(l10n.tr('Select at least one day of the week for repeat'));
@@ -2299,7 +2306,8 @@ class _ClassEditorDialogState extends State<_ClassEditorDialog> {
             controller: _dropInPriceController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
-              labelText: context.l10n.tr('Drop-in Price (€)'),
+              labelText:
+                  '${context.l10n.tr('Drop-in Price')} (${Currency.defaultCode})',
               prefixIcon: Icon(Icons.euro_outlined),
             ),
           ),
