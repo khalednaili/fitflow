@@ -19,8 +19,24 @@ class InvoicePdfService {
   // ── Public API ────────────────────────────────────────────────────────────
 
   /// Builds and returns the raw PDF bytes for [invoice].
+  ///
+  /// Uses Unicode-capable fonts (Noto Sans + Noto Sans Arabic fallback) so that
+  /// non-Latin content — Arabic member names, accented notes, etc. — renders
+  /// correctly. The `pdf` package's built-in Helvetica is Latin-1 only and
+  /// throws ("Helvetica has no Unicode support") on any other glyph.
   static Future<Uint8List> generateBytes(Invoice invoice) async {
-    final pdf = pw.Document();
+    final theme = pw.ThemeData.withFont(
+      base: await PdfGoogleFonts.notoSansRegular(),
+      bold: await PdfGoogleFonts.notoSansBold(),
+      italic: await PdfGoogleFonts.notoSansItalic(),
+      boldItalic: await PdfGoogleFonts.notoSansBoldItalic(),
+      fontFallback: [
+        await PdfGoogleFonts.notoSansArabicRegular(),
+        await PdfGoogleFonts.notoSansArabicBold(),
+      ],
+    );
+
+    final pdf = pw.Document(theme: theme);
     final dateFmt = DateFormat('d MMM yyyy');
 
     pdf.addPage(
