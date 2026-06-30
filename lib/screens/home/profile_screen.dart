@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'package:fit_flow/utils/crash_logger.dart';
+import 'package:fit_flow/utils/currency.dart';
 import '../../l10n/app_localizations.dart';
 import '../../models/app_user.dart';
 import '../../models/user_subscription.dart';
@@ -1120,7 +1121,7 @@ class _PaymentCard extends StatelessWidget {
       children: [
         _PaymentRow(
           label: l10n.tr('Total Price'),
-          value: '${subscription.totalAmount} ${subscription.currency}',
+          value: Currency.format(subscription.totalAmount, subscription.currency),
           valueStyle: TextStyle(fontWeight: FontWeight.w700),
         ),
         Padding(
@@ -1129,7 +1130,7 @@ class _PaymentCard extends StatelessWidget {
         ),
         _PaymentRow(
           label: l10n.tr('Amount Paid'),
-          value: '${subscription.amountPaid} ${subscription.currency}',
+          value: Currency.format(subscription.amountPaid, subscription.currency),
           valueStyle: TextStyle(
             fontWeight: FontWeight.w700,
             color: Color(0xFF16A34A),
@@ -1141,7 +1142,8 @@ class _PaymentCard extends StatelessWidget {
         ),
         _PaymentRow(
           label: l10n.tr('Remaining Amount'),
-          value: '${subscription.remainingAmount} ${subscription.currency}',
+          value:
+              Currency.format(subscription.remainingAmount, subscription.currency),
           valueStyle: TextStyle(
             fontWeight: FontWeight.w700,
             color: hasRemaining ? Color(0xFFF97316) : Color(0xFF16A34A),

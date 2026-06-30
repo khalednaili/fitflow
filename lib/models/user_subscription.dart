@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../utils/currency.dart';
+
 // ── ScheduledInstalment ───────────────────────────────────────────────────────
 
 /// One instalment in a multi-part payment plan.
@@ -160,7 +162,7 @@ class UserSubscription {
       planId: (data['planId'] ?? '') as String,
       totalAmount: (data['totalAmount'] as num? ?? 0).toInt(),
       amountPaid: (data['amountPaid'] as num? ?? 0).toInt(),
-      currency: (data['currency'] ?? 'EUR') as String,
+      currency: (data['currency'] ?? Currency.defaultCode) as String,
       status: (data['status'] ?? 'pending') as String,
       startDate: (data['startDate'] as Timestamp?)?.toDate(),
       endDate: (data['endDate'] as Timestamp?)?.toDate(),

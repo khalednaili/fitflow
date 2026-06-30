@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../l10n/app_localizations.dart';
 import 'package:fit_flow/utils/crash_logger.dart';
+import 'package:fit_flow/utils/currency.dart';
 import '../../../models/app_user.dart';
 import '../../../models/booking.dart';
 import '../../../models/gym_class.dart';
@@ -126,8 +127,12 @@ class _AdminDropInsTabState extends State<AdminDropInsTab> {
           double totalRevenue = 0;
           for (final b in all) {
             if (b.dropInPaymentStatus == 'paid') {
-              final gc = _classCache[b.classId];
-              if (gc != null) totalRevenue += gc.dropInPrice;
+              // Prefer the price snapshotted on the booking; fall back to the
+              // class's current price for legacy bookings created before the
+              // snapshot field existed.
+              totalRevenue += b.dropInPrice > 0
+                  ? b.dropInPrice
+                  : (_classCache[b.classId]?.dropInPrice ?? 0);
             }
           }
 
@@ -201,9 +206,8 @@ class _StatsStrip extends StatelessWidget {
           const SizedBox(width: 20),
           _StatItem(
             label: context.l10n.tr('Confirmed revenue'),
-            value:
-                '€${totalRevenue % 1 == 0 ? totalRevenue.toInt() : totalRevenue.toStringAsFixed(2)}',
-            icon: Icons.euro_outlined,
+            value: Currency.format(totalRevenue, null),
+            icon: Icons.payments_outlined,
           ),
         ],
       ),
@@ -413,9 +417,11 @@ class _DropInCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isPaid = booking.dropInPaymentStatus == 'paid';
-    final price = gymClass?.dropInPrice ?? 0.0;
-    final priceLabel =
-        '€${price % 1 == 0 ? price.toInt() : price.toStringAsFixed(2)}';
+    // Snapshotted price (fall back to the class's current price for legacy
+    // bookings without it).
+    final price =
+        booking.dropInPrice > 0 ? booking.dropInPrice : (gymClass?.dropInPrice ?? 0.0);
+    final priceLabel = Currency.format(price, null);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -983,7 +989,7 @@ class _AddDropInDialogState extends State<_AddDropInDialog> {
                           (c) => DropdownMenuItem(
                             value: c,
                             child: Text(
-                              '${c.title}  •  ${DateFormat('EEE d MMM HH:mm').format(c.startTime)}  •  €${c.dropInPrice % 1 == 0 ? c.dropInPrice.toInt() : c.dropInPrice}',
+                              '${c.title}  •  ${DateFormat('EEE d MMM HH:mm').format(c.startTime)}  •  ${Currency.format(c.dropInPrice, null)}',
                               style: const TextStyle(fontSize: 13),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -1101,7 +1107,7 @@ class _AddDropInDialogState extends State<_AddDropInDialog> {
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
-                        '${context.l10n.tr('Drop-in fee')}: €${_selectedClass!.dropInPrice % 1 == 0 ? _selectedClass!.dropInPrice.toInt() : _selectedClass!.dropInPrice}  •  ${context.l10n.tr('Payment collected at desk')}',
+                        '${context.l10n.tr('Drop-in fee')}: ${Currency.format(_selectedClass!.dropInPrice, null)}  •  ${context.l10n.tr('Payment collected at desk')}',
                         style: const TextStyle(
                             fontSize: 12,
                             color: accent,

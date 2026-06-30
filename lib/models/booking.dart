@@ -12,6 +12,7 @@ class Booking {
     this.checkedInAt,
     this.isDropIn = false,
     this.dropInPaymentStatus = 'pending',
+    this.dropInPrice = 0.0,
     this.gymId = '',
     this.usedPlanId = '',
     this.classStartTime,
@@ -31,6 +32,11 @@ class Booking {
   final DateTime? checkedInAt;
   final bool isDropIn;
   final String dropInPaymentStatus;
+
+  /// Drop-in fee charged at booking time, snapshotted so revenue reporting is
+  /// not affected by later edits to the class's `dropInPrice`. 0 for
+  /// non-drop-in bookings (and legacy drop-ins created before this field).
+  final double dropInPrice;
   final String gymId;
   /// The planId of the subscription that was consumed for this booking.
   /// Used to isolate per-offer check-in counters when a member holds
@@ -59,6 +65,7 @@ class Booking {
       checkedInAt: (data['checkedInAt'] as Timestamp?)?.toDate(),
       isDropIn: (data['isDropIn'] ?? false) as bool,
       dropInPaymentStatus: (data['dropInPaymentStatus'] ?? 'pending') as String,
+      dropInPrice: ((data['dropInPrice'] ?? 0) as num).toDouble(),
       gymId: (data['gymId'] ?? '') as String,
       usedPlanId: (data['usedPlanId'] ?? '') as String,
       classStartTime: (data['classStartTime'] as Timestamp?)?.toDate(),
@@ -78,6 +85,7 @@ class Booking {
       if (checkedInAt != null) 'checkedInAt': Timestamp.fromDate(checkedInAt!),
       'isDropIn': isDropIn,
       'dropInPaymentStatus': dropInPaymentStatus,
+      'dropInPrice': dropInPrice,
       'gymId': gymId,
       'usedPlanId': usedPlanId,
       if (classStartTime != null)

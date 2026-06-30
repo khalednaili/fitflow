@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../models/invoice.dart';
+import '../utils/currency.dart';
 
 /// Generates, prints, and shares PDF invoices.
 class InvoicePdfService {
@@ -196,9 +197,9 @@ class InvoicePdfService {
       return [
         item.description,
         if (hasVat) '${item.taxRate}%',
-        '${invoice.currency} ${item.amount}',
-        if (hasVat) '${invoice.currency} ${item.taxAmount}',
-        '${invoice.currency} ${item.amount + item.taxAmount}',
+        Currency.format(item.amount, invoice.currency),
+        if (hasVat) Currency.format(item.taxAmount, invoice.currency),
+        Currency.format(item.amount + item.taxAmount, invoice.currency),
       ];
     }).toList();
 
@@ -233,17 +234,17 @@ class InvoicePdfService {
     final rows = <(String, String)>[];
 
     if (invoice.taxAmount > 0 || invoice.discountAmount > 0) {
-      rows.add(('Subtotal', '${invoice.currency} ${invoice.subtotal}'));
+      rows.add(('Subtotal', Currency.format(invoice.subtotal, invoice.currency)));
     }
     if (invoice.taxAmount > 0) {
-      rows.add(('VAT / Tax', '${invoice.currency} ${invoice.taxAmount}'));
+      rows.add(('VAT / Tax', Currency.format(invoice.taxAmount, invoice.currency)));
     }
     if (invoice.discountAmount > 0) {
-      rows.add(('Discount', '-${invoice.currency} ${invoice.discountAmount}'));
+      rows.add(('Discount', '-${Currency.format(invoice.discountAmount, invoice.currency)}'));
     }
-    rows.add(('TOTAL', '${invoice.currency} ${invoice.totalAmount}'));
-    rows.add(('Amount Paid', '${invoice.currency} ${invoice.amountPaid}'));
-    rows.add(('Balance Due', '${invoice.currency} ${invoice.remainingAmount}'));
+    rows.add(('TOTAL', Currency.format(invoice.totalAmount, invoice.currency)));
+    rows.add(('Amount Paid', Currency.format(invoice.amountPaid, invoice.currency)));
+    rows.add(('Balance Due', Currency.format(invoice.remainingAmount, invoice.currency)));
 
     return pw.Align(
       alignment: pw.Alignment.centerRight,
@@ -326,7 +327,7 @@ class InvoicePdfService {
               .map((p) => [
                     dateFmt.format(p.date),
                     p.method,
-                    '${invoice.currency} ${p.amount}',
+                    Currency.format(p.amount, invoice.currency),
                     p.notes,
                   ])
               .toList(),

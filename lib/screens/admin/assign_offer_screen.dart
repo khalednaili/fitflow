@@ -6,6 +6,7 @@ import '../../models/membership_plan.dart';
 import '../../models/user_subscription.dart';
 import '../../services/member_service.dart';
 import '../../services/subscription_service.dart';
+import '../../utils/currency.dart';
 import '../../widgets/user_avatar.dart';
 import 'record_payment_screen.dart';
 import '../../l10n/app_localizations.dart';
@@ -217,7 +218,7 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
           _paymentError = context.l10n.tr('Add at least one instalment');
         } else if (_instalmentTotal != _selectedPlan!.price) {
           _paymentError =
-              '${context.l10n.tr('Instalments must total')} ${_selectedPlan!.price} ${_selectedPlan!.currency} (${context.l10n.tr('currently')} $_instalmentTotal)';
+              '${context.l10n.tr('Instalments must total')} ${Currency.format(_selectedPlan!.price, _selectedPlan!.currency)} (${context.l10n.tr('currently')} $_instalmentTotal)';
         } else {
           _paymentError = null;
         }
@@ -242,7 +243,7 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
           int.tryParse(_initialPaidController.text.trim())!;
       if (initialAmountPaid > plan.price) {
         setState(() => _paymentError =
-            '${context.l10n.tr('Amount cannot exceed total price')} (${plan.price} ${plan.currency})');
+            '${context.l10n.tr('Amount cannot exceed total price')} (${Currency.format(plan.price, plan.currency)})');
         return;
       }
     }
@@ -503,7 +504,7 @@ class _AssignOfferScreenState extends State<AssignOfferScreen> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             Text(
-                              '${plan.price} ${plan.currency}',
+                              Currency.format(plan.price, plan.currency),
                               style: TextStyle(
                                 fontWeight: FontWeight.w800,
                                 fontSize: 16,
@@ -1121,7 +1122,7 @@ class _PaymentSection extends StatelessWidget {
               Icon(Icons.payments_outlined, size: 16, color: accentColor),
               const SizedBox(width: 8),
               Text(
-                '${context.l10n.tr('Total')}: ${plan.price} ${plan.currency}',
+                '${context.l10n.tr('Total')}: ${Currency.format(plan.price, plan.currency)}',
                 style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
@@ -1182,12 +1183,12 @@ class _PaymentSection extends StatelessWidget {
             children: [
               _PayRow(
                   label: 'Paid',
-                  value: '${paid.clamp(0, total)} ${plan.currency}',
+                  value: Currency.format(paid.clamp(0, total), plan.currency),
                   color: Colors.green.shade600),
               const Spacer(),
               _PayRow(
                   label: 'Remaining',
-                  value: '$remaining ${plan.currency}',
+                  value: Currency.format(remaining, plan.currency),
                   color: remaining > 0
                       ? Colors.orange.shade700
                       : Colors.green.shade600),
@@ -1462,7 +1463,7 @@ class _ExistingSubscriptions extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                '${context.l10n.tr('Paid')}: ${sub.amountPaid} / ${sub.totalAmount} ${sub.currency}',
+                                '${context.l10n.tr('Paid')}: ${Currency.format(sub.amountPaid, sub.currency)} / ${Currency.format(sub.totalAmount, sub.currency)}',
                                 style: TextStyle(
                                     fontSize: 12, color: cs.onSurfaceVariant),
                               ),
@@ -1552,7 +1553,7 @@ class _InstalmentPlanEditor extends StatelessWidget {
               Icon(Icons.payments_outlined, size: 15, color: accentColor),
               const SizedBox(width: 8),
               Text(
-                '${context.l10n.tr('Total')}: ${plan.price} ${plan.currency}',
+                '${context.l10n.tr('Total')}: ${Currency.format(plan.price, plan.currency)}',
                 style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
@@ -1561,7 +1562,7 @@ class _InstalmentPlanEditor extends StatelessWidget {
               const Spacer(),
               if (!allAllocated)
                 Text(
-                  '${context.l10n.tr('Remaining')}: $remaining ${plan.currency}',
+                  '${context.l10n.tr('Remaining')}: ${Currency.format(remaining, plan.currency)}',
                   style: TextStyle(
                       fontSize: 12,
                       color: remaining > 0 ? Colors.orange : Colors.red),

@@ -9,6 +9,7 @@ import '../../models/personal_training.dart';
 import '../../services/booking_service.dart';
 import '../../services/class_service.dart';
 import '../../services/personal_training_service.dart';
+import '../../utils/currency.dart';
 import 'class_details_screen.dart';
 import 'membership_screen.dart';
 
@@ -1249,7 +1250,7 @@ class _ClassCardState extends State<_ClassCard> {
                                         .withValues(alpha: 0.35)),
                               ),
                               child: Text(
-                                '${context.l10n.tr('Drop-in')} · €${gc.dropInPrice % 1 == 0 ? gc.dropInPrice.toInt() : gc.dropInPrice}',
+                                '${context.l10n.tr('Drop-in')} · ${Currency.format(gc.dropInPrice, null)}',
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,

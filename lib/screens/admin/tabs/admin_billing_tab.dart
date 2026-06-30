@@ -10,6 +10,7 @@ import '../../../services/billing_service.dart';
 import '../../../services/member_service.dart';
 import '../../../services/subscription_service.dart';
 import '../../../utils/crash_logger.dart';
+import '../../../utils/currency.dart';
 import '../invoice_detail_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -962,13 +963,13 @@ class _InvoiceCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    '${invoice.currency} ${invoice.totalAmount}',
+                    Currency.format(invoice.totalAmount, invoice.currency),
                     style: const TextStyle(
                         fontWeight: FontWeight.w800, fontSize: 15),
                   ),
                   if (invoice.remainingAmount > 0)
                     Text(
-                      'Due: ${invoice.currency} ${invoice.remainingAmount}',
+                      'Due: ${Currency.format(invoice.remainingAmount, invoice.currency)}',
                       style:
                           TextStyle(fontSize: 10, color: Colors.red.shade400),
                     ),
@@ -1786,21 +1787,21 @@ class _OfferCard extends StatelessWidget {
                   Expanded(
                     child: _AmountCell(
                       label: l10n.tr('Total'),
-                      value: '${sub.currency} $total',
+                      value: Currency.format(total, sub.currency),
                       color: Colors.grey.shade700,
                     ),
                   ),
                   Expanded(
                     child: _AmountCell(
                       label: l10n.tr('Paid'),
-                      value: '${sub.currency} $paid',
+                      value: Currency.format(paid, sub.currency),
                       color: Colors.green.shade700,
                     ),
                   ),
                   Expanded(
                     child: _AmountCell(
                       label: l10n.tr('Balance'),
-                      value: '${sub.currency} $remaining',
+                      value: Currency.format(remaining, sub.currency),
                       color: remaining > 0
                           ? Colors.red.shade700
                           : Colors.green.shade700,
@@ -1955,7 +1956,7 @@ class _OfferSummaryRow extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          '$currency ${sub.totalAmount}',
+          Currency.format(sub.totalAmount, currency),
           style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 13,
@@ -2207,7 +2208,7 @@ class _ConfirmStepState extends State<_ConfirmStep> {
               keyboardType: TextInputType.number,
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
-                prefixText: '$currency ',
+                prefixText: '${Currency.normalize(currency)} ',
                 hintText: '0',
                 border:
                     OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -2230,23 +2231,23 @@ class _ConfirmStepState extends State<_ConfirmStep> {
             child: Column(
               children: [
                 _TotalPreviewRow(
-                    label: l10n.tr('Subtotal'), value: '$currency $subtotal'),
+                    label: l10n.tr('Subtotal'), value: Currency.format(subtotal, currency)),
                 if (extraTax > 0) ...[
                   const SizedBox(height: 4),
                   _TotalPreviewRow(
                       label: l10n.tr('VAT / Tax'),
-                      value: '+ $currency $extraTax'),
+                      value: '+ ${Currency.format(extraTax, currency)}'),
                 ],
                 if (_discount > 0) ...[
                   const SizedBox(height: 4),
                   _TotalPreviewRow(
                       label: l10n.tr('Discount'),
-                      value: '− $currency $_discount'),
+                      value: '− ${Currency.format(_discount, currency)}'),
                 ],
                 const Divider(height: 16),
                 _TotalPreviewRow(
                   label: l10n.tr('Total'),
-                  value: '$currency $total',
+                  value: Currency.format(total, currency),
                   bold: true,
                 ),
               ],
@@ -2375,7 +2376,7 @@ class _ExtraItemRow extends StatelessWidget {
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   hintText: l10n.tr('Amount'),
-                  prefixText: '$currency ',
+                  prefixText: '${Currency.normalize(currency)} ',
                   border:
                       OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   contentPadding:
@@ -2715,7 +2716,7 @@ class _InvoiceTable extends StatelessWidget {
                         Expanded(
                           flex: 2,
                           child: Text(
-                            '${inv.currency} ${inv.totalAmount}',
+                            Currency.format(inv.totalAmount, inv.currency),
                             style: const TextStyle(
                                 fontWeight: FontWeight.w700, fontSize: 13),
                             textAlign: TextAlign.right,
@@ -2726,7 +2727,8 @@ class _InvoiceTable extends StatelessWidget {
                           flex: 2,
                           child: Text(
                             inv.remainingAmount > 0
-                                ? '${inv.currency} ${inv.remainingAmount}'
+                                ? Currency.format(
+                                    inv.remainingAmount, inv.currency)
                                 : '—',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,

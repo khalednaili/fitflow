@@ -474,7 +474,7 @@ void main() {
       expect(invoice.items, isEmpty);
       expect(invoice.payments, isEmpty);
       expect(invoice.dueDate, isNull);
-      expect(invoice.currency, 'EUR');
+      expect(invoice.currency, 'TND'); // app-wide default (Currency.defaultCode)
       expect(invoice.taxAmount, 0);
       expect(invoice.discountAmount, 0);
       expect(invoice.isCreditNote, false);
@@ -783,6 +783,184 @@ void main() {
       expect(payment['notes'], 'June instalment');
       expect(payment['method'], 'transfer');
     });
+
+    test('throws when a payment would exceed the outstanding balance',
+        () async {
+      final id = await createUnpaidInvoice(total: 1000);
+      await sut.recordPayment(id, amount: 600, method: 'cash');
+
+      // 600 already paid → only 400 outstanding; 600 must be rejected.
+      await expectLater(
+        sut.recordPayment(id, amount: 600, method: 'card'),
+        throwsA(isA<Exception>()),
+      );
+
+      // The rejected payment must not have mutated the invoice.
+      final doc = await db.collection('invoices').doc(id).get();
+      expect(doc.data()!['amountPaid'], 600);
+      expect((doc.data()!['payments'] as List).length, 1);
+    });
+
+    test('allows a payment that exactly settles the balance', () async {
+      final id = await createUnpaidInvoice(total: 1000);
+      await sut.recordPayment(id, amount: 400, method: 'cash');
+      await sut.recordPayment(id, amount: 600, method: 'card');
+
+      final doc = await db.collection('invoices').doc(id).get();
+      expect(doc.data()!['amountPaid'], 1000);
+      expect(doc.data()!['status'], InvoiceStatus.paid);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // createInvoice — totals invariant (subtotal + tax - discount)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('createInvoice totals', () {
+    test('totalAmount = subtotal + tax - discount', () async {
+      await _seedSettings(db);
+      final inv = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        subscriptions: [_sub(totalAmount: 1000)],
+        planLabels: ['Basic'],
+        extraItems: const [
+          InvoiceItem(
+              description: 'Setup fee',
+              amount: 1000,
+              currency: 'EUR',
+              taxRate: 20),
+        ],
+        discountAmount: 100,
+      );
+
+      // subtotal = 1000 (base, no tax) + 1000 (setup) = 2000
+      // tax = 200 (only the setup item is taxed)
+      // total = 2000 + 200 - 100 = 2100
+      expect(inv.subtotal, 2000);
+      expect(inv.taxAmount, 200);
+      expect(inv.discountAmount, 100);
+      expect(inv.totalAmount, 2100);
+      // Invariant the PDF/UI rely on.
+      expect(inv.totalAmount, inv.subtotal + inv.taxAmount - inv.discountAmount);
+    });
+
+    test('discount is clamped to the subtotal (never produces a negative total)',
+        () async {
+      await _seedSettings(db);
+      final inv = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        subscriptions: [_sub(totalAmount: 1000)],
+        planLabels: ['Basic'],
+        discountAmount: 5000, // larger than the subtotal
+      );
+
+      expect(inv.discountAmount, 1000);
+      expect(inv.totalAmount, 0);
+    });
+
+    test('invalid status falls back to unpaid', () async {
+      await _seedSettings(db);
+      final inv = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        subscriptions: [_sub()],
+        planLabels: ['Basic'],
+        status: 'bogus',
+      );
+
+      expect(inv.status, InvoiceStatus.unpaid);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // updateInvoiceItems — must keep totals tax/discount-consistent
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('updateInvoiceItems', () {
+    Future<String> createTaxedInvoice() async {
+      await _seedSettings(db);
+      final inv = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        subscriptions: [_sub(totalAmount: 1000)],
+        planLabels: ['Basic'],
+        extraItems: const [],
+      );
+      return inv.id;
+    }
+
+    test('recomputes totalAmount tax-inclusively and persists taxAmount',
+        () async {
+      final id = await createTaxedInvoice();
+
+      final updated = await sut.updateInvoiceItems(
+        invoiceId: id,
+        items: const [
+          InvoiceItem(
+              description: 'Plan A', amount: 500, currency: 'EUR', taxRate: 20),
+          InvoiceItem(
+              description: 'Plan B', amount: 500, currency: 'EUR', taxRate: 20),
+        ],
+      );
+
+      // subtotal 1000, tax 200 → total 1200 (previously dropped tax → 1000).
+      expect(updated.totalAmount, 1200);
+      expect(updated.taxAmount, 200);
+
+      final doc = await db.collection('invoices').doc(id).get();
+      expect(doc.data()!['totalAmount'], 1200);
+      expect(doc.data()!['taxAmount'], 200);
+    });
+
+    test('preserves the existing discount, clamped to the new subtotal',
+        () async {
+      await _seedSettings(db);
+      final inv = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        subscriptions: [_sub(totalAmount: 1000)],
+        planLabels: ['Basic'],
+        discountAmount: 100,
+      );
+
+      final updated = await sut.updateInvoiceItems(
+        invoiceId: inv.id,
+        items: const [
+          InvoiceItem(description: 'Plan A', amount: 800, currency: 'EUR'),
+        ],
+      );
+
+      // subtotal 800, tax 0, discount preserved 100 → total 700.
+      expect(updated.discountAmount, 100);
+      expect(updated.totalAmount, 700);
+    });
+
+    test(
+        'marks paid (with overpayment surfaced) when new total drops below '
+        'amountPaid', () async {
+      final id = await createTaxedInvoice(); // total 1000
+      await sut.recordPayment(id, amount: 1000, method: 'cash'); // fully paid
+
+      final updated = await sut.updateInvoiceItems(
+        invoiceId: id,
+        items: const [
+          InvoiceItem(description: 'Reduced', amount: 600, currency: 'EUR'),
+        ],
+      );
+
+      // amountPaid (1000) >= new total (600) → paid; remaining negative
+      // surfaces the 400 overpayment for refund/credit-note handling.
+      expect(updated.totalAmount, 600);
+      expect(updated.status, InvoiceStatus.paid);
+      expect(updated.remainingAmount, -400);
+    });
   });
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -827,6 +1005,24 @@ void main() {
 
       final doc = await db.collection('invoices').doc(id).get();
       expect(doc.data()!['status'], InvoiceStatus.paid);
+    });
+
+    test('markAsSent reflects a partial payment instead of sent', () async {
+      final id = await createInvoice(); // total 1000
+      await sut.recordPayment(id, amount: 400, method: 'cash');
+      await sut.markAsSent(id);
+
+      final doc = await db.collection('invoices').doc(id).get();
+      expect(doc.data()!['status'], InvoiceStatus.partial);
+    });
+
+    test('markAsSent is a no-op on a voided invoice', () async {
+      final id = await createInvoice();
+      await sut.voidInvoice(id);
+      await sut.markAsSent(id);
+
+      final doc = await db.collection('invoices').doc(id).get();
+      expect(doc.data()!['status'], InvoiceStatus.void_);
     });
 
     test('markOverdue sets status to overdue', () async {
@@ -1004,6 +1200,126 @@ void main() {
       );
       expect(cn.status, InvoiceStatus.unpaid);
     });
+
+    test('totalAmount is tax-inclusive (subtotal + tax)', () async {
+      await _seedSettings(db);
+      final cn = await sut.createCreditNote(
+        originalInvoiceId: 'orig-abc',
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        items: const [
+          InvoiceItem(
+              description: 'Refund - Basic plan',
+              amount: 1000,
+              currency: 'EUR',
+              taxRate: 20),
+        ],
+      );
+
+      // 1000 + 20% tax = 1200, mirroring how createInvoice builds totals.
+      expect(cn.taxAmount, 200);
+      expect(cn.totalAmount, 1200);
+
+      final doc = await db.collection('invoices').doc(cn.id).get();
+      expect(doc.data()!['totalAmount'], 1200);
+      expect(doc.data()!['taxAmount'], 200);
+    });
+
+    test('auto-numbers with a CR- prefix and increments the shared counter',
+        () async {
+      await _seedSettings(db, prefix: 'INV-', nextSequence: 7);
+      final cn = await sut.createCreditNote(
+        originalInvoiceId: 'orig-abc',
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        items: const [
+          InvoiceItem(description: 'Refund', amount: 200, currency: 'EUR'),
+        ],
+      );
+
+      expect(cn.invoiceNumber, startsWith('CR-'));
+      expect(cn.invoiceNumber, contains('0007'));
+
+      final settings = await sut.getInvoiceSettings();
+      expect(settings.nextSequence, 8);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Invoice read / number / delete
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('invoice read, number and delete', () {
+    Future<Invoice> create({String userId = 'u1'}) async {
+      await _seedSettings(db);
+      return sut.createInvoice(
+        userId: userId,
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        subscriptions: [_sub(userId: userId)],
+        planLabels: ['Basic'],
+      );
+    }
+
+    test('getInvoice returns the invoice when it exists', () async {
+      final inv = await create();
+      final fetched = await sut.getInvoice(inv.id);
+      expect(fetched, isNotNull);
+      expect(fetched!.id, inv.id);
+      expect(fetched.memberName, 'Alice');
+    });
+
+    test('getInvoice returns null for a missing id', () async {
+      expect(await sut.getInvoice('does-not-exist'), isNull);
+    });
+
+    test('updateInvoiceNumber trims and persists the new number', () async {
+      final inv = await create();
+      await sut.updateInvoiceNumber(inv.id, '  CUSTOM-99  ');
+
+      final doc = await db.collection('invoices').doc(inv.id).get();
+      expect(doc.data()!['invoiceNumber'], 'CUSTOM-99');
+    });
+
+    test('deleteInvoice removes the document', () async {
+      final inv = await create();
+      await sut.deleteInvoice(inv.id);
+
+      final doc = await db.collection('invoices').doc(inv.id).get();
+      expect(doc.exists, isFalse);
+    });
+
+    test('streamInvoicesForUser filters by user and sorts newest first',
+        () async {
+      await _seedSettings(db);
+      // Two invoices for u1 with different issued dates, one for u2.
+      final older = await db.collection('invoices').add({
+        'gymId': 'gym1',
+        'invoiceNumber': 'INV-0001',
+        'userId': 'u1',
+        'issuedAt': Timestamp.fromDate(DateTime(2026, 1, 1)),
+        'status': 'unpaid',
+      });
+      final newer = await db.collection('invoices').add({
+        'gymId': 'gym1',
+        'invoiceNumber': 'INV-0002',
+        'userId': 'u1',
+        'issuedAt': Timestamp.fromDate(DateTime(2026, 6, 1)),
+        'status': 'unpaid',
+      });
+      await db.collection('invoices').add({
+        'gymId': 'gym1',
+        'invoiceNumber': 'INV-0003',
+        'userId': 'u2',
+        'issuedAt': Timestamp.fromDate(DateTime(2026, 3, 1)),
+        'status': 'unpaid',
+      });
+
+      final list = await sut.streamInvoicesForUser('u1').first;
+      expect(list.map((i) => i.id).toList(), [newer.id, older.id]);
+    });
   });
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1092,6 +1408,105 @@ void main() {
 
       final stats = await sut.computeRevenueStats();
       expect(stats.currency, 'EUR');
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // computeRevenueStats — aggregation
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('computeRevenueStats — aggregation', () {
+    final now = DateTime.now();
+
+    Future<void> seedSub({
+      required int totalAmount,
+      required int amountPaid,
+      String status = 'active',
+      List<({DateTime date, int amount, String method})> payments = const [],
+    }) async {
+      await db.collection('user_subscriptions').add({
+        'gymId': 'gym1',
+        'userId': 'u1',
+        'planId': 'plan1',
+        'totalAmount': totalAmount,
+        'amountPaid': amountPaid,
+        'currency': 'EUR',
+        'status': status,
+        'startDate': Timestamp.fromDate(DateTime(2026, 1, 1)),
+        'endDate': Timestamp.fromDate(DateTime(2026, 12, 31)),
+        'paymentHistory': payments
+            .map((p) => {
+                  'amount': p.amount,
+                  'date': Timestamp.fromDate(p.date),
+                  'method': p.method,
+                  'notes': '',
+                })
+            .toList(),
+        'updatedAt': Timestamp.now(),
+      });
+    }
+
+    test('totalOutstanding sums remaining balances but excludes cancelled subs',
+        () async {
+      await seedSub(totalAmount: 1000, amountPaid: 400); // outstanding 600
+      await seedSub(totalAmount: 500, amountPaid: 500); // outstanding 0
+      await seedSub(
+          totalAmount: 800, amountPaid: 0, status: 'cancelled'); // ignored
+
+      final stats = await sut.computeRevenueStats();
+      expect(stats.totalOutstanding, 600);
+    });
+
+    test('totalOutstanding clamps overpaid subscriptions to zero', () async {
+      await seedSub(totalAmount: 1000, amountPaid: 1200); // remaining -200
+      final stats = await sut.computeRevenueStats();
+      expect(stats.totalOutstanding, 0);
+    });
+
+    test('revenueByMethod groups payment amounts by method', () async {
+      await seedSub(totalAmount: 2000, amountPaid: 900, payments: [
+        (date: now, amount: 400, method: 'cash'),
+        (date: now, amount: 300, method: 'card'),
+        (date: now, amount: 200, method: 'cash'),
+      ]);
+
+      final stats = await sut.computeRevenueStats();
+      expect(stats.revenueByMethod['cash'], 600);
+      expect(stats.revenueByMethod['card'], 300);
+    });
+
+    test('blank payment method is bucketed as "other"', () async {
+      await seedSub(totalAmount: 1000, amountPaid: 150, payments: [
+        (date: now, amount: 150, method: ''),
+      ]);
+
+      final stats = await sut.computeRevenueStats();
+      expect(stats.revenueByMethod['other'], 150);
+    });
+
+    test('monthlyTrend exposes 6 buckets and includes the current month',
+        () async {
+      await seedSub(totalAmount: 1000, amountPaid: 250, payments: [
+        (date: now, amount: 250, method: 'cash'),
+      ]);
+
+      final stats = await sut.computeRevenueStats();
+      expect(stats.monthlyTrend.length, 6);
+      final key =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}';
+      expect(stats.monthlyTrend[key], 250);
+    });
+
+    test('revenueToday and revenueThisMonth count a payment made today',
+        () async {
+      await seedSub(totalAmount: 1000, amountPaid: 500, payments: [
+        (date: now, amount: 500, method: 'cash'),
+      ]);
+
+      final stats = await sut.computeRevenueStats();
+      expect(stats.revenueToday, 500);
+      expect(stats.revenueThisMonth, 500);
+      expect(stats.newPaymentsThisMonth, 1);
     });
   });
 }

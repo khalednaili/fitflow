@@ -8,6 +8,7 @@ import '../../l10n/app_localizations.dart';
 import '../../models/membership_plan.dart';
 import '../../models/user_subscription.dart';
 import '../../services/subscription_service.dart';
+import '../../utils/currency.dart';
 import 'offer_details_screen.dart';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -270,7 +271,7 @@ class _SummaryHeader extends StatelessWidget {
                   ),
                   SizedBox(height: 2),
                   Text(
-                    '$totalOwed $currency',
+                    Currency.format(totalOwed, currency),
                     style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
@@ -484,12 +485,12 @@ class _OfferCardState extends State<_OfferCard> {
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  '${subscription.amountPaid} ${subscription.currency} ${context.l10n.tr('paid')}',
+                                  '${Currency.format(subscription.amountPaid, subscription.currency)} ${context.l10n.tr('paid')}',
                                   style: TextStyle(
                                       fontSize: 12, color: cs.onSurfaceVariant),
                                 ),
                                 Text(
-                                  '${subscription.totalAmount} ${subscription.currency}',
+                                  Currency.format(subscription.totalAmount, subscription.currency),
                                   style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w700),
@@ -540,7 +541,7 @@ class _OfferCardState extends State<_OfferCard> {
                               size: 14, color: Colors.orange.shade700),
                           SizedBox(width: 6),
                           Text(
-                            '${subscription.remainingAmount} ${subscription.currency} ${context.l10n.tr('remaining')}',
+                            '${Currency.format(subscription.remainingAmount, subscription.currency)} ${context.l10n.tr('remaining')}',
                             style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.orange.shade800,
