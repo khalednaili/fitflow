@@ -6,9 +6,10 @@ import '../models/user_subscription.dart';
 /// Settings stored in Firestore for invoice numbering.
 class InvoiceSettings {
   const InvoiceSettings({
-    this.prefix = 'INV',
+    this.prefix = 'INV-',
     this.startNumber = 1,
     this.nextSequence = 1,
+    this.padding = 4,
   });
 
   final String prefix;
@@ -17,10 +18,14 @@ class InvoiceSettings {
   /// The next sequence number that will be used when creating an invoice.
   final int nextSequence;
 
+  /// How many digits to pad the sequence number to (e.g. 4 → 0001).
+  final int padding;
+
   factory InvoiceSettings.fromMap(Map<String, dynamic> map) => InvoiceSettings(
-        prefix: (map['prefix'] ?? 'INV') as String,
+        prefix: (map['prefix'] ?? 'INV-') as String,
         startNumber: (map['startNumber'] ?? 1) as int,
         nextSequence: (map['nextSequence'] ?? map['startNumber'] ?? 1) as int,
+        padding: (map['padding'] ?? 4) as int,
       );
 }
 
@@ -52,7 +57,6 @@ class BillingService {
 
   Stream<List<Invoice>> streamInvoices() {
     return _invoicesQuery
-        .orderBy('issuedAt', descending: true)
         .snapshots()
         .map((snap) =>
             snap.docs.map((d) => Invoice.fromSnapshot(d)).toList());
@@ -105,6 +109,7 @@ class BillingService {
   Future<void> saveInvoiceSettings({
     required String prefix,
     required int startNumber,
+    int padding = 4,
     bool resetCounter = false,
   }) async {
     final current = await getInvoiceSettings();
@@ -115,9 +120,10 @@ class BillingService {
 
     await _settingsRef.set(
       <String, dynamic>{
-        'prefix': prefix.trim(),
+        'prefix': prefix,
         'startNumber': startNumber,
         'nextSequence': nextSeq,
+        'padding': padding,
         if (gymId.isNotEmpty) 'gymId': gymId,
       },
     );
@@ -131,13 +137,13 @@ class BillingService {
   Future<String> previewNextInvoiceNumber() async {
     final snap = await _settingsRef.get();
     final sData = snap.data() ?? {};
-    final rawPrefix = (sData['prefix'] as String? ?? 'INV').trim();
-    final effectivePrefix = rawPrefix.isEmpty ? 'INV' : rawPrefix;
+    final prefix = ((sData['prefix'] as String?) ?? 'INV-');
+    final effectivePrefix = prefix.isEmpty ? 'INV-' : prefix;
     final startNumber = (sData['startNumber'] as int? ?? 1);
     final nextSeq =
         snap.exists ? (sData['nextSequence'] as int? ?? startNumber) : startNumber;
-    final year = DateTime.now().year;
-    return '$effectivePrefix-$year-${nextSeq.toString().padLeft(4, '0')}';
+    final padding = (sData['padding'] as int? ?? 4);
+    return '$effectivePrefix${nextSeq.toString().padLeft(padding, '0')}';
   }
 
   /// Creates an invoice document.
@@ -207,15 +213,16 @@ class BillingService {
         // Auto-generate and atomically increment the counter.
         final settingsSnap = await tx.get(_settingsRef);
         final sData = settingsSnap.data() ?? {};
-        final rawPrefix = (sData['prefix'] as String? ?? 'INV').trim();
-        final effectivePrefix = rawPrefix.isEmpty ? 'INV' : rawPrefix;
+        final rawPrefix = ((sData['prefix'] as String?) ?? 'INV-');
+        final effectivePrefix = rawPrefix.isEmpty ? 'INV-' : rawPrefix;
         final startNumber = (sData['startNumber'] as int? ?? 1);
         final nextSeq = settingsSnap.exists
             ? (sData['nextSequence'] as int? ?? startNumber)
             : startNumber;
+        final padding = (sData['padding'] as int? ?? 4);
 
         invoiceNumber =
-            '$effectivePrefix-${now.year}-${nextSeq.toString().padLeft(4, '0')}';
+            '$effectivePrefix${nextSeq.toString().padLeft(padding, '0')}';
 
         tx.set(
           _settingsRef,
@@ -223,6 +230,7 @@ class BillingService {
             'prefix': rawPrefix,
             'startNumber': startNumber,
             'nextSequence': nextSeq + 1,
+            'padding': padding,
             if (gymId.isNotEmpty) 'gymId': gymId,
           },
         );

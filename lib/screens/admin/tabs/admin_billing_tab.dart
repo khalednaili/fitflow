@@ -199,6 +199,15 @@ class _AdminBillingTabState extends State<AdminBillingTab>
                       if (snap.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());
                       }
+                      if (snap.hasError) {
+                        return Center(
+                          child: Text(
+                            '${l10n.tr('Error loading invoices')}: ${snap.error}',
+                            style: const TextStyle(color: Colors.red),
+                            textAlign: TextAlign.center,
+                          ),
+                        );
+                      }
                       final all = snap.data ?? [];
                       return AnimatedBuilder(
                         animation: _filterController,
@@ -306,6 +315,15 @@ class _AdminBillingTabState extends State<AdminBillingTab>
               builder: (context, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return Center(
+                    child: Text(
+                      '${l10n.tr('Error loading invoices')}: ${snap.error}',
+                      style: const TextStyle(color: Colors.red),
+                      textAlign: TextAlign.center,
+                    ),
+                  );
                 }
                 final all = snap.data ?? [];
                 return TabBarView(
@@ -2016,15 +2034,18 @@ class _ConfirmStepState extends State<_ConfirmStep> {
           _PreviewSection(
             icon: Icons.tag,
             title: l10n.tr('Invoice Number'),
-            child: TextField(
-              controller: _invoiceNumberController,
-              decoration: InputDecoration(
-                hintText: widget.invoiceNumberHint,
-                helperText:
-                    l10n.tr('Edit to override the auto-generated number'),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.all(10),
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Text(
+                _invoiceNumberController.text.isNotEmpty
+                    ? _invoiceNumberController.text
+                    : widget.invoiceNumberHint,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
             ),
           ),
@@ -2716,6 +2737,8 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
   bool _saving = false;
   String? _error;
   int _currentNextSeq = 1;
+  int _padding = 4;
+  String? _activePreset; // 'inv' | 'year' | 'yearmonth' | null (custom)
 
   @override
   void initState() {
@@ -2738,6 +2761,8 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
         _prefixCtrl.text = settings.prefix;
         _startCtrl.text = settings.startNumber.toString();
         _currentNextSeq = settings.nextSequence;
+        _padding = settings.padding;
+        _activePreset = _detectPreset(settings.prefix);
         _loading = false;
       });
     } catch (e) {
@@ -2749,16 +2774,44 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
     }
   }
 
+  String? _detectPreset(String prefix) {
+    final now = DateTime.now();
+    final year = now.year.toString();
+    final month = now.month.toString().padLeft(2, '0');
+    if (prefix == 'INV-') return 'inv';
+    if (prefix == '$year-') return 'year';
+    if (prefix == '$year-$month-') return 'yearmonth';
+    return null;
+  }
+
+  void _applyPreset(String preset) {
+    final now = DateTime.now();
+    final year = now.year.toString();
+    final month = now.month.toString().padLeft(2, '0');
+    setState(() {
+      _activePreset = preset;
+      switch (preset) {
+        case 'inv':
+          _prefixCtrl.text = 'INV-';
+        case 'year':
+          _prefixCtrl.text = '$year-';
+        case 'yearmonth':
+          _prefixCtrl.text = '$year-$month-';
+      }
+    });
+  }
+
   Future<void> _save() async {
-    final prefix = _prefixCtrl.text.trim();
+    final l10n = context.l10n;
+    final prefix = _prefixCtrl.text;
     final startNumber = int.tryParse(_startCtrl.text.trim());
 
     if (prefix.isEmpty) {
-      setState(() => _error = 'Prefix cannot be empty.');
+      setState(() => _error = l10n.tr('Prefix cannot be empty.'));
       return;
     }
     if (startNumber == null || startNumber < 1) {
-      setState(() => _error = 'Start number must be a positive integer.');
+      setState(() => _error = l10n.tr('Start number must be a positive integer.'));
       return;
     }
 
@@ -2771,6 +2824,7 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
       await widget.billing.saveInvoiceSettings(
         prefix: prefix,
         startNumber: startNumber,
+        padding: _padding,
         resetCounter: _resetCounter,
       );
       if (!mounted) return;
@@ -2784,110 +2838,286 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
     }
   }
 
-  /// Preview what the next invoice number will look like.
   String get _preview {
-    final prefix = _prefixCtrl.text.trim().isEmpty ? 'INV' : _prefixCtrl.text.trim();
-    final startNumber = int.tryParse(_startCtrl.text.trim()) ?? 1;
-    final seq = _resetCounter ? startNumber : _currentNextSeq;
-    final year = DateTime.now().year;
-    return '$prefix-$year-${seq.toString().padLeft(4, '0')}';
+    final prefix = _prefixCtrl.text.isEmpty ? 'INV-' : _prefixCtrl.text;
+    final seq = _resetCounter
+        ? (int.tryParse(_startCtrl.text.trim()) ?? 1)
+        : _currentNextSeq;
+    return '$prefix${seq.toString().padLeft(_padding, '0')}';
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final now = DateTime.now();
+    final year = now.year.toString();
+    final month = now.month.toString().padLeft(2, '0');
+
+    final presets = [
+      (id: 'inv', label: 'INV-', sample: 'INV-'),
+      (id: 'year', label: '$year-', sample: '$year-'),
+      (id: 'yearmonth', label: '$year-$month-', sample: '$year-$month-'),
+    ];
+
     return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+      contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       title: Row(
         children: [
-          const Icon(Icons.receipt_long_outlined,
-              color: Color(0xFF0F766E), size: 22),
-          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F766E).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.receipt_long_outlined,
+                color: Color(0xFF0F766E), size: 20),
+          ),
+          const SizedBox(width: 10),
           Text(l10n.tr('Invoice Settings'),
-              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              style:
+                  const TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
         ],
       ),
       content: _loading
           ? const SizedBox(
-              height: 80,
+              height: 100,
               child: Center(child: CircularProgressIndicator()))
           : SizedBox(
-              width: 380,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Prefix
-                  TextField(
-                    controller: _prefixCtrl,
-                    decoration: InputDecoration(
-                      labelText: l10n.tr('Invoice Prefix'),
-                      hintText: 'INV',
-                      helperText: l10n.tr('Letters/numbers only, e.g. INV or GYM'),
-                      border: const OutlineInputBorder(),
-                    ),
-                    textCapitalization: TextCapitalization.characters,
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: 16),
-                  // Start number
-                  TextField(
-                    controller: _startCtrl,
-                    decoration: InputDecoration(
-                      labelText: l10n.tr('Starting Number'),
-                      hintText: '1',
-                      helperText: l10n.tr('First sequence number when counter resets'),
-                      border: const OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  // Reset counter
-                  CheckboxListTile(
-                    value: _resetCounter,
-                    onChanged: (v) => setState(() => _resetCounter = v ?? false),
-                    contentPadding: EdgeInsets.zero,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: Text(l10n.tr('Reset counter to start number'),
-                        style: const TextStyle(fontSize: 14)),
-                    subtitle: Text(
-                      l10n.tr('Current next: #${_currentNextSeq.toString().padLeft(4, '0')}'),
-                      style:
-                          TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Preview
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE6F4F1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
+              width: 420,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Quick Presets ───────────────────────────────────────
+                    _SettingsLabel(l10n.tr('Quick Presets')),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
-                        const Icon(Icons.visibility_outlined,
-                            size: 16, color: Color(0xFF0F766E)),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${l10n.tr('Next invoice')}: $_preview',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF0F766E),
-                          ),
+                        ...presets.map((p) {
+                          final active = _activePreset == p.id;
+                          return _PresetChip(
+                            label: p.label,
+                            active: active,
+                            onTap: () => _applyPreset(p.id),
+                          );
+                        }),
+                        _PresetChip(
+                          label: l10n.tr('Custom'),
+                          icon: Icons.edit_outlined,
+                          active: _activePreset == null,
+                          onTap: () => setState(() => _activePreset = null),
                         ),
                       ],
                     ),
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 10),
-                    Text(_error!,
-                        style: const TextStyle(color: Colors.red, fontSize: 13)),
+                    const SizedBox(height: 20),
+                    // ── Prefix ──────────────────────────────────────────────
+                    _SettingsLabel(l10n.tr('Prefix')),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _prefixCtrl,
+                      decoration: InputDecoration(
+                        hintText: 'INV-',
+                        helperText: l10n.tr(
+                            'Appears before the number — include any separators (e.g. INV-, 2026-06-)'),
+                        helperMaxLines: 2,
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(
+                              color: Color(0xFF0F766E), width: 2),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                      ),
+                      onChanged: (_) => setState(() => _activePreset = null),
+                    ),
+                    const SizedBox(height: 20),
+                    // ── Sequence Length ──────────────────────────────────────
+                    _SettingsLabel(l10n.tr('Sequence Length')),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [3, 4, 5, 6].map((digits) {
+                        final active = _padding == digits;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(8),
+                            onTap: () => setState(() => _padding = digits),
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: active
+                                    ? const Color(0xFF0F766E)
+                                    : Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: active
+                                      ? const Color(0xFF0F766E)
+                                      : Colors.grey.shade300,
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    '${'0' * (digits - 1)}1',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: active
+                                          ? Colors.white
+                                          : Colors.black87,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures()
+                                      ],
+                                    ),
+                                  ),
+                                  Text(
+                                    '$digits ${l10n.tr('digits')}',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: active
+                                          ? Colors.white70
+                                          : Colors.grey.shade500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 20),
+                    // ── Starting Number ─────────────────────────────────────
+                    _SettingsLabel(l10n.tr('Starting Number')),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: 140,
+                      child: TextField(
+                        controller: _startCtrl,
+                        decoration: InputDecoration(
+                          hintText: '1',
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                                color: Color(0xFF0F766E), width: 2),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 12),
+                        ),
+                        keyboardType: TextInputType.number,
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // ── Reset Counter ───────────────────────────────────────
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: CheckboxListTile(
+                        value: _resetCounter,
+                        onChanged: (v) =>
+                            setState(() => _resetCounter = v ?? false),
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 12),
+                        controlAffinity: ListTileControlAffinity.leading,
+                        activeColor: const Color(0xFF0F766E),
+                        title: Text(l10n.tr('Reset counter to start number'),
+                            style: const TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w600)),
+                        subtitle: Text(
+                          '${l10n.tr('Current next')}: #${_currentNextSeq.toString().padLeft(_padding, '0')}',
+                          style: TextStyle(
+                              fontSize: 12, color: Colors.grey.shade600),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // ── Live Preview ────────────────────────────────────────
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFE6F4F1), Color(0xFFF0FAF8)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: const Color(0xFF0F766E).withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.visibility_outlined,
+                              size: 18, color: Color(0xFF0F766E)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  l10n.tr('Next invoice number'),
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _preview,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: Color(0xFF0F766E),
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.error_outline,
+                                size: 16, color: Colors.red.shade700),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(_error!,
+                                  style: TextStyle(
+                                      color: Colors.red.shade700,
+                                      fontSize: 13)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 8),
                   ],
-                ],
+                ),
               ),
             ),
       actions: [
@@ -2898,7 +3128,9 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
         FilledButton(
           onPressed: _saving || _loading ? null : _save,
           style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF0F766E)),
+              backgroundColor: const Color(0xFF0F766E),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10))),
           child: _saving
               ? const SizedBox(
                   width: 16,
@@ -2908,6 +3140,82 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
               : Text(l10n.tr('Save')),
         ),
       ],
+    );
+  }
+}
+
+// ── Small helpers ─────────────────────────────────────────────────────────────
+
+class _SettingsLabel extends StatelessWidget {
+  const _SettingsLabel(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.grey.shade500,
+          letterSpacing: 0.8,
+        ),
+      );
+}
+
+class _PresetChip extends StatelessWidget {
+  const _PresetChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.icon,
+  });
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: active
+              ? const Color(0xFF0F766E)
+              : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active
+                ? const Color(0xFF0F766E)
+                : Colors.grey.shade300,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon,
+                  size: 13,
+                  color: active ? Colors.white : Colors.grey.shade600),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: active ? Colors.white : Colors.grey.shade700,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

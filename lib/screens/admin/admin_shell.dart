@@ -52,6 +52,20 @@ class _AdminItem {
   final Color color;
 }
 
+/// Action item that opens a dialog / pushes a route (not a selectable tab).
+class _ToolItem {
+  const _ToolItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+}
+
 // ⚠️  DUAL-FILE NAV: When adding a new item here, you MUST also update
 //    admin_dashboard_screen.dart (_tabs + _buildTabChildren + _sidebarGroups)
 //    for the mobile sidebar, otherwise the new tab will be invisible on mobile.
@@ -539,10 +553,12 @@ class _AdminShellState extends State<AdminShell> {
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 8),
-              children: _adminSections
-                  .map((s) =>
-                      _buildSidebarSection(s, context, showLabels: showLabels))
-                  .toList(),
+              children: [
+                ..._adminSections
+                    .map((s) =>
+                        _buildSidebarSection(s, context, showLabels: showLabels)),
+                _buildToolsSection(context, showLabels: showLabels),
+              ],
             ),
           ),
           _buildSidebarUtilityBar(showLabels: showLabels),
@@ -646,204 +662,168 @@ class _AdminShellState extends State<AdminShell> {
     );
   }
 
-  // ── Sidebar utility bar (bottom) ─────────────────────────────────────────
-  //
-  // Consolidates: Booking Rules, Import, Export, Payment Calendar, Sign out
-  // into one cohesive section, preventing border-fragment noise.
+  // ── Tools section (scrollable — Booking Rules, Import, Export, Calendar) ──
 
-  Widget _buildSidebarUtilityBar({required bool showLabels}) {
+  Widget _buildToolsSection(BuildContext context, {required bool showLabels}) {
     final gymId = widget.appUser?.gymId ?? '';
-    final accent = const Color(0xFF10B981);
-
-    void openBooking() => showDialog<void>(
+    final tools = [
+      _ToolItem(
+        icon: Icons.tune_outlined,
+        label: 'Booking Rules',
+        color: const Color(0xFF6B7280),
+        onTap: () => showDialog<void>(
           context: context,
           builder: (_) => BookingSettingsDialog(gymId: gymId),
-        );
-    void openImport() => showDialog<void>(
+        ),
+      ),
+      _ToolItem(
+        icon: Icons.upload_file_outlined,
+        label: 'Import Data',
+        color: const Color(0xFF10B981),
+        onTap: () => showDialog<void>(
           context: context,
           builder: (_) => ImportDataDialog(gymId: gymId),
-        );
-    void openExport() => showDialog<void>(
+        ),
+      ),
+      _ToolItem(
+        icon: Icons.download_outlined,
+        label: 'Export Data',
+        color: const Color(0xFF60A5FA),
+        onTap: () => showDialog<void>(
           context: context,
           builder: (_) => ExportDataDialog(gymId: gymId),
-        );
-    void openPayment() => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-              builder: (_) => PaymentCalendarScreen(gymId: gymId)),
-        );
-    void signOut() => FirebaseAuth.instance.signOut();
-
-    const divider = Divider(
-        height: 1, indent: 14, endIndent: 14, color: Color(0xFF1A3530));
-
-    if (!showLabels) {
-      // ── Icon-rail mode ───────────────────────────────────────────────────
-      return Container(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: Color(0xFF1A3530))),
         ),
-        child: Column(
-          children: [
-            _railIcon(Icons.tune_outlined, context.l10n.tr('Booking Rules'), onTap: openBooking),
-            _railIcon(Icons.upload_file_outlined, context.l10n.tr('Import Data'), onTap: openImport),
-            _railIcon(Icons.download_outlined, context.l10n.tr('Export Data'), onTap: openExport),
-            _railIcon(Icons.calendar_month_outlined, context.l10n.tr('Payment Calendar'), onTap: openPayment),
-            _railIcon(Icons.logout, context.l10n.tr('Sign out'),
-                color: const Color(0xFF6B7280), onTap: signOut),
-          ],
-        ),
-      );
-    }
-
-    // ── Expanded-label mode ───────────────────────────────────────────────
-    return Container(
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Color(0xFF1A3530))),
       ),
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      _ToolItem(
+        icon: Icons.calendar_month_outlined,
+        label: 'Payment Calendar',
+        color: const Color(0xFF6B7280),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => PaymentCalendarScreen(gymId: gymId),
+          ),
+        ),
+      ),
+    ];
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          showLabels ? 12 : 4, 10, showLabels ? 12 : 4, 4),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Booking Rules
-          _utilityTile(
-            icon: Icons.tune_outlined,
-            label: context.l10n.tr('Booking Rules'),
-            onTap: openBooking,
-          ),
-          divider,
-          // Data management row: Import + Export side by side
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _dataButton(
-                    icon: Icons.upload_file_outlined,
-                    label: context.l10n.tr('Import'),
-                    color: accent.withValues(alpha: 0.7),
-                    onTap: openImport,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _dataButton(
-                    icon: Icons.download_outlined,
-                    label: context.l10n.tr('Export'),
-                    color: const Color(0xFF60A5FA).withValues(alpha: 0.8),
-                    onTap: openExport,
-                  ),
-                ),
-              ],
+          if (showLabels)
+            Padding(
+              padding: const EdgeInsets.only(left: 8, bottom: 6),
+              child: Text(
+                context.l10n.tr('SETTINGS'),
+                style: const TextStyle(
+                    color: Color(0xFF4B7A6E),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              child: Divider(color: const Color(0xFF1A3530), height: 1),
             ),
-          ),
-          divider,
-          // Payment Calendar
-          _utilityTile(
-            icon: Icons.calendar_month_outlined,
-            label: context.l10n.tr('Payment Calendar'),
-            onTap: openPayment,
-          ),
-          divider,
-          // Sign out
-          _utilityTile(
-            icon: Icons.logout,
-            label: context.l10n.tr('Sign out'),
-            iconColor: const Color(0xFF6B7280),
-            textColor: const Color(0xFF6B7280),
-            onTap: signOut,
-          ),
+          ...tools.map((t) =>
+              _buildToolItem(t, context, showLabels: showLabels)),
         ],
       ),
     );
   }
 
-  Widget _utilityTile({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    Color iconColor = const Color(0xFF6B7280),
-    Color textColor = const Color(0xFF9CA3AF),
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-        child: Row(
-          children: [
-            Icon(icon, size: 16, color: iconColor),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: TextStyle(
-                color: textColor,
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _dataButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Tooltip(
-      message: label,
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 7),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: color.withValues(alpha: 0.18)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 13, color: color),
-                const SizedBox(width: 5),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+  Widget _buildToolItem(_ToolItem item, BuildContext context,
+      {required bool showLabels}) {
+    final itemWidget = Container(
+      margin: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        children: [
+          // 3px spacer to align with nav items that have a left accent bar
+          const SizedBox(width: 3),
+          Expanded(
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.symmetric(
+                  horizontal: showLabels ? 10 : 6, vertical: 0),
+              leading: Icon(item.icon, size: 18, color: item.color),
+              title: showLabels
+                  ? Text(
+                      context.l10n.tr(item.label),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: Color(0xFF9CA3AF),
+                      ),
+                    )
+                  : null,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+              hoverColor: Colors.white.withValues(alpha: 0.05),
+              onTap: item.onTap,
             ),
           ),
-        ),
+        ],
       ),
     );
+
+    if (!showLabels) {
+      return Tooltip(
+        message: context.l10n.tr(item.label),
+        preferBelow: false,
+        verticalOffset: 0,
+        child: itemWidget,
+      );
+    }
+    return itemWidget;
   }
 
-  Widget _railIcon(
-    IconData icon,
-    String tooltip, {
-    required VoidCallback onTap,
-    Color color = const Color(0xFF6B7280),
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Center(child: Icon(icon, size: 18, color: color)),
-        ),
+  // ── Sidebar utility bar (Sign out only) ──────────────────────────────────
+
+  Widget _buildSidebarUtilityBar({required bool showLabels}) {
+    void signOut() => FirebaseAuth.instance.signOut();
+
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Color(0xFF1A3530))),
       ),
+      child: showLabels
+          ? InkWell(
+              onTap: signOut,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    const Icon(Icons.logout,
+                        size: 16, color: Color(0xFF6B7280)),
+                    const SizedBox(width: 12),
+                    Text(
+                      context.l10n.tr('Sign out'),
+                      style: const TextStyle(
+                          color: Color(0xFF6B7280),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          : Tooltip(
+              message: context.l10n.tr('Sign out'),
+              child: InkWell(
+                onTap: signOut,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Center(
+                      child: Icon(Icons.logout,
+                          size: 18, color: Color(0xFF6B7280))),
+                ),
+              ),
+            ),
     );
   }
 
@@ -963,10 +943,12 @@ class _AdminShellState extends State<AdminShell> {
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(vertical: 8),
-                children: _adminSections
-                    .map((s) =>
-                        _buildSidebarSection(s, context, showLabels: true))
-                    .toList(),
+                children: [
+                  ..._adminSections
+                      .map((s) =>
+                          _buildSidebarSection(s, context, showLabels: true)),
+                  _buildToolsSection(context, showLabels: true),
+                ],
               ),
             ),
             _buildSidebarUtilityBar(showLabels: true),
