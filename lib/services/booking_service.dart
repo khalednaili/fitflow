@@ -601,7 +601,11 @@ class BookingService {
           // eat into "punic" weekly slots). Legacy bookings without usedPlanId
           // are counted conservatively so old data can't be used to bypass limits.
           bool sameOffer(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-            final docPlanId = (doc.data()['usedPlanId'] as String?) ?? '';
+            final d = doc.data();
+            // Drop-ins are paid per visit and must never consume an offer's
+            // weekly/monthly/pack allowance.
+            if ((d['isDropIn'] ?? false) as bool) return false;
+            final docPlanId = (d['usedPlanId'] as String?) ?? '';
             return docPlanId.isEmpty || docPlanId == planId;
           }
 
@@ -828,6 +832,17 @@ class BookingService {
       final bookedCount = (latestClassData['bookedCount'] ?? 0) as int;
       final nextBookedCount = bookedCount > 0 ? bookedCount - 1 : 0;
 
+      // Re-read the first waitlist entry *inside* the transaction. This both
+      // pulls it into the transaction's read set (so a concurrent
+      // cancel/promotion that already consumed it forces a retry) and lets us
+      // skip promotion if it no longer exists — preventing the same waitlister
+      // from being promoted twice. All reads must precede writes.
+      DocumentSnapshot<Map<String, dynamic>>? waitlistSnap;
+      if (firstWaitlistDoc != null) {
+        waitlistSnap = await transaction
+            .get(_firestore.collection('waitlists').doc(firstWaitlistDoc.id));
+      }
+
       transaction.delete(bookingDocRef);
 
       if (needsRefundTrace) {
@@ -844,8 +859,8 @@ class BookingService {
         });
       }
 
-      if (firstWaitlistDoc != null) {
-        final data = firstWaitlistDoc.data() as Map<String, dynamic>? ?? {};
+      if (waitlistSnap != null && waitlistSnap.exists) {
+        final data = waitlistSnap.data() ?? <String, dynamic>{};
         final waitlistUserId = (data['userId'] ?? '') as String;
         final waitlistMemberName = (data['memberName'] ?? '') as String;
 
@@ -859,7 +874,7 @@ class BookingService {
             'memberName': waitlistMemberName,
             ..._promotedDropInFields(data),
           });
-          transaction.delete(firstWaitlistDoc.reference);
+          transaction.delete(waitlistSnap.reference);
 
           final waitlistCount = (latestClassData['waitlistCount'] ?? 0) as int;
           transaction.update(classRef, <String, dynamic>{

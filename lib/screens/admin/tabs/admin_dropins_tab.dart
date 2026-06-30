@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../../l10n/app_localizations.dart';
 import 'package:fit_flow/utils/crash_logger.dart';
 import 'package:fit_flow/utils/currency.dart';
+import 'package:fit_flow/utils/member_search.dart';
 import '../../../models/app_user.dart';
 import '../../../models/booking.dart';
 import '../../../models/gym_class.dart';
@@ -705,11 +706,26 @@ class _AddDropInDialogState extends State<_AddDropInDialog> {
   final _guestNameCtrl = TextEditingController();
   final _guestEmailCtrl = TextEditingController();
 
+  // Member search
+  final _memberSearchCtrl = TextEditingController();
+  String _memberQuery = '';
+
   @override
   void dispose() {
     _guestNameCtrl.dispose();
     _guestEmailCtrl.dispose();
+    _memberSearchCtrl.dispose();
     super.dispose();
+  }
+
+  /// Whether the form is complete enough to submit.
+  bool get _canSubmit {
+    if (_selectedClass == null) return false;
+    if (_isGuest) {
+      return _guestNameCtrl.text.trim().isNotEmpty &&
+          _guestEmailCtrl.text.trim().contains('@');
+    }
+    return _selectedMemberId != null && _selectedMemberId!.isNotEmpty;
   }
 
   List<GymClass> get _dropInClasses =>
@@ -799,6 +815,170 @@ class _AddDropInDialogState extends State<_AddDropInDialog> {
     }
   }
 
+  Widget _infoBox(IconData icon, Color color, String message) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(message,
+                style: TextStyle(color: color, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Searchable member list with loading / error / empty / no-match states.
+  Widget _buildMemberPicker(ColorScheme cs, Color accent) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _memberSearchCtrl,
+          onChanged: (v) => setState(() => _memberQuery = v),
+          decoration: InputDecoration(
+            isDense: true,
+            prefixIcon: const Icon(Icons.search_rounded, size: 20),
+            suffixIcon: _memberQuery.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    onPressed: () {
+                      _memberSearchCtrl.clear();
+                      setState(() => _memberQuery = '');
+                    },
+                  ),
+            hintText: context.l10n.tr('Search members…'),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12)),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
+        ),
+        const SizedBox(height: 8),
+        StreamBuilder<List<AppUser>>(
+          stream: _memberService.streamMembers(),
+          builder: (context, snap) {
+            if (snap.hasError) {
+              return _infoBox(Icons.error_outline, Colors.red.shade700,
+                  context.l10n.tr("Couldn't load members. Please try again."));
+            }
+            if (snap.connectionState == ConnectionState.waiting &&
+                !snap.hasData) {
+              return Container(
+                height: 64,
+                alignment: Alignment.center,
+                child: const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              );
+            }
+            final all = snap.data ?? const <AppUser>[];
+            if (all.isEmpty) {
+              return _infoBox(Icons.group_off_outlined, cs.onSurfaceVariant,
+                  context.l10n.tr('No members found.'));
+            }
+            final members = filterMembers(all, _memberQuery);
+            if (members.isEmpty) {
+              return _infoBox(
+                  Icons.search_off_rounded,
+                  cs.onSurfaceVariant,
+                  context.l10n.tr('No members match your search.'));
+            }
+            return Container(
+              constraints: const BoxConstraints(maxHeight: 240),
+              decoration: BoxDecoration(
+                border: Border.all(color: cs.outlineVariant),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: members.length,
+                separatorBuilder: (_, __) => Divider(
+                    height: 1, color: cs.outlineVariant.withValues(alpha: 0.5)),
+                itemBuilder: (context, i) {
+                  final m = members[i];
+                  final name =
+                      m.displayName.trim().isNotEmpty ? m.displayName : m.email;
+                  final selected = m.id == _selectedMemberId;
+                  return InkWell(
+                    onTap: () => setState(() {
+                      _selectedMemberId = m.id;
+                      _selectedMemberName = name;
+                    }),
+                    child: Container(
+                      color: selected
+                          ? accent.withValues(alpha: 0.10)
+                          : Colors.transparent,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor: selected
+                                ? accent
+                                : cs.surfaceContainerHighest,
+                            child: Text(
+                              memberInitials(m),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: selected ? Colors.white : cs.onSurface,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: selected
+                                            ? FontWeight.w700
+                                            : FontWeight.w500)),
+                                if (m.email.isNotEmpty &&
+                                    m.email != name)
+                                  Text(m.email,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: cs.onSurfaceVariant)),
+                              ],
+                            ),
+                          ),
+                          if (selected)
+                            Icon(Icons.check_circle_rounded,
+                                color: accent, size: 20),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -830,15 +1010,16 @@ class _AddDropInDialogState extends State<_AddDropInDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Add Drop-in',
-                        style: TextStyle(
+                      Text(
+                        context.l10n.tr('Add Drop-in'),
+                        style: const TextStyle(
                             fontSize: 18, fontWeight: FontWeight.w800),
                       ),
                       Text(
                         _isGuest
-                            ? 'Register a non-member guest'
-                            : 'Book a member as a drop-in guest',
+                            ? context.l10n.tr('Register a non-member guest')
+                            : context.l10n
+                                .tr('Book a member as a drop-in guest'),
                         style:
                             TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                       ),
@@ -1011,6 +1192,7 @@ class _AddDropInDialogState extends State<_AddDropInDialog> {
               TextField(
                 controller: _guestNameCtrl,
                 textCapitalization: TextCapitalization.words,
+                onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.badge_outlined),
                   hintText: context.l10n.tr('Full name'),
@@ -1030,6 +1212,7 @@ class _AddDropInDialogState extends State<_AddDropInDialog> {
               TextField(
                 controller: _guestEmailCtrl,
                 keyboardType: TextInputType.emailAddress,
+                onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.email_outlined),
                   hintText: context.l10n.tr('guest@example.com'),
@@ -1046,52 +1229,7 @@ class _AddDropInDialogState extends State<_AddDropInDialog> {
                       fontWeight: FontWeight.w600,
                       color: cs.onSurfaceVariant)),
               const SizedBox(height: 8),
-              StreamBuilder<List<AppUser>>(
-                stream: _memberService.streamMembers(),
-                builder: (context, snap) {
-                  // streamMembers() returns an unmodifiable list, so copy
-                  // before sorting in place (in-place sort would throw
-                  // "Unsupported operation: sort").
-                  final members = List<AppUser>.of(snap.data ?? const <AppUser>[]);
-                  members
-                      .sort((a, b) => a.displayName.compareTo(b.displayName));
-                  return DropdownButtonFormField<String>(
-                    value: _selectedMemberId,
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.person_outline_rounded),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 14),
-                    ),
-                    hint: Text(context.l10n.tr('Select a member')), 
-                    items: members
-                        .map(
-                          (m) => DropdownMenuItem<String>(
-                            value: m.id,
-                            child: Text(
-                              m.displayName.isNotEmpty
-                                  ? m.displayName
-                                  : m.email,
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (id) {
-                      final picked =
-                          members.where((m) => m.id == id).firstOrNull;
-                      setState(() {
-                        _selectedMemberId = id;
-                        _selectedMemberName =
-                            picked?.displayName.isNotEmpty == true
-                                ? picked!.displayName
-                                : (picked?.email ?? '');
-                      });
-                    },
-                  );
-                },
-              ),
+              _buildMemberPicker(cs, accent),
             ],
 
             // Price preview
@@ -1106,7 +1244,7 @@ class _AddDropInDialogState extends State<_AddDropInDialog> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.euro_outlined, size: 16, color: accent),
+                    const Icon(Icons.payments_outlined, size: 16, color: accent),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
@@ -1146,9 +1284,11 @@ class _AddDropInDialogState extends State<_AddDropInDialog> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
-                    onPressed: _saving ? null : _save,
+                    onPressed: (_saving || !_canSubmit) ? null : _save,
                     style: FilledButton.styleFrom(
                       backgroundColor: accent,
+                      disabledBackgroundColor: accent.withValues(alpha: 0.4),
+                      disabledForegroundColor: Colors.white70,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),

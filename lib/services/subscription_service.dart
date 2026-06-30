@@ -358,6 +358,20 @@ class SubscriptionService {
       }
     }
 
+    // ── Instalment-plan integrity guard ───────────────────────────────────
+    // The scheduled amounts must add up to the total price, otherwise the plan
+    // would over/under-bill the member. The UI enforces this too; this is the
+    // server-side backstop.
+    if (instalmentSchedule.isNotEmpty) {
+      final instalmentTotal =
+          instalmentSchedule.fold<int>(0, (s, i) => s + i.amount);
+      if (instalmentTotal != totalAmount) {
+        throw Exception(
+            'Instalment amounts ($instalmentTotal) must equal the total '
+            '($totalAmount).');
+      }
+    }
+
     // ── Resolve payment history & amountPaid ──────────────────────────────
     // If using an instalment plan, any instalment already marked paid on
     // creation (e.g. first instalment paid today) seeds paymentHistory.

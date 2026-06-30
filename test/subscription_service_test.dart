@@ -642,6 +642,42 @@ void main() {
       expect(snap.data()!['amountPaid'], 0);
       expect((snap.data()!['paymentHistory'] as List).isEmpty, true);
     });
+
+    test('throws when instalment amounts do not equal the total', () async {
+      // schedule sums to 100 but totalAmount is 120 → reject.
+      await expectLater(
+        sut.assignOfferAtomic(
+          userId: userId,
+          planId: planId,
+          totalAmount: 120,
+          currency: 'DZD',
+          startDate: now,
+          endDate: now.add(const Duration(days: 90)),
+          instalmentSchedule: schedule,
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      // Nothing should have been written.
+      final snap =
+          await db.collection('user_subscriptions').doc(subId).get();
+      expect(snap.exists, isFalse);
+    });
+
+    test('accepts a schedule whose amounts equal the total', () async {
+      await expectLater(
+        sut.assignOfferAtomic(
+          userId: userId,
+          planId: planId,
+          totalAmount: 100, // 40 + 30 + 30
+          currency: 'DZD',
+          startDate: now,
+          endDate: now.add(const Duration(days: 90)),
+          instalmentSchedule: schedule,
+        ),
+        completes,
+      );
+    });
   });
 
   // ══════════════════════════════════════════════════════════════════════════

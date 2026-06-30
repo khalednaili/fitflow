@@ -22,7 +22,11 @@ class WaitlistEntry {
       id: snapshot.id,
       userId: (data['userId'] ?? '') as String,
       classId: (data['classId'] ?? '') as String,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      // Missing createdAt sorts *earliest* (matches the promotion sorts), and is
+      // a stable sentinel rather than DateTime.now() which would shift on every
+      // read and make FIFO position non-deterministic.
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ??
+          DateTime.fromMillisecondsSinceEpoch(0),
       memberName: (data['memberName'] ?? '') as String,
     );
   }

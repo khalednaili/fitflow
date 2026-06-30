@@ -486,6 +486,12 @@ class AppLocalizations {
     'Drop-in price must be greater than 0':
         'Drop-in price must be greater than 0',
     'Payment collected at desk': 'Payment collected at desk',
+    'Register a non-member guest': 'Register a non-member guest',
+    'Book a member as a drop-in guest': 'Book a member as a drop-in guest',
+    'Search members…': 'Search members…',
+    'No members found.': 'No members found.',
+    "Couldn't load members. Please try again.":
+        "Couldn't load members. Please try again.",
     'Book Drop-in': 'Book Drop-in',
     'Member created.': 'Member created.',
     'activated.': 'activated.',
@@ -1516,6 +1522,13 @@ class AppLocalizations {
     'Drop-in price must be greater than 0':
         'Le prix du drop-in doit être supérieur à 0',
     'Payment collected at desk': 'Paiement encaissé au comptoir',
+    'Register a non-member guest': 'Enregistrer un invité non-membre',
+    'Book a member as a drop-in guest':
+        'Réserver un membre en tant que drop-in',
+    'Search members…': 'Rechercher des membres…',
+    'No members found.': 'Aucun membre trouvé.',
+    "Couldn't load members. Please try again.":
+        'Impossible de charger les membres. Veuillez réessayer.',
     'Book Drop-in': 'Réserver un drop-in',
     'Member created.': 'Membre créé.',
     'activated.': 'activé.',

@@ -320,6 +320,45 @@ void main() {
           userId: userId, classId: wodClass, bypassDailyLimit: true);
       expect(result, BookingResult.booked);
     });
+
+    test('a drop-in does not consume the weekly (punic) quota', () async {
+      // 2 punic bookings + 1 drop-in this week → 3rd punic still allowed
+      // because the drop-in must not count against the weekly limit.
+      for (var i = 1; i <= 2; i++) {
+        await db.createBookingDoc(
+            userId: userId,
+            classId: 'wod_prev_$i',
+            bookingDate: _futureClass,
+            usedPlanId: punicPlan);
+      }
+      await db.createBookingDoc(
+          userId: userId,
+          classId: 'wod_dropin',
+          bookingDate: _futureClass,
+          isDropIn: true);
+      final result = await sut.bookClass(
+          userId: userId, classId: wodClass, bypassDailyLimit: true);
+      expect(result, BookingResult.booked);
+    });
+
+    test('a drop-in does not consume the pack (skills) quota', () async {
+      // 9 skills bookings + 1 drop-in → 10th skills still allowed.
+      for (var i = 1; i <= 9; i++) {
+        await db.createBookingDoc(
+            userId: userId,
+            classId: 'sk_prev_$i',
+            bookingDate: _futureClass,
+            usedPlanId: skillsPlan);
+      }
+      await db.createBookingDoc(
+          userId: userId,
+          classId: 'sk_dropin',
+          bookingDate: _futureClass,
+          isDropIn: true);
+      final result = await sut.bookClass(
+          userId: userId, classId: skillsClass, bypassDailyLimit: true);
+      expect(result, BookingResult.booked);
+    });
   });
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -761,6 +800,28 @@ void main() {
         await db.createBookingDoc(
             userId: userId,
             classId: 'june_prev_$i',
+            bookingDate: june,
+            usedPlanId: planId);
+      }
+      final result = await sut.bookClass(
+          userId: userId, classId: classId, bypassDailyLimit: true);
+      expect(result, BookingResult.booked);
+    });
+
+    test('a drop-in this month does NOT count toward the offer limit',
+        () async {
+      // A paid drop-in (empty usedPlanId, isDropIn=true) must not consume an
+      // offer slot. 7 real offer bookings + 1 drop-in = 8 docs this month, but
+      // only the 7 offer bookings count, so an 8th offer booking is allowed.
+      await db.createBookingDoc(
+          userId: userId,
+          classId: 'june_dropin',
+          bookingDate: june,
+          isDropIn: true);
+      for (var i = 1; i <= 7; i++) {
+        await db.createBookingDoc(
+            userId: userId,
+            classId: 'june_offer_$i',
             bookingDate: june,
             usedPlanId: planId);
       }
@@ -1210,6 +1271,87 @@ void main() {
           .where('classId', isEqualTo: classId)
           .get();
       expect(notPromotedSnap.docs, isEmpty);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 13b. WAITLIST PROMOTION SAFETY & ORDERING
+  // ══════════════════════════════════════════════════════════════════════════
+  group('13b • waitlist promotion safety & ordering', () {
+    const a = 'u13b_a';
+    const b = 'u13b_b';
+    const waiter = 'u13b_w';
+    const classId = 'class_wlsafe';
+
+    setUp(() async {
+      await db.createUser(userId: a);
+      await db.createUser(userId: b);
+      await db.createUser(userId: waiter);
+    });
+
+    test('the same waitlister is never promoted twice on two cancellations',
+        () async {
+      // Capacity 2, both seats taken, one waitlister.
+      await db.createClass(
+          classId: classId,
+          startTime: _futureClass,
+          capacity: 2,
+          bookedCount: 2,
+          waitlistCount: 1);
+      await db.createBookingDoc(
+          userId: a, classId: classId, bookingDate: _futureClass);
+      await db.createBookingDoc(
+          userId: b, classId: classId, bookingDate: _futureClass);
+      await db.createWaitlistEntry(userId: waiter, classId: classId);
+
+      // Cancel both booked members.
+      await sut.cancelBooking(userId: a, classId: classId);
+      await sut.cancelBooking(userId: b, classId: classId);
+
+      // The waitlister must hold exactly ONE booking — not two.
+      final waiterBookings = await db
+          .collection('bookings')
+          .where('userId', isEqualTo: waiter)
+          .where('classId', isEqualTo: classId)
+          .get();
+      expect(waiterBookings.docs, hasLength(1));
+
+      // Waitlist drained; class not overfilled.
+      final wl = await db
+          .collection('waitlists')
+          .where('classId', isEqualTo: classId)
+          .get();
+      expect(wl.docs, isEmpty);
+      final classSnap = await db.collection('classes').doc(classId).get();
+      expect(classSnap.data()!['bookedCount'], lessThanOrEqualTo(2));
+      expect(classSnap.data()!['waitlistCount'], 0);
+    });
+
+    // NOTE: the true concurrency case (two simultaneous cancels both
+    // pre-reading the same first entry) can't be exercised here —
+    // fake_cloud_firestore doesn't model Firestore's optimistic-concurrency
+    // retry. The fix (re-reading the waitlist entry inside the transaction)
+    // relies on that retry on real Firestore: the loser re-runs, sees the
+    // entry already deleted, and skips the duplicate promotion.
+
+    test('an entry with no createdAt sorts earliest (FIFO sentinel)', () async {
+      await db.createClass(
+          classId: classId, startTime: _futureClass, waitlistCount: 2);
+      // Raw entry WITHOUT createdAt (legacy/corrupted), plus a normal one.
+      await db.collection('waitlists').add(<String, dynamic>{
+        'userId': waiter,
+        'classId': classId,
+        'gymId': '',
+        'memberName': 'No Timestamp',
+      });
+      await db.createWaitlistEntry(
+          userId: a, classId: classId, createdAt: _futureClass);
+
+      final entries = await sut.streamWaitlistForClass(classId).first;
+      expect(entries.first.userId, waiter); // missing createdAt → position 1
+      final pos =
+          await sut.streamUserWaitlistPosition(waiter, classId).first;
+      expect(pos, 1);
     });
   });
 
@@ -1807,6 +1949,206 @@ void main() {
       // Next get must return the updated value
       final after = await sut.getHideClassesWithoutSubscription();
       expect(after, isTrue);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 18. PACK SESSION REFUNDED ON CANCEL
+  // ══════════════════════════════════════════════════════════════════════════
+  group('18 • pack session refunded on cancel', () {
+    const userId = 'u18';
+    const planId = 'plan_pack1';
+
+    setUp(() async {
+      await db.createUser(userId: userId);
+      await db.createPlan(
+          planId: planId, offerType: 'limited_sessions', totalCheckins: 1);
+      await db.createSubscription(userId: userId, planId: planId);
+      await db.createClass(
+          classId: 'packA',
+          startTime: _futureClass,
+          requiredOfferPlanIds: [planId]);
+      await db.createClass(
+          classId: 'packB',
+          startTime: _futureClass,
+          requiredOfferPlanIds: [planId]);
+    });
+
+    test('cancelling a pack booking frees the consumed session', () async {
+      // 1-session pack: book A → pack exhausted, B blocked.
+      await sut.bookClass(
+          userId: userId, classId: 'packA', bypassDailyLimit: true);
+      await expectLater(
+        () => sut.bookClass(
+            userId: userId, classId: 'packB', bypassDailyLimit: true),
+        throwsA(isA<Exception>().having(
+            (e) => e.toString(), '', contains('Session pack exhausted'))),
+      );
+
+      // Cancel A → the session is returned (booking is deleted).
+      await sut.cancelBooking(userId: userId, classId: 'packA');
+
+      final result = await sut.bookClass(
+          userId: userId, classId: 'packB', bypassDailyLimit: true);
+      expect(result, BookingResult.booked);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 19. PENDING SUBSCRIPTION CAN BOOK (intentional)
+  // ══════════════════════════════════════════════════════════════════════════
+  group('19 • pending subscription can book', () {
+    const userId = 'u19';
+    const planId = 'plan_pending';
+
+    test('a member with a pending subscription can book a required class',
+        () async {
+      // 'pending' (e.g. assigned, paying in instalments) is intentionally
+      // allowed to book — only 'cancelled'/'paused' are blocked.
+      await db.createUser(userId: userId);
+      await db.createPlan(
+          planId: planId, offerType: 'weekly_recurring', checkinsPerWeek: 3);
+      await db.createSubscription(
+          userId: userId, planId: planId, status: 'pending');
+      await db.createClass(
+          classId: 'pendingClass',
+          startTime: _futureClass,
+          requiredOfferPlanIds: [planId]);
+
+      final result = await sut.bookClass(
+          userId: userId, classId: 'pendingClass', bypassDailyLimit: true);
+      expect(result, BookingResult.booked);
+    });
+
+    test('a cancelled subscription cannot book', () async {
+      await db.createUser(userId: 'u19b');
+      await db.createPlan(
+          planId: 'plan_cancelled', offerType: 'weekly_recurring',
+          checkinsPerWeek: 3);
+      await db.createSubscription(
+          userId: 'u19b', planId: 'plan_cancelled', status: 'cancelled');
+      await db.createClass(
+          classId: 'cancelledClass',
+          startTime: _futureClass,
+          requiredOfferPlanIds: ['plan_cancelled']);
+
+      await expectLater(
+        () => sut.bookClass(
+            userId: 'u19b', classId: 'cancelledClass', bypassDailyLimit: true),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 20. OFFER-TYPE LIMIT BEHAVIOR
+  // ══════════════════════════════════════════════════════════════════════════
+  group('20 • offer-type limit behavior', () {
+    const userId = 'u20';
+
+    Future<void> seed({
+      required String planId,
+      required String offerType,
+      int checkinsPerWeek = 0,
+      int totalCheckins = 0,
+      required String classId,
+    }) async {
+      await db.createPlan(
+        planId: planId,
+        offerType: offerType,
+        checkinsPerWeek: checkinsPerWeek,
+        totalCheckins: totalCheckins,
+      );
+      await db.createSubscription(userId: userId, planId: planId);
+      await db.createClass(
+          classId: classId,
+          startTime: _futureClass,
+          requiredOfferPlanIds: [planId]);
+    }
+
+    setUp(() => db.createUser(userId: userId));
+
+    test("'weekly' alias enforces the weekly limit like weekly_recurring",
+        () async {
+      await seed(
+          planId: 'p_weekly',
+          offerType: 'weekly',
+          checkinsPerWeek: 2,
+          classId: 'c_weekly');
+      for (var i = 1; i <= 2; i++) {
+        await db.createBookingDoc(
+            userId: userId,
+            classId: 'w_prev_$i',
+            bookingDate: _futureClass,
+            usedPlanId: 'p_weekly');
+      }
+      await expectLater(
+        () => sut.bookClass(
+            userId: userId, classId: 'c_weekly', bypassDailyLimit: true),
+        throwsA(isA<Exception>().having(
+            (e) => e.toString(), '', contains('Weekly limit reached'))),
+      );
+    });
+
+    test("'pack' alias is exhausted like limited_sessions", () async {
+      await seed(
+          planId: 'p_pack',
+          offerType: 'pack',
+          totalCheckins: 2,
+          classId: 'c_pack');
+      for (var i = 1; i <= 2; i++) {
+        await db.createBookingDoc(
+            userId: userId,
+            classId: 'pk_prev_$i',
+            bookingDate: _futureClass,
+            usedPlanId: 'p_pack');
+      }
+      await expectLater(
+        () => sut.bookClass(
+            userId: userId, classId: 'c_pack', bypassDailyLimit: true),
+        throwsA(isA<Exception>().having(
+            (e) => e.toString(), '', contains('Session pack exhausted'))),
+      );
+    });
+
+    test('a weekly offer with checkinsPerWeek = 0 has no limit', () async {
+      await seed(
+          planId: 'p_unl',
+          offerType: 'weekly_recurring',
+          checkinsPerWeek: 0,
+          classId: 'c_unl');
+      // Far more bookings than any cap — must still be allowed.
+      for (var i = 1; i <= 12; i++) {
+        await db.createBookingDoc(
+            userId: userId,
+            classId: 'unl_prev_$i',
+            bookingDate: _futureClass,
+            usedPlanId: 'p_unl');
+      }
+      final result = await sut.bookClass(
+          userId: userId, classId: 'c_unl', bypassDailyLimit: true);
+      expect(result, BookingResult.booked);
+    });
+
+    test("previous week's bookings don't count toward this week's limit",
+        () async {
+      await seed(
+          planId: 'p_wk2',
+          offerType: 'weekly_recurring',
+          checkinsPerWeek: 2,
+          classId: 'c_wk2');
+      // 2 bookings last week — should not block this week's first booking.
+      final lastWeek = _futureClass.subtract(const Duration(days: 7));
+      for (var i = 1; i <= 2; i++) {
+        await db.createBookingDoc(
+            userId: userId,
+            classId: 'lw_prev_$i',
+            bookingDate: lastWeek,
+            usedPlanId: 'p_wk2');
+      }
+      final result = await sut.bookClass(
+          userId: userId, classId: 'c_wk2', bypassDailyLimit: true);
+      expect(result, BookingResult.booked);
     });
   });
 }
