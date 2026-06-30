@@ -37,8 +37,9 @@ class _AdminBillingTabState extends State<AdminBillingTab>
   String _searchQuery = '';
   String _sortColumn = 'date';
   bool _sortAscending = false;
+  DateTimeRange? _statsDateRange;
 
-  static const _filters = ['All', 'Paid', 'Partial', 'Unpaid'];
+  static const _filters = ['All', 'Unpaid', 'Partial', 'Paid', 'Sent', 'Overdue', 'Void'];
 
   @override
   void initState() {
@@ -50,6 +51,8 @@ class _AdminBillingTabState extends State<AdminBillingTab>
     _searchCtrl.addListener(
         () => setState(() => _searchQuery = _searchCtrl.text.toLowerCase()));
     _loadStats();
+    // Auto-mark past-due invoices on open
+    _billing.checkAndUpdateOverdueInvoices().ignore();
   }
 
   @override
@@ -62,7 +65,10 @@ class _AdminBillingTabState extends State<AdminBillingTab>
   Future<void> _loadStats() async {
     setState(() => _statsLoading = true);
     try {
-      final stats = await _billing.computeRevenueStats();
+      final stats = await _billing.computeRevenueStats(
+        from: _statsDateRange?.start,
+        to: _statsDateRange?.end,
+      );
       if (mounted) setState(() => _stats = stats);
     } catch (e, s) {
       await CrashLogger.log(e, s, reason: 'BillingTab._loadStats');
@@ -74,7 +80,12 @@ class _AdminBillingTabState extends State<AdminBillingTab>
   List<Invoice> _applyFilterAndSearch(List<Invoice> all, String filter) {
     var list = filter == 'All'
         ? List.of(all)
-        : all.where((inv) => inv.status == filter.toLowerCase()).toList();
+        : all
+            .where((inv) =>
+                inv.status ==
+                // 'Void' label → InvoiceStatus.void_ = 'void'
+                (filter == 'Void' ? 'void' : filter.toLowerCase()))
+            .toList();
     if (_searchQuery.isNotEmpty) {
       list = list
           .where((inv) =>
@@ -106,6 +117,26 @@ class _AdminBillingTabState extends State<AdminBillingTab>
         _sortAscending = false;
       }
     });
+  }
+
+  Future<void> _pickStatsDateRange() async {
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDateRange: _statsDateRange,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: Theme.of(ctx).colorScheme.copyWith(
+                primary: const Color(0xFF0F766E),
+              ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    setState(() => _statsDateRange = picked);
+    _loadStats();
   }
 
   @override
@@ -147,6 +178,30 @@ class _AdminBillingTabState extends State<AdminBillingTab>
                             ),
                           ),
                         ),
+                        Tooltip(
+                          message: 'Filter by date range',
+                          child: IconButton(
+                            icon: Icon(
+                              Icons.date_range_outlined,
+                              size: 18,
+                              color: _statsDateRange != null
+                                  ? const Color(0xFF0F766E)
+                                  : null,
+                            ),
+                            onPressed: _pickStatsDateRange,
+                          ),
+                        ),
+                        if (_statsDateRange != null)
+                          Tooltip(
+                            message: 'Clear date filter',
+                            child: IconButton(
+                              icon: const Icon(Icons.clear, size: 16),
+                              onPressed: () {
+                                setState(() => _statsDateRange = null);
+                                _loadStats();
+                              },
+                            ),
+                          ),
                         Tooltip(
                           message: 'Refresh stats',
                           child: IconButton(
@@ -938,16 +993,15 @@ class _InvoiceCard extends StatelessWidget {
     );
   }
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'paid':
-        return Colors.green;
-      case 'partial':
-        return Colors.orange;
-      default:
-        return Colors.red;
-    }
-  }
+  Color _statusColor(String status) => switch (status) {
+        'paid' => Colors.green,
+        'partial' => Colors.orange,
+        'sent' => Colors.purple,
+        'overdue' => Colors.red.shade700,
+        'void' => Colors.grey,
+        'draft' => Colors.blue,
+        _ => Colors.red,
+      };
 }
 
 class _StatusChip extends StatelessWidget {
@@ -956,21 +1010,15 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color bg;
-    Color fg;
-    switch (status) {
-      case 'paid':
-        bg = Colors.green.shade100;
-        fg = Colors.green.shade800;
-        break;
-      case 'partial':
-        bg = Colors.orange.shade100;
-        fg = Colors.orange.shade800;
-        break;
-      default:
-        bg = Colors.red.shade100;
-        fg = Colors.red.shade800;
-    }
+    final (bg, fg) = switch (status) {
+      'paid' => (Colors.green.shade100, Colors.green.shade800),
+      'partial' => (Colors.orange.shade100, Colors.orange.shade800),
+      'sent' => (Colors.purple.shade50, Colors.purple.shade700),
+      'overdue' => (Colors.red.shade100, Colors.red.shade800),
+      'void' => (Colors.grey.shade200, Colors.grey.shade600),
+      'draft' => (Colors.blue.shade50, Colors.blue.shade700),
+      _ => (Colors.amber.shade100, Colors.amber.shade800),
+    };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration:
@@ -1216,7 +1264,8 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
   }
 
   Future<void> _createInvoice(
-      List<InvoiceItem> extraItems, String? customInvoiceNumber) async {
+      List<InvoiceItem> extraItems, String? customInvoiceNumber,
+      int discount, bool saveAsDraft) async {
     if (_selectedMember == null || _selectedSubs.isEmpty) return;
     setState(() {
       _saving = true;
@@ -1233,6 +1282,8 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
         notes: _notesController.text.trim(),
         extraItems: extraItems,
         customInvoiceNumber: customInvoiceNumber,
+        discountAmount: discount,
+        status: saveAsDraft ? InvoiceStatus.draft : InvoiceStatus.unpaid,
       );
       widget.onCreated(invoice);
     } catch (e, s) {
@@ -1915,16 +1966,19 @@ class _OfferSummaryRow extends StatelessWidget {
   }
 }
 
-/// A pair of text controllers for one extra line-item row.
+/// Controllers for one extra line-item row (description, amount, taxRate).
 class _ItemRowControllers {
   _ItemRowControllers()
       : desc = TextEditingController(),
-        amount = TextEditingController();
+        amount = TextEditingController(),
+        taxRate = TextEditingController(text: '0');
   final TextEditingController desc;
   final TextEditingController amount;
+  final TextEditingController taxRate;
   void dispose() {
     desc.dispose();
     amount.dispose();
+    taxRate.dispose();
   }
 }
 
@@ -1948,9 +2002,8 @@ class _ConfirmStep extends StatefulWidget {
   final String error;
   final bool saving;
   final AppLocalizations l10n;
-  /// Called with extra items and an optional custom invoice number.
-  /// Pass null for invoice number to use auto-generated numbering.
-  final void Function(List<InvoiceItem>, String?) onSubmit;
+  /// Called with extra items, optional custom invoice number, discount amount, and saveAsDraft flag.
+  final void Function(List<InvoiceItem>, String?, int, bool) onSubmit;
 
   @override
   State<_ConfirmStep> createState() => _ConfirmStepState();
@@ -1959,6 +2012,8 @@ class _ConfirmStep extends StatefulWidget {
 class _ConfirmStepState extends State<_ConfirmStep> {
   final List<_ItemRowControllers> _extraRows = [];
   late final TextEditingController _invoiceNumberController;
+  final _discountCtrl = TextEditingController(text: '0');
+  bool _saveAsDraft = false;
 
   @override
   void initState() {
@@ -1973,13 +2028,14 @@ class _ConfirmStepState extends State<_ConfirmStep> {
       row.dispose();
     }
     _invoiceNumberController.dispose();
+    _discountCtrl.dispose();
     super.dispose();
   }
 
   void _addRow() {
     final row = _ItemRowControllers();
-    // Rebuild on amount changes so the live total stays accurate.
     row.amount.addListener(() => setState(() {}));
+    row.taxRate.addListener(() => setState(() {}));
     setState(() => _extraRows.add(row));
   }
 
@@ -1989,12 +2045,8 @@ class _ConfirmStepState extends State<_ConfirmStep> {
     });
   }
 
-  int _extraTotal() {
-    return _extraRows.fold(
-      0,
-      (sum, row) => sum + (int.tryParse(row.amount.text.trim()) ?? 0),
-    );
-  }
+
+  int get _discount => (int.tryParse(_discountCtrl.text.trim()) ?? 0).clamp(0, 999999);
 
   List<InvoiceItem> _buildExtraItems() {
     final currency = widget.subs.first.currency;
@@ -2002,8 +2054,10 @@ class _ConfirmStepState extends State<_ConfirmStep> {
     for (final row in _extraRows) {
       final desc = row.desc.text.trim();
       final amt = int.tryParse(row.amount.text.trim()) ?? 0;
+      final tax = (int.tryParse(row.taxRate.text.trim()) ?? 0).clamp(0, 100);
       if (desc.isNotEmpty && amt > 0) {
-        result.add(InvoiceItem(description: desc, amount: amt, currency: currency));
+        result.add(InvoiceItem(
+            description: desc, amount: amt, currency: currency, taxRate: tax));
       }
     }
     return result;
@@ -2023,7 +2077,15 @@ class _ConfirmStepState extends State<_ConfirmStep> {
     final currency = widget.subs.first.currency;
     final baseTotal =
         widget.subs.fold<int>(0, (acc, s) => acc + s.totalAmount);
-    final total = baseTotal + _extraTotal();
+    final extraSubtotal = _extraRows.fold<int>(
+        0, (s, r) => s + (int.tryParse(r.amount.text.trim()) ?? 0));
+    final extraTax = _extraRows.fold<int>(0, (s, r) {
+      final amt = int.tryParse(r.amount.text.trim()) ?? 0;
+      final tax = (int.tryParse(r.taxRate.text.trim()) ?? 0).clamp(0, 100);
+      return s + (amt * tax / 100).round();
+    });
+    final subtotal = baseTotal + extraSubtotal;
+    final total = (subtotal + extraTax - _discount).clamp(0, 999999999);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -2136,6 +2198,25 @@ class _ConfirmStepState extends State<_ConfirmStep> {
             ),
           ),
           const SizedBox(height: 12),
+          // ── Discount ─────────────────────────────────────────────────────
+          _PreviewSection(
+            icon: Icons.local_offer_outlined,
+            title: l10n.tr('Discount'),
+            child: TextField(
+              controller: _discountCtrl,
+              keyboardType: TextInputType.number,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                prefixText: '$currency ',
+                hintText: '0',
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           // ── Invoice total preview ────────────────────────────────────────
           Container(
             padding:
@@ -2146,11 +2227,42 @@ class _ConfirmStepState extends State<_ConfirmStep> {
               border: Border.all(
                   color: const Color(0xFF0F4C45).withValues(alpha: 0.15)),
             ),
-            child: _TotalPreviewRow(
-              label: l10n.tr('Invoice Total'),
-              value: '$currency $total',
-              bold: true,
+            child: Column(
+              children: [
+                _TotalPreviewRow(
+                    label: l10n.tr('Subtotal'), value: '$currency $subtotal'),
+                if (extraTax > 0) ...[
+                  const SizedBox(height: 4),
+                  _TotalPreviewRow(
+                      label: l10n.tr('VAT / Tax'),
+                      value: '+ $currency $extraTax'),
+                ],
+                if (_discount > 0) ...[
+                  const SizedBox(height: 4),
+                  _TotalPreviewRow(
+                      label: l10n.tr('Discount'),
+                      value: '− $currency $_discount'),
+                ],
+                const Divider(height: 16),
+                _TotalPreviewRow(
+                  label: l10n.tr('Total'),
+                  value: '$currency $total',
+                  bold: true,
+                ),
+              ],
             ),
+          ),
+          const SizedBox(height: 12),
+          // ── Save as draft toggle ─────────────────────────────────────────
+          SwitchListTile(
+            value: _saveAsDraft,
+            onChanged: (v) => setState(() => _saveAsDraft = v),
+            title: Text(l10n.tr('Save as Draft'),
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(l10n.tr(
+                'Draft invoices are not sent to the member automatically')),
+            activeColor: const Color(0xFF0F766E),
+            contentPadding: EdgeInsets.zero,
           ),
           const SizedBox(height: 12),
           // ── Notes ────────────────────────────────────────────────────────
@@ -2189,7 +2301,7 @@ class _ConfirmStepState extends State<_ConfirmStep> {
               onPressed: widget.saving
                   ? null
                   : () => widget.onSubmit(
-                      _buildExtraItems(), _customInvoiceNumber()),
+                      _buildExtraItems(), _customInvoiceNumber(), _discount, _saveAsDraft),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF0F766E),
                 padding: const EdgeInsets.symmetric(vertical: 15),
@@ -2207,7 +2319,9 @@ class _ConfirmStepState extends State<_ConfirmStep> {
               label: Text(
                 widget.saving
                     ? l10n.tr('Generating…')
-                    : l10n.tr('Generate Invoice'),
+                    : _saveAsDraft
+                        ? l10n.tr('Save as Draft')
+                        : l10n.tr('Generate Invoice'),
                 style: const TextStyle(
                     fontSize: 15, fontWeight: FontWeight.w800),
               ),
@@ -2235,42 +2349,66 @@ class _ExtraItemRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          flex: 3,
-          child: TextField(
-            controller: row.desc,
-            decoration: InputDecoration(
-              hintText: l10n.tr('Description'),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              isDense: true,
+        Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: TextField(
+                controller: row.desc,
+                decoration: InputDecoration(
+                  hintText: l10n.tr('Description'),
+                  border:
+                      OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  isDense: true,
+                ),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 2,
-          child: TextField(
-            controller: row.amount,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              hintText: l10n.tr('Amount'),
-              prefixText: '$currency ',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              isDense: true,
+            const SizedBox(width: 6),
+            Expanded(
+              flex: 2,
+              child: TextField(
+                controller: row.amount,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: l10n.tr('Amount'),
+                  prefixText: '$currency ',
+                  border:
+                      OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  isDense: true,
+                ),
+              ),
             ),
-          ),
-        ),
-        IconButton(
-          onPressed: onRemove,
-          icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-          padding: const EdgeInsets.only(left: 4),
-          constraints: const BoxConstraints(),
+            const SizedBox(width: 6),
+            SizedBox(
+              width: 64,
+              child: TextField(
+                controller: row.taxRate,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  hintText: '0',
+                  suffixText: '%',
+                  labelText: l10n.tr('Tax'),
+                  border:
+                      OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  isDense: true,
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: onRemove,
+              icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+              padding: const EdgeInsets.only(left: 4),
+              constraints: const BoxConstraints(),
+            ),
+          ],
         ),
       ],
     );

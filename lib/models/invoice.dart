@@ -6,23 +6,60 @@ class InvoiceItem {
     required this.description,
     required this.amount,
     required this.currency,
+    this.taxRate = 0,
   });
 
   final String description;
   final int amount;
   final String currency;
 
+  /// Tax percentage (0–100). e.g. 20 = 20 % VAT.
+  final int taxRate;
+
+  /// Computed tax amount in the same currency unit as [amount].
+  int get taxAmount => (amount * taxRate / 100).round();
+
   factory InvoiceItem.fromMap(Map<String, dynamic> map) => InvoiceItem(
         description: (map['description'] ?? '') as String,
         amount: (map['amount'] ?? 0) as int,
         currency: (map['currency'] ?? 'EUR') as String,
+        taxRate: (map['taxRate'] ?? 0) as int,
       );
 
   Map<String, dynamic> toMap() => <String, dynamic>{
         'description': description,
         'amount': amount,
         'currency': currency,
+        'taxRate': taxRate,
       };
+}
+
+/// Possible invoice lifecycle statuses.
+///
+/// draft → unpaid → sent → partial / paid
+///                       ↘ overdue
+///                  (any) → void
+abstract final class InvoiceStatus {
+  static const draft = 'draft';
+  static const unpaid = 'unpaid';
+  static const sent = 'sent';
+  static const partial = 'partial';
+  static const paid = 'paid';
+  static const overdue = 'overdue';
+  static const void_ = 'void';
+
+  /// Returns [status] if it is a known value, otherwise [unpaid].
+  static String validated(String status) => const {
+        draft,
+        unpaid,
+        sent,
+        partial,
+        paid,
+        overdue,
+        void_,
+      }.contains(status)
+          ? status
+          : unpaid;
 }
 
 /// Billing invoice document stored in the `invoices` Firestore collection.
@@ -40,6 +77,8 @@ class Invoice {
     required this.currency,
     required this.totalAmount,
     required this.amountPaid,
+    this.taxAmount = 0,
+    this.discountAmount = 0,
     required this.status,
     required this.issuedAt,
     this.dueDate,
@@ -48,11 +87,13 @@ class Invoice {
     required this.payments,
     required this.createdAt,
     required this.updatedAt,
+    this.isCreditNote = false,
+    this.originalInvoiceId,
   });
 
   final String id;
 
-  /// Human-readable invoice number, e.g. "INV-20240529-A3F2".
+  /// Human-readable invoice number, e.g. "INV-0001" or "2026-06-0001".
   final String invoiceNumber;
   final String gymId;
   final String userId;
@@ -62,10 +103,18 @@ class Invoice {
   final String subscriptionId;
   final String planName;
   final String currency;
+
+  /// Final billed amount (subtotal + tax − discount), in the smallest currency unit.
   final int totalAmount;
   final int amountPaid;
 
-  /// 'paid' | 'partial' | 'unpaid'
+  /// Total tax collected on this invoice.
+  final int taxAmount;
+
+  /// Flat discount applied (subtracted from subtotal before tax? or after? — stored explicitly).
+  final int discountAmount;
+
+  /// See [InvoiceStatus] constants.
   final String status;
   final DateTime issuedAt;
   final DateTime? dueDate;
@@ -75,8 +124,30 @@ class Invoice {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  /// True when this invoice is a credit note (negative balance document).
+  final bool isCreditNote;
+
+  /// For credit notes: the ID of the invoice being credited.
+  final String? originalInvoiceId;
+
+  // ── Computed ─────────────────────────────────────────────────────────────
+
   int get remainingAmount => totalAmount - amountPaid;
-  bool get isPaid => status == 'paid';
+
+  /// Pre-tax, pre-discount sum of line items.
+  int get subtotal => items.fold(0, (s, i) => s + i.amount);
+
+  bool get isPaid => status == InvoiceStatus.paid;
+  bool get isVoid => status == InvoiceStatus.void_;
+  bool get isDraft => status == InvoiceStatus.draft;
+
+  /// True when dueDate has passed and the invoice is not paid/void.
+  bool get isOverdue =>
+      dueDate != null &&
+      dueDate!.isBefore(DateTime.now()) &&
+      status != InvoiceStatus.paid &&
+      status != InvoiceStatus.void_ &&
+      status != InvoiceStatus.draft;
 
   factory Invoice.fromSnapshot(
     DocumentSnapshot<Map<String, dynamic>> snapshot,
@@ -102,9 +173,10 @@ class Invoice {
       currency: (data['currency'] ?? 'EUR') as String,
       totalAmount: (data['totalAmount'] ?? 0) as int,
       amountPaid: (data['amountPaid'] ?? 0) as int,
-      status: (data['status'] ?? 'unpaid') as String,
-      issuedAt:
-          (data['issuedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      taxAmount: (data['taxAmount'] ?? 0) as int,
+      discountAmount: (data['discountAmount'] ?? 0) as int,
+      status: InvoiceStatus.validated((data['status'] ?? '') as String),
+      issuedAt: (data['issuedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       dueDate: (data['dueDate'] as Timestamp?)?.toDate(),
       notes: (data['notes'] ?? '') as String,
       items: rawItems,
@@ -113,6 +185,8 @@ class Invoice {
           (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt:
           (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      isCreditNote: (data['isCreditNote'] ?? false) as bool,
+      originalInvoiceId: data['originalInvoiceId'] as String?,
     );
   }
 
@@ -128,6 +202,8 @@ class Invoice {
         'currency': currency,
         'totalAmount': totalAmount,
         'amountPaid': amountPaid,
+        'taxAmount': taxAmount,
+        'discountAmount': discountAmount,
         'status': status,
         'issuedAt': Timestamp.fromDate(issuedAt),
         if (dueDate != null) 'dueDate': Timestamp.fromDate(dueDate!),
@@ -136,6 +212,8 @@ class Invoice {
         'payments': payments.map((p) => p.toMap()).toList(),
         'createdAt': Timestamp.fromDate(createdAt),
         'updatedAt': Timestamp.fromDate(updatedAt),
+        'isCreditNote': isCreditNote,
+        if (originalInvoiceId != null) 'originalInvoiceId': originalInvoiceId,
       };
 }
 
@@ -206,3 +284,4 @@ class RevenueStats {
     currency: '',
   );
 }
+
