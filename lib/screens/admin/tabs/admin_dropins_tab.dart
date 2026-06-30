@@ -1049,7 +1049,10 @@ class _AddDropInDialogState extends State<_AddDropInDialog> {
               StreamBuilder<List<AppUser>>(
                 stream: _memberService.streamMembers(),
                 builder: (context, snap) {
-                  final members = snap.data ?? <AppUser>[];
+                  // streamMembers() returns an unmodifiable list, so copy
+                  // before sorting in place (in-place sort would throw
+                  // "Unsupported operation: sort").
+                  final members = List<AppUser>.of(snap.data ?? const <AppUser>[]);
                   members
                       .sort((a, b) => a.displayName.compareTo(b.displayName));
                   return DropdownButtonFormField<String>(
