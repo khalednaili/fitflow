@@ -391,6 +391,9 @@ class _InvoiceView extends StatelessWidget {
                       _InfoRow(Icons.email_outlined, invoice.memberEmail),
                     if (invoice.memberPhone.isNotEmpty)
                       _InfoRow(Icons.phone_outlined, invoice.memberPhone),
+                    if (invoice.memberAddress.isNotEmpty)
+                      _InfoRow(
+                          Icons.location_on_outlined, invoice.memberAddress),
                     const SizedBox(height: 24),
 
                     // ── Line items ────────────────────────────────────────

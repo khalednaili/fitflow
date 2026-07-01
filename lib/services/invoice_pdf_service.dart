@@ -184,6 +184,9 @@ class InvoicePdfService {
               if (invoice.memberPhone.isNotEmpty)
                 pw.Text(invoice.memberPhone,
                     style: const pw.TextStyle(color: _grey, fontSize: 11)),
+              if (invoice.memberAddress.isNotEmpty)
+                pw.Text(invoice.memberAddress,
+                    style: const pw.TextStyle(color: _grey, fontSize: 11)),
             ],
           ),
         ),

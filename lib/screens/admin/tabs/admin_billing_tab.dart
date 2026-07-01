@@ -418,11 +418,16 @@ class _AdminBillingTabState extends State<AdminBillingTab>
 
   Future<void> _confirmDelete(Invoice invoice) async {
     final l10n = context.l10n;
+    // Audit compliance: an issued invoice is voided (kept in the ledger),
+    // never deleted. Only drafts, which were never issued, can be hard-deleted.
+    final isDraft = invoice.isDraft;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.tr('Delete Invoice')),
-        content: Text('${l10n.tr('Delete')} ${invoice.invoiceNumber}?'),
+        title: Text(l10n.tr(isDraft ? 'Delete Invoice' : 'Void Invoice')),
+        content: Text(isDraft
+            ? '${l10n.tr('Delete')} ${invoice.invoiceNumber}?'
+            : '${l10n.tr('Void')} ${invoice.invoiceNumber}? ${l10n.tr('It will be kept for records.')}'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -430,7 +435,7 @@ class _AdminBillingTabState extends State<AdminBillingTab>
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(l10n.tr('Delete'),
+            child: Text(l10n.tr(isDraft ? 'Delete' : 'Void'),
                 style: const TextStyle(color: Colors.red)),
           ),
         ],
@@ -438,9 +443,13 @@ class _AdminBillingTabState extends State<AdminBillingTab>
     );
     if (ok != true) return;
     try {
-      await _billing.deleteInvoice(invoice.id);
+      if (isDraft) {
+        await _billing.deleteInvoice(invoice.id);
+      } else {
+        await _billing.voidInvoice(invoice.id);
+      }
     } catch (e, s) {
-      await CrashLogger.log(e, s, reason: 'BillingTab.deleteInvoice');
+      await CrashLogger.log(e, s, reason: 'BillingTab.voidOrDeleteInvoice');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
@@ -1284,6 +1293,7 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
         memberName: _selectedMember!.displayName,
         memberEmail: _selectedMember!.email,
         memberPhone: _selectedMember!.phoneNumber,
+        memberAddress: _selectedMember!.address,
         subscriptions: _selectedSubs,
         planLabels: _selectedPlanLabels,
         notes: _notesController.text.trim(),
@@ -2988,8 +2998,13 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
         _companyCtrl.text = settings.companyName;
         _addressCtrl.text = settings.companyAddress;
         _matriculeCtrl.text = settings.matriculeFiscal;
-        _stampCtrl.text =
-            Currency.formatAmount(settings.stampDuty, maxDecimals: 3);
+        // Suggest the Tunisian standard stamp (1.000) when none is configured
+        // yet; it is only charged once the admin saves a non-zero value.
+        _stampCtrl.text = Currency.formatAmount(
+            settings.stampDuty > 0
+                ? settings.stampDuty
+                : InvoiceSettings.suggestedStampDutyTND,
+            maxDecimals: 3);
         _vatCtrl.text = settings.defaultVatRate.toString();
         _currentNextSeq = settings.nextSequence;
         _padding = settings.padding;

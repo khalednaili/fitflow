@@ -559,6 +559,17 @@ void main() {
       );
       expect(item.toMap()['taxRate'], 15);
     });
+
+    test('taxAmount handles fractional (millime) amounts', () {
+      const item = InvoiceItem(
+        description: 'Drop-in',
+        amount: 49.5,
+        currency: 'TND',
+        taxRate: 19,
+      );
+      // 49.5 * 19% = 9.405 (rounded to millime precision)
+      expect(item.taxAmount, closeTo(9.405, 0.0001));
+    });
   });
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1226,8 +1237,9 @@ void main() {
       expect(doc.data()!['taxAmount'], 200);
     });
 
-    test('auto-numbers with a CR- prefix and increments the shared counter',
+    test('uses its own CN- series, leaving the invoice counter untouched',
         () async {
+      // Invoice counter at 7; credit-note counter defaults to 1.
       await _seedSettings(db, prefix: 'INV-', nextSequence: 7);
       final cn = await sut.createCreditNote(
         originalInvoiceId: 'orig-abc',
@@ -1239,11 +1251,67 @@ void main() {
         ],
       );
 
-      expect(cn.invoiceNumber, startsWith('CR-'));
-      expect(cn.invoiceNumber, contains('0007'));
+      expect(cn.invoiceNumber, 'CN-0001');
 
       final settings = await sut.getInvoiceSettings();
-      expect(settings.nextSequence, 8);
+      expect(settings.nextSequence, 7); // invoice counter NOT advanced
+      expect(settings.creditNoteNextSequence, 2); // CN counter advanced
+    });
+
+    test('consecutive credit notes increment the CN series', () async {
+      await _seedSettings(db);
+      final cn1 = await sut.createCreditNote(
+        originalInvoiceId: 'orig-1',
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        items: const [
+          InvoiceItem(description: 'Refund', amount: 100, currency: 'EUR'),
+        ],
+      );
+      final cn2 = await sut.createCreditNote(
+        originalInvoiceId: 'orig-2',
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        items: const [
+          InvoiceItem(description: 'Refund', amount: 100, currency: 'EUR'),
+        ],
+      );
+
+      expect(cn1.invoiceNumber, 'CN-0001');
+      expect(cn2.invoiceNumber, 'CN-0002');
+    });
+
+    test('snapshots seller identity (matricule fiscal) and buyer address',
+        () async {
+      await db.collection('settings').doc('invoiceSettings_gym1').set({
+        'prefix': 'INV-',
+        'nextSequence': 1,
+        'padding': 4,
+        'gymId': 'gym1',
+        'companyName': 'Carthage CrossFit',
+        'matriculeFiscal': '1234567/A/M/000',
+      });
+
+      final cn = await sut.createCreditNote(
+        originalInvoiceId: 'orig-abc',
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        memberAddress: '10 Rue de Carthage, Tunis',
+        items: const [
+          InvoiceItem(description: 'Refund', amount: 200, currency: 'TND'),
+        ],
+      );
+
+      expect(cn.sellerName, 'Carthage CrossFit');
+      expect(cn.sellerTaxId, '1234567/A/M/000');
+      expect(cn.memberAddress, '10 Rue de Carthage, Tunis');
+
+      final doc = await db.collection('invoices').doc(cn.id).get();
+      expect(doc.data()!['sellerTaxId'], '1234567/A/M/000');
+      expect(doc.data()!['memberAddress'], '10 Rue de Carthage, Tunis');
     });
   });
 
@@ -1363,11 +1431,9 @@ void main() {
           amount: 500,
           method: 'cash'
         ),
-        (
-          date: now.subtract(const Duration(days: 10)),
-          amount: 300,
-          method: 'cash'
-        ),
+        // Use `now` (not a fixed offset) so the payment always lands in the
+        // current month, even when the test runs early in the month.
+        (date: now, amount: 300, method: 'cash'),
       ]);
 
       final stats = await sut.computeRevenueStats();
@@ -1376,7 +1442,8 @@ void main() {
 
     test('excludes payments before the from date', () async {
       final oldPaymentDate = now.subtract(const Duration(days: 90));
-      final recentPaymentDate = now.subtract(const Duration(days: 5));
+      // `now` is guaranteed to be within the current month and after `from`.
+      final recentPaymentDate = now;
 
       await seedSubWithPayments(db, payments: [
         (date: oldPaymentDate, amount: 999, method: 'cash'),
@@ -1507,6 +1574,226 @@ void main() {
       expect(stats.revenueToday, 500);
       expect(stats.revenueThisMonth, 500);
       expect(stats.newPaymentsThisMonth, 1);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // voidInvoice — audit compliance (void, don't delete; can't void if paid)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('voidInvoice — audit compliance', () {
+    Future<String> createUnpaid({int total = 1000}) async {
+      await _seedSettings(db);
+      final inv = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        subscriptions: [_sub(totalAmount: total)],
+        planLabels: ['Basic'],
+      );
+      return inv.id;
+    }
+
+    test('voids an unpaid invoice', () async {
+      final id = await createUnpaid();
+      await sut.voidInvoice(id);
+
+      final doc = await db.collection('invoices').doc(id).get();
+      expect(doc.data()!['status'], InvoiceStatus.void_);
+    });
+
+    test('throws when the invoice has payments allocated', () async {
+      final id = await createUnpaid(total: 1000);
+      await sut.recordPayment(id, amount: 400, method: 'cash');
+
+      await expectLater(sut.voidInvoice(id), throwsA(isA<Exception>()));
+
+      // The invoice must be left in its prior (partial) state, not voided.
+      final doc = await db.collection('invoices').doc(id).get();
+      expect(doc.data()!['status'], InvoiceStatus.partial);
+    });
+
+    test('is idempotent on an already-voided invoice', () async {
+      final id = await createUnpaid();
+      await sut.voidInvoice(id);
+      await sut.voidInvoice(id); // must not throw
+
+      final doc = await db.collection('invoices').doc(id).get();
+      expect(doc.data()!['status'], InvoiceStatus.void_);
+    });
+
+    test('throws for a missing invoice', () async {
+      await expectLater(sut.voidInvoice('nope'), throwsA(isA<Exception>()));
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // createInvoice — Tunisian fiscal (timbre + seller snapshot)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('createInvoice — Tunisian fiscal', () {
+    Future<void> seedFiscal({
+      num stampDuty = 1.0,
+      String company = 'Carthage CrossFit',
+      String address = 'Tunis',
+      String matricule = '1234567/A/M/000',
+    }) =>
+        db.collection('settings').doc('invoiceSettings_gym1').set({
+          'prefix': 'INV-',
+          'startNumber': 1,
+          'nextSequence': 1,
+          'padding': 4,
+          'gymId': 'gym1',
+          'companyName': company,
+          'companyAddress': address,
+          'matriculeFiscal': matricule,
+          'stampDuty': stampDuty,
+          'defaultVatRate': 19,
+        });
+
+    Future<Invoice> create({
+      num? stampDuty,
+      List<InvoiceItem> extraItems = const [],
+      num discountAmount = 0,
+    }) =>
+        sut.createInvoice(
+          userId: 'u1',
+          memberName: 'Alice',
+          memberEmail: 'a@test.com',
+          subscriptions: [_sub(totalAmount: 1000, currency: 'TND')],
+          planLabels: ['Basic'],
+          stampDuty: stampDuty,
+          extraItems: extraItems,
+          discountAmount: discountAmount,
+        );
+
+    test('applies the settings stamp and snapshots seller identity', () async {
+      await seedFiscal(stampDuty: 1.0);
+      final inv = await create();
+
+      expect(inv.stampDuty, 1.0);
+      expect(inv.sellerName, 'Carthage CrossFit');
+      expect(inv.sellerAddress, 'Tunis');
+      expect(inv.sellerTaxId, '1234567/A/M/000');
+      expect(inv.totalAmount, 1001); // subtotal 1000 + stamp 1
+    });
+
+    test('explicit stampDuty overrides the settings default', () async {
+      await seedFiscal(stampDuty: 1.0);
+      final inv = await create(stampDuty: 0.6);
+
+      expect(inv.stampDuty, 0.6);
+      expect(inv.totalAmount, 1000.6);
+    });
+
+    test('total = subtotal + tax - discount + stamp', () async {
+      await seedFiscal(stampDuty: 1.0);
+      final inv = await create(
+        extraItems: const [
+          InvoiceItem(
+              description: 'Extra',
+              amount: 100,
+              currency: 'TND',
+              taxRate: 19),
+        ],
+        discountAmount: 50,
+      );
+
+      // subtotal 1100, tax 19 (19% of 100), discount 50, stamp 1 → 1070
+      expect(inv.taxAmount, 19);
+      expect(inv.totalAmount, 1070);
+    });
+
+    test('persists fiscal fields on the invoice document', () async {
+      await seedFiscal(stampDuty: 1.0);
+      final inv = await create();
+
+      final doc = await db.collection('invoices').doc(inv.id).get();
+      expect(doc.data()!['stampDuty'], 1.0);
+      expect(doc.data()!['sellerTaxId'], '1234567/A/M/000');
+    });
+
+    test('auto-numbering preserves fiscal settings (merge, not overwrite)',
+        () async {
+      await seedFiscal(stampDuty: 1.0);
+      await create(); // consumes the counter via a merged settings write
+
+      final s =
+          await db.collection('settings').doc('invoiceSettings_gym1').get();
+      expect(s.data()!['companyName'], 'Carthage CrossFit');
+      expect(s.data()!['matriculeFiscal'], '1234567/A/M/000');
+      expect(s.data()!['nextSequence'], 2); // counter incremented
+    });
+
+    test('stamp defaults to 0 when settings have none (non-Tunisia gyms)',
+        () async {
+      await _seedSettings(db); // no fiscal fields
+      final inv = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        subscriptions: [_sub(totalAmount: 1000)],
+        planLabels: ['Basic'],
+      );
+      expect(inv.stampDuty, 0);
+      expect(inv.totalAmount, 1000); // no surprise stamp charge
+    });
+
+    test('stores the buyer address on the invoice', () async {
+      await seedFiscal();
+      final inv = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        memberAddress: '10 Rue de Carthage, Tunis',
+        subscriptions: [_sub(totalAmount: 1000, currency: 'TND')],
+        planLabels: ['Basic'],
+      );
+
+      expect(inv.memberAddress, '10 Rue de Carthage, Tunis');
+      final doc = await db.collection('invoices').doc(inv.id).get();
+      expect(doc.data()!['memberAddress'], '10 Rue de Carthage, Tunis');
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // saveInvoiceSettings — fiscal fields
+  // ══════════════════════════════════════════════════════════════════════════
+
+  group('saveInvoiceSettings — fiscal', () {
+    test('persists fiscal identity fields', () async {
+      await sut.saveInvoiceSettings(
+        prefix: 'INV-',
+        startNumber: 1,
+        padding: 4,
+        companyName: 'Carthage CrossFit',
+        companyAddress: 'Tunis',
+        matriculeFiscal: '1234567/A/M/000',
+        stampDuty: 1.0,
+        defaultVatRate: 19,
+      );
+
+      final loaded = await sut.getInvoiceSettings();
+      expect(loaded.companyName, 'Carthage CrossFit');
+      expect(loaded.companyAddress, 'Tunis');
+      expect(loaded.matriculeFiscal, '1234567/A/M/000');
+      expect(loaded.stampDuty, 1.0);
+      expect(loaded.defaultVatRate, 19);
+    });
+
+    test('merges fiscal fields without clobbering the counter', () async {
+      await _seedSettings(db, nextSequence: 9, startNumber: 1);
+
+      await sut.saveInvoiceSettings(
+        prefix: 'INV-',
+        startNumber: 1,
+        padding: 4,
+        companyName: 'Carthage CrossFit',
+      );
+
+      final loaded = await sut.getInvoiceSettings();
+      expect(loaded.companyName, 'Carthage CrossFit');
+      expect(loaded.nextSequence, 9); // preserved
     });
   });
 }

@@ -50,15 +50,11 @@ abstract final class Currency {
       '${symbol(code)}${formatAmount(amount, maxDecimals: decimalsFor(code))}';
 
   /// Formats just the numeric part: whole numbers render without decimals,
-  /// fractional values render with up to [maxDecimals] decimals and trailing
-  /// zeros trimmed (e.g. `50.500` → `50.5`).
+  /// fractional values render with exactly [maxDecimals] decimals (2 by
+  /// default, 3 for TND millimes — see [format]).
   static String formatAmount(num amount, {int maxDecimals = 2}) {
     if (amount % 1 == 0) return amount.toInt().toString();
-    var s = amount.toStringAsFixed(maxDecimals);
-    if (s.contains('.')) {
-      s = s.replaceAll(RegExp(r'0+$'), '').replaceAll(RegExp(r'\.$'), '');
-    }
-    return s;
+    return amount.toStringAsFixed(maxDecimals);
   }
 
   /// Parses a user-entered amount, accepting both `.` and `,` as the decimal

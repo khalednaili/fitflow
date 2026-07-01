@@ -75,6 +75,7 @@ class Invoice {
     required this.memberName,
     required this.memberEmail,
     this.memberPhone = '',
+    this.memberAddress = '',
     required this.subscriptionId,
     required this.planName,
     required this.currency,
@@ -107,6 +108,9 @@ class Invoice {
   final String memberName;
   final String memberEmail;
   final String memberPhone;
+
+  /// Buyer's postal address, shown on the invoice for legal compliance.
+  final String memberAddress;
   final String subscriptionId;
   final String planName;
   final String currency;
@@ -187,6 +191,7 @@ class Invoice {
       memberName: (data['memberName'] ?? '') as String,
       memberEmail: (data['memberEmail'] ?? '') as String,
       memberPhone: (data['memberPhone'] ?? '') as String,
+      memberAddress: (data['memberAddress'] ?? '') as String,
       subscriptionId: (data['subscriptionId'] ?? '') as String,
       planName: (data['planName'] ?? '') as String,
       currency: (data['currency'] ?? Currency.defaultCode) as String,
@@ -220,6 +225,7 @@ class Invoice {
         'memberName': memberName,
         'memberEmail': memberEmail,
         'memberPhone': memberPhone,
+        'memberAddress': memberAddress,
         'subscriptionId': subscriptionId,
         'planName': planName,
         'currency': currency,

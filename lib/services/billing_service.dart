@@ -15,9 +15,16 @@ class InvoiceSettings {
     this.companyName = '',
     this.companyAddress = '',
     this.matriculeFiscal = '',
-    this.stampDuty = 1.0,
+    this.stampDuty = 0,
     this.defaultVatRate = 19,
+    this.creditNotePrefix = 'CN-',
+    this.creditNoteNextSequence = 1,
   });
+
+  /// Suggested Tunisian fiscal stamp (droit de timbre) offered as a default in
+  /// the settings UI. Not applied automatically — the stamp is only charged
+  /// once an admin saves a non-zero [stampDuty].
+  static const num suggestedStampDutyTND = 1.0;
 
   final String prefix;
   final int startNumber;
@@ -46,6 +53,13 @@ class InvoiceSettings {
   /// Default TVA rate (%) pre-filled for new line items (19 % standard rate).
   final int defaultVatRate;
 
+  /// Prefix for credit-note numbers — kept as its own legally-required series
+  /// (e.g. `CN-000001`), independent of the invoice counter.
+  final String creditNotePrefix;
+
+  /// Next sequence number for credit notes (separate from [nextSequence]).
+  final int creditNoteNextSequence;
+
   factory InvoiceSettings.fromMap(Map<String, dynamic> map) => InvoiceSettings(
         prefix: (map['prefix'] ?? 'INV-') as String,
         startNumber: (map['startNumber'] ?? 1) as int,
@@ -54,8 +68,11 @@ class InvoiceSettings {
         companyName: (map['companyName'] ?? '') as String,
         companyAddress: (map['companyAddress'] ?? '') as String,
         matriculeFiscal: (map['matriculeFiscal'] ?? '') as String,
-        stampDuty: (map['stampDuty'] as num? ?? 1.0),
+        stampDuty: (map['stampDuty'] as num? ?? 0),
         defaultVatRate: (map['defaultVatRate'] as num? ?? 19).toInt(),
+        creditNotePrefix: (map['creditNotePrefix'] ?? 'CN-') as String,
+        creditNoteNextSequence:
+            (map['creditNoteNextSequence'] as num? ?? 1).toInt(),
       );
 }
 
@@ -204,6 +221,7 @@ class BillingService {
     required String memberName,
     required String memberEmail,
     String memberPhone = '',
+    String memberAddress = '',
     required List<UserSubscription> subscriptions,
     required List<String> planLabels,
     String notes = '',
@@ -276,17 +294,20 @@ class BillingService {
         invoiceNumber =
             '$effectivePrefix${nextSeq.toString().padLeft(padding, '0')}';
 
-        tx.set(
-          _settingsRef,
-          <String, dynamic>{
-            'prefix': rawPrefix,
-            'startNumber': startNumber,
-            'nextSequence': nextSeq + 1,
-            'padding': padding,
-            if (gymId.isNotEmpty) 'gymId': gymId,
-          },
-          SetOptions(merge: true),
-        );
+        final counterUpdate = <String, dynamic>{
+          'prefix': rawPrefix,
+          'startNumber': startNumber,
+          'nextSequence': nextSeq + 1,
+          'padding': padding,
+          if (gymId.isNotEmpty) 'gymId': gymId,
+        };
+        // Update (not set) when the doc exists so fiscal fields — companyName,
+        // matriculeFiscal, stampDuty, etc. — are preserved; set only creates it.
+        if (settingsSnap.exists) {
+          tx.update(_settingsRef, counterUpdate);
+        } else {
+          tx.set(_settingsRef, counterUpdate);
+        }
       }
 
       tx.set(invoiceRef, <String, dynamic>{
@@ -296,6 +317,7 @@ class BillingService {
         'memberName': memberName,
         'memberEmail': memberEmail,
         'memberPhone': memberPhone,
+        'memberAddress': memberAddress,
         'subscriptionId': subscriptionId,
         'planName': planName,
         'currency': currency,
@@ -327,6 +349,7 @@ class BillingService {
       memberName: memberName,
       memberEmail: memberEmail,
       memberPhone: memberPhone,
+      memberAddress: memberAddress,
       subscriptionId: subscriptionId,
       planName: planName,
       currency: currency,
@@ -405,6 +428,7 @@ class BillingService {
         memberName: current.memberName,
         memberEmail: current.memberEmail,
         memberPhone: current.memberPhone,
+        memberAddress: current.memberAddress,
         subscriptionId: current.subscriptionId,
         planName: current.planName,
         currency: current.currency,
@@ -507,6 +531,7 @@ class BillingService {
         memberName: current.memberName,
         memberEmail: current.memberEmail,
         memberPhone: current.memberPhone,
+        memberAddress: current.memberAddress,
         subscriptionId: current.subscriptionId,
         planName: current.planName,
         currency: current.currency,
@@ -551,8 +576,22 @@ class BillingService {
   }
 
   /// Voids an invoice. Voided invoices are kept for audit purposes.
+  ///
+  /// For invoicing compliance, an invoice that already has payments allocated
+  /// cannot be voided — it must be credited instead (see [createCreditNote]).
+  /// Voiding an already-voided invoice is a no-op.
   Future<void> voidInvoice(String invoiceId) async {
-    await _firestore.collection('invoices').doc(invoiceId).update(<String, dynamic>{
+    final ref = _firestore.collection('invoices').doc(invoiceId);
+    final snap = await ref.get();
+    if (!snap.exists) throw Exception('Invoice $invoiceId not found');
+    final current = Invoice.fromSnapshot(snap);
+    if (current.isVoid) return;
+    if (current.amountPaid > 0) {
+      throw Exception(
+          'Cannot void an invoice with payments allocated — issue a credit '
+          'note instead.');
+    }
+    await ref.update(<String, dynamic>{
       'status': InvoiceStatus.void_,
       'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
@@ -617,12 +656,17 @@ class BillingService {
     required String memberName,
     required String memberEmail,
     String memberPhone = '',
+    String memberAddress = '',
     required List<InvoiceItem> items,
     String notes = '',
     DateTime? dueDate,
     String? customInvoiceNumber,
   }) async {
     assert(items.isNotEmpty, 'Credit note must have at least one item');
+
+    // Seller identity snapshot (matricule fiscal etc.) so the credit note is
+    // as compliant as the invoice it credits.
+    final settings = await getInvoiceSettings();
 
     final now = DateTime.now();
     final taxAmount = items.fold<num>(0, (s, i) => s + i.taxAmount);
@@ -640,24 +684,27 @@ class BillingService {
       if (useCustom) {
         invoiceNumber = customInvoiceNumber.trim();
       } else {
+        // Credit notes use their OWN sequential series (creditNoteNextSequence),
+        // independent of the invoice counter, per invoicing regulations.
         final settingsSnap = await tx.get(_settingsRef);
         final sData = settingsSnap.data() ?? {};
-        final rawPrefix = ((sData['prefix'] as String?) ?? 'CR-');
-        final effectivePrefix = rawPrefix.isEmpty ? 'CR-' : 'CR-${rawPrefix.replaceAll(RegExp(r'^CR-'), '')}';
-        final startNumber = (sData['startNumber'] as int? ?? 1);
-        final nextSeq = settingsSnap.exists
-            ? (sData['nextSequence'] as int? ?? startNumber)
-            : startNumber;
+        final rawPrefix = (sData['creditNotePrefix'] as String?) ?? 'CN-';
+        final effectivePrefix = rawPrefix.isEmpty ? 'CN-' : rawPrefix;
+        final cnSeq = (sData['creditNoteNextSequence'] as int? ?? 1);
         final padding = (sData['padding'] as int? ?? 4);
         invoiceNumber =
-            '$effectivePrefix${nextSeq.toString().padLeft(padding, '0')}';
-        tx.set(_settingsRef, <String, dynamic>{
-          'prefix': sData['prefix'] ?? 'INV-',
-          'startNumber': startNumber,
-          'nextSequence': nextSeq + 1,
-          'padding': padding,
+            '$effectivePrefix${cnSeq.toString().padLeft(padding, '0')}';
+        // Advance only the credit-note counter; leave the invoice counter and
+        // fiscal fields untouched.
+        final counterUpdate = <String, dynamic>{
+          'creditNoteNextSequence': cnSeq + 1,
           if (gymId.isNotEmpty) 'gymId': gymId,
-        }, SetOptions(merge: true));
+        };
+        if (settingsSnap.exists) {
+          tx.update(_settingsRef, counterUpdate);
+        } else {
+          tx.set(_settingsRef, counterUpdate);
+        }
       }
 
       tx.set(invoiceRef, <String, dynamic>{
@@ -667,6 +714,7 @@ class BillingService {
         'memberName': memberName,
         'memberEmail': memberEmail,
         'memberPhone': memberPhone,
+        'memberAddress': memberAddress,
         'subscriptionId': '',
         'planName': '',
         'currency': items.first.currency,
@@ -674,6 +722,9 @@ class BillingService {
         'amountPaid': 0,
         'taxAmount': taxAmount,
         'discountAmount': 0,
+        'sellerName': settings.companyName,
+        'sellerAddress': settings.companyAddress,
+        'sellerTaxId': settings.matriculeFiscal,
         'status': InvoiceStatus.unpaid,
         'issuedAt': Timestamp.fromDate(now),
         if (dueDate != null) 'dueDate': Timestamp.fromDate(dueDate),
@@ -695,12 +746,16 @@ class BillingService {
       memberName: memberName,
       memberEmail: memberEmail,
       memberPhone: memberPhone,
+      memberAddress: memberAddress,
       subscriptionId: '',
       planName: '',
       currency: items.first.currency,
       totalAmount: totalAmount,
       amountPaid: 0,
       taxAmount: taxAmount,
+      sellerName: settings.companyName,
+      sellerAddress: settings.companyAddress,
+      sellerTaxId: settings.matriculeFiscal,
       status: InvoiceStatus.unpaid,
       issuedAt: now,
       dueDate: dueDate,

@@ -101,4 +101,66 @@ void main() {
       expect(Currency.formatSymbol(50, null), 'TND50');
     });
   });
+
+  group('Currency.decimalsFor', () {
+    test('TND uses 3 decimals (millimes)', () {
+      expect(Currency.decimalsFor('TND'), 3);
+    });
+
+    test('other currencies use 2 decimals', () {
+      expect(Currency.decimalsFor('EUR'), 2);
+      expect(Currency.decimalsFor('USD'), 2);
+    });
+
+    test('null/empty resolves to TND → 3 decimals', () {
+      expect(Currency.decimalsFor(null), 3);
+      expect(Currency.decimalsFor(''), 3);
+    });
+  });
+
+  group('Currency.format — TND millimes', () {
+    test('fractional TND renders 3 decimals', () {
+      expect(Currency.format(50.5, 'TND'), '50.500 TND');
+      expect(Currency.format(9.876, 'TND'), '9.876 TND');
+    });
+
+    test('whole TND still drops decimals', () {
+      expect(Currency.format(50, 'TND'), '50 TND');
+    });
+
+    test('non-TND currencies keep 2 decimals', () {
+      expect(Currency.format(50.5, 'EUR'), '50.50 EUR');
+    });
+  });
+
+  group('Currency.parse', () {
+    test('parses a plain decimal', () {
+      expect(Currency.parse('50.5'), 50.5);
+      expect(Currency.parse('50'), 50);
+    });
+
+    test('accepts a comma as decimal separator', () {
+      expect(Currency.parse('50,500'), 50.5);
+      expect(Currency.parse('  12,25 '), 12.25);
+    });
+
+    test('returns null for empty or invalid input', () {
+      expect(Currency.parse(''), isNull);
+      expect(Currency.parse('   '), isNull);
+      expect(Currency.parse('abc'), isNull);
+      expect(Currency.parse(null), isNull);
+    });
+  });
+
+  group('Currency.roundMillimes', () {
+    test('rounds to 3 decimals', () {
+      expect(Currency.roundMillimes(9.4051), 9.405);
+      expect(Currency.roundMillimes(6.3327), 6.333);
+    });
+
+    test('leaves millime-precise values unchanged', () {
+      expect(Currency.roundMillimes(19), 19);
+      expect(Currency.roundMillimes(50.5), 50.5);
+    });
+  });
 }
