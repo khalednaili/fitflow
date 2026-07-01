@@ -12,20 +12,21 @@ class InvoiceItem {
   });
 
   final String description;
-  final int amount;
+  final num amount;
   final String currency;
 
-  /// Tax percentage (0–100). e.g. 20 = 20 % VAT.
+  /// Tax percentage (0–100). e.g. 19 = 19 % TVA.
   final int taxRate;
 
-  /// Computed tax amount in the same currency unit as [amount].
-  int get taxAmount => (amount * taxRate / 100).round();
+  /// Computed tax amount in the same currency unit as [amount], rounded to
+  /// millime precision.
+  num get taxAmount => Currency.roundMillimes(amount * taxRate / 100);
 
   factory InvoiceItem.fromMap(Map<String, dynamic> map) => InvoiceItem(
         description: (map['description'] ?? '') as String,
-        amount: (map['amount'] ?? 0) as int,
+        amount: (map['amount'] as num? ?? 0),
         currency: (map['currency'] ?? Currency.defaultCode) as String,
-        taxRate: (map['taxRate'] ?? 0) as int,
+        taxRate: (map['taxRate'] as num? ?? 0).toInt(),
       );
 
   Map<String, dynamic> toMap() => <String, dynamic>{
@@ -81,6 +82,10 @@ class Invoice {
     required this.amountPaid,
     this.taxAmount = 0,
     this.discountAmount = 0,
+    this.stampDuty = 0,
+    this.sellerName = '',
+    this.sellerAddress = '',
+    this.sellerTaxId = '',
     required this.status,
     required this.issuedAt,
     this.dueDate,
@@ -106,15 +111,27 @@ class Invoice {
   final String planName;
   final String currency;
 
-  /// Final billed amount (subtotal + tax − discount), in whole currency units.
-  final int totalAmount;
-  final int amountPaid;
+  /// Final billed amount (subtotal + tax − discount + stamp duty), in currency
+  /// units (may be fractional, e.g. TND millimes).
+  final num totalAmount;
+  final num amountPaid;
 
   /// Total tax collected on this invoice.
-  final int taxAmount;
+  final num taxAmount;
 
   /// Flat discount applied (subtracted from subtotal before tax? or after? — stored explicitly).
-  final int discountAmount;
+  final num discountAmount;
+
+  /// Fixed fiscal stamp (droit de timbre) added to the total. Mandatory on
+  /// Tunisian invoices; defaults to 0 when not applicable.
+  final num stampDuty;
+
+  /// Seller identity captured at issue time so the invoice stays accurate even
+  /// if gym settings change later. `sellerTaxId` is the Tunisian matricule
+  /// fiscal.
+  final String sellerName;
+  final String sellerAddress;
+  final String sellerTaxId;
 
   /// See [InvoiceStatus] constants.
   final String status;
@@ -134,10 +151,10 @@ class Invoice {
 
   // ── Computed ─────────────────────────────────────────────────────────────
 
-  int get remainingAmount => totalAmount - amountPaid;
+  num get remainingAmount => totalAmount - amountPaid;
 
   /// Pre-tax, pre-discount sum of line items.
-  int get subtotal => items.fold(0, (s, i) => s + i.amount);
+  num get subtotal => items.fold<num>(0, (s, i) => s + i.amount);
 
   bool get isPaid => status == InvoiceStatus.paid;
   bool get isVoid => status == InvoiceStatus.void_;
@@ -173,10 +190,14 @@ class Invoice {
       subscriptionId: (data['subscriptionId'] ?? '') as String,
       planName: (data['planName'] ?? '') as String,
       currency: (data['currency'] ?? Currency.defaultCode) as String,
-      totalAmount: (data['totalAmount'] ?? 0) as int,
-      amountPaid: (data['amountPaid'] ?? 0) as int,
-      taxAmount: (data['taxAmount'] ?? 0) as int,
-      discountAmount: (data['discountAmount'] ?? 0) as int,
+      totalAmount: (data['totalAmount'] as num? ?? 0),
+      amountPaid: (data['amountPaid'] as num? ?? 0),
+      taxAmount: (data['taxAmount'] as num? ?? 0),
+      discountAmount: (data['discountAmount'] as num? ?? 0),
+      stampDuty: (data['stampDuty'] as num? ?? 0),
+      sellerName: (data['sellerName'] ?? '') as String,
+      sellerAddress: (data['sellerAddress'] ?? '') as String,
+      sellerTaxId: (data['sellerTaxId'] ?? '') as String,
       status: InvoiceStatus.validated((data['status'] ?? '') as String),
       issuedAt: (data['issuedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       dueDate: (data['dueDate'] as Timestamp?)?.toDate(),
@@ -206,6 +227,10 @@ class Invoice {
         'amountPaid': amountPaid,
         'taxAmount': taxAmount,
         'discountAmount': discountAmount,
+        'stampDuty': stampDuty,
+        'sellerName': sellerName,
+        'sellerAddress': sellerAddress,
+        'sellerTaxId': sellerTaxId,
         'status': status,
         'issuedAt': Timestamp.fromDate(issuedAt),
         if (dueDate != null) 'dueDate': Timestamp.fromDate(dueDate!),
@@ -228,13 +253,13 @@ class InvoicePayment {
     this.notes = '',
   });
 
-  final int amount;
+  final num amount;
   final DateTime date;
   final String method;
   final String notes;
 
   factory InvoicePayment.fromMap(Map<String, dynamic> map) => InvoicePayment(
-        amount: (map['amount'] ?? 0) as int,
+        amount: (map['amount'] as num? ?? 0),
         date: (map['date'] as Timestamp?)?.toDate() ?? DateTime.now(),
         method: (map['method'] ?? 'cash') as String,
         notes: (map['notes'] ?? '') as String,

@@ -506,16 +506,16 @@ class _EditItemsSheetState extends State<_EditItemsSheet> {
     });
   }
 
-  int _total() => _rows.fold(
+  num _total() => _rows.fold<num>(
         0,
-        (sum, r) => sum + (int.tryParse(r.amount.text.trim()) ?? 0),
+        (sum, r) => sum + (Currency.parse(r.amount.text) ?? 0),
       );
 
   Future<void> _save() async {
     final items = <InvoiceItem>[];
     for (final r in _rows) {
       final desc = r.desc.text.trim();
-      final amt = int.tryParse(r.amount.text.trim()) ?? 0;
+      final amt = Currency.parse(r.amount.text) ?? 0;
       if (desc.isEmpty) {
         setState(() => _error = context.l10n.tr('All items need a description.'));
         return;
@@ -724,7 +724,7 @@ class _EditItemRow extends StatelessWidget {
           flex: 2,
           child: TextField(
             controller: amountController,
-            keyboardType: TextInputType.number,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
               hintText: l10n.tr('Amount'),
               prefixText: '${Currency.normalize(currency)} ',
@@ -970,33 +970,39 @@ class _TotalsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = invoice.currency;
-    final subtotal = invoice.subtotal;
-    final tax = invoice.taxAmount;
-    final discount = invoice.discountAmount;
-    final hasTax = tax > 0;
-    final hasDiscount = discount > 0;
+    final hasTax = invoice.taxAmount > 0;
+    final hasDiscount = invoice.discountAmount > 0;
+    final hasStamp = invoice.stampDuty > 0;
     return Align(
       alignment: Alignment.centerRight,
       child: IntrinsicWidth(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (hasTax || hasDiscount) ...[
-              _TotalRow(l10n.tr('Subtotal'), '$c $subtotal'),
+            if (hasTax || hasDiscount || hasStamp) ...[
+              _TotalRow(l10n.tr('Subtotal'),
+                  Currency.format(invoice.subtotal, c)),
               if (hasTax)
-                _TotalRow(l10n.tr('VAT / Tax'), '+ $c $tax'),
+                _TotalRow(l10n.tr('VAT / Tax'),
+                    '+ ${Currency.format(invoice.taxAmount, c)}'),
               if (hasDiscount)
-                _TotalRow(l10n.tr('Discount'), '− $c $discount'),
+                _TotalRow(l10n.tr('Discount'),
+                    '− ${Currency.format(invoice.discountAmount, c)}'),
+              if (hasStamp)
+                _TotalRow(l10n.tr('Timbre Fiscal'),
+                    '+ ${Currency.format(invoice.stampDuty, c)}'),
               const Divider(height: 12),
             ],
-            _TotalRow(l10n.tr('Total'), '$c ${invoice.totalAmount}', bold: true),
+            _TotalRow(l10n.tr('Total'),
+                Currency.format(invoice.totalAmount, c), bold: true),
             const SizedBox(height: 6),
-            _TotalRow(l10n.tr('Amount Paid'), '$c ${invoice.amountPaid}',
+            _TotalRow(l10n.tr('Amount Paid'),
+                Currency.format(invoice.amountPaid, c),
                 color: Colors.green.shade700),
-            if (invoice.totalAmount - invoice.amountPaid > 0)
+            if (invoice.remainingAmount > 0)
               _TotalRow(
                 l10n.tr('Balance Due'),
-                '$c ${invoice.totalAmount - invoice.amountPaid}',
+                Currency.format(invoice.remainingAmount, c),
                 color: Colors.red.shade700,
                 bold: true,
               ),
@@ -1158,7 +1164,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
 
   Future<void> _submit() async {
     final l10n = context.l10n;
-    final amount = int.tryParse(_amountCtrl.text.trim()) ?? 0;
+    final amount = Currency.parse(_amountCtrl.text) ?? 0;
     if (amount <= 0) {
       setState(() => _error = l10n.tr('Enter a valid amount'));
       return;
@@ -1269,12 +1275,13 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
                 const SizedBox(height: 6),
                 TextField(
                   controller: _amountCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: false),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   autofocus: true,
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
                     prefixText: '${Currency.normalize(currency)} ',
-                    hintText: remaining.toString(),
+                    hintText: Currency.formatAmount(remaining,
+                        maxDecimals: Currency.decimalsFor(currency)),
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10)),
                     focusedBorder: OutlineInputBorder(
@@ -1294,8 +1301,9 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
                     child: ActionChip(
                       label: Text(l10n.tr('Pay in full (${Currency.format(remaining, currency)})')),
                       avatar: const Icon(Icons.check_circle_outline, size: 16),
-                      onPressed: () =>
-                          setState(() => _amountCtrl.text = remaining.toString()),
+                      onPressed: () => setState(() => _amountCtrl.text =
+                          Currency.formatAmount(remaining,
+                              maxDecimals: Currency.decimalsFor(currency))),
                       backgroundColor:
                           const Color(0xFF0F766E).withValues(alpha: 0.08),
                       labelStyle:

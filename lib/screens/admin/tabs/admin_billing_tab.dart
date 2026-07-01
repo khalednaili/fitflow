@@ -1113,6 +1113,8 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
   List<MembershipPlan> _plans = [];
   List<UserSubscription> _selectedSubs = [];
   String _invoiceNumberHint = '';
+  num _stampDefault = 0;
+  int _vatDefault = 19;
 
   bool _loadingMembers = true;
   bool _loadingSubs = false;
@@ -1248,12 +1250,16 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
           'All selected offers must use the same currency (${currencies.join(', ')} found).');
       return;
     }
-    // Pre-load the invoice number hint without consuming the counter.
+    // Pre-load the invoice number hint (without consuming the counter) and the
+    // fiscal defaults (stamp duty + TVA rate) for the confirm step.
     try {
       final hint = await widget.billingService.previewNextInvoiceNumber();
+      final settings = await widget.billingService.getInvoiceSettings();
       if (mounted) {
         setState(() {
           _invoiceNumberHint = hint;
+          _stampDefault = settings.stampDuty;
+          _vatDefault = settings.defaultVatRate;
           _error = '';
           _step = _InvoiceStep.confirm;
         });
@@ -1266,7 +1272,7 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
 
   Future<void> _createInvoice(
       List<InvoiceItem> extraItems, String? customInvoiceNumber,
-      int discount, bool saveAsDraft) async {
+      num discount, num stamp, bool saveAsDraft) async {
     if (_selectedMember == null || _selectedSubs.isEmpty) return;
     setState(() {
       _saving = true;
@@ -1284,6 +1290,7 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
         extraItems: extraItems,
         customInvoiceNumber: customInvoiceNumber,
         discountAmount: discount,
+        stampDuty: stamp,
         status: saveAsDraft ? InvoiceStatus.draft : InvoiceStatus.unpaid,
       );
       widget.onCreated(invoice);
@@ -1420,6 +1427,8 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
                             subs: _selectedSubs,
                             plans: _selectedPlans,
                             invoiceNumberHint: _invoiceNumberHint,
+                            defaultStampDuty: _stampDefault,
+                            defaultVatRate: _vatDefault,
                             notesController: _notesController,
                             error: _error,
                             saving: _saving,
@@ -1969,10 +1978,10 @@ class _OfferSummaryRow extends StatelessWidget {
 
 /// Controllers for one extra line-item row (description, amount, taxRate).
 class _ItemRowControllers {
-  _ItemRowControllers()
+  _ItemRowControllers({int vatRate = 0})
       : desc = TextEditingController(),
         amount = TextEditingController(),
-        taxRate = TextEditingController(text: '0');
+        taxRate = TextEditingController(text: '$vatRate');
   final TextEditingController desc;
   final TextEditingController amount;
   final TextEditingController taxRate;
@@ -1989,6 +1998,8 @@ class _ConfirmStep extends StatefulWidget {
     required this.subs,
     required this.plans,
     required this.invoiceNumberHint,
+    required this.defaultStampDuty,
+    required this.defaultVatRate,
     required this.notesController,
     required this.error,
     required this.saving,
@@ -1999,12 +2010,19 @@ class _ConfirmStep extends StatefulWidget {
   final List<UserSubscription> subs;
   final List<MembershipPlan?> plans;
   final String invoiceNumberHint;
+
+  /// Fiscal stamp (droit de timbre) pre-filled from gym settings.
+  final num defaultStampDuty;
+
+  /// TVA rate (%) pre-filled for new line items.
+  final int defaultVatRate;
   final TextEditingController notesController;
   final String error;
   final bool saving;
   final AppLocalizations l10n;
-  /// Called with extra items, optional custom invoice number, discount amount, and saveAsDraft flag.
-  final void Function(List<InvoiceItem>, String?, int, bool) onSubmit;
+  /// Called with extra items, optional custom invoice number, discount amount,
+  /// stamp duty, and saveAsDraft flag.
+  final void Function(List<InvoiceItem>, String?, num, num, bool) onSubmit;
 
   @override
   State<_ConfirmStep> createState() => _ConfirmStepState();
@@ -2014,6 +2032,7 @@ class _ConfirmStepState extends State<_ConfirmStep> {
   final List<_ItemRowControllers> _extraRows = [];
   late final TextEditingController _invoiceNumberController;
   final _discountCtrl = TextEditingController(text: '0');
+  late final TextEditingController _stampCtrl;
   bool _saveAsDraft = false;
 
   @override
@@ -2021,6 +2040,8 @@ class _ConfirmStepState extends State<_ConfirmStep> {
     super.initState();
     _invoiceNumberController =
         TextEditingController(text: widget.invoiceNumberHint);
+    _stampCtrl = TextEditingController(
+        text: Currency.formatAmount(widget.defaultStampDuty, maxDecimals: 3));
   }
 
   @override
@@ -2030,11 +2051,12 @@ class _ConfirmStepState extends State<_ConfirmStep> {
     }
     _invoiceNumberController.dispose();
     _discountCtrl.dispose();
+    _stampCtrl.dispose();
     super.dispose();
   }
 
   void _addRow() {
-    final row = _ItemRowControllers();
+    final row = _ItemRowControllers(vatRate: widget.defaultVatRate);
     row.amount.addListener(() => setState(() {}));
     row.taxRate.addListener(() => setState(() {}));
     setState(() => _extraRows.add(row));
@@ -2047,14 +2069,17 @@ class _ConfirmStepState extends State<_ConfirmStep> {
   }
 
 
-  int get _discount => (int.tryParse(_discountCtrl.text.trim()) ?? 0).clamp(0, 999999);
+  num get _discount =>
+      (Currency.parse(_discountCtrl.text) ?? 0).clamp(0, 999999);
+
+  num get _stamp => (Currency.parse(_stampCtrl.text) ?? 0).clamp(0, 999999);
 
   List<InvoiceItem> _buildExtraItems() {
     final currency = widget.subs.first.currency;
     final result = <InvoiceItem>[];
     for (final row in _extraRows) {
       final desc = row.desc.text.trim();
-      final amt = int.tryParse(row.amount.text.trim()) ?? 0;
+      final amt = Currency.parse(row.amount.text) ?? 0;
       final tax = (int.tryParse(row.taxRate.text.trim()) ?? 0).clamp(0, 100);
       if (desc.isNotEmpty && amt > 0) {
         result.add(InvoiceItem(
@@ -2077,16 +2102,18 @@ class _ConfirmStepState extends State<_ConfirmStep> {
     final dateFmt = DateFormat('d MMM yyyy');
     final currency = widget.subs.first.currency;
     final baseTotal =
-        widget.subs.fold<int>(0, (acc, s) => acc + s.totalAmount);
-    final extraSubtotal = _extraRows.fold<int>(
-        0, (s, r) => s + (int.tryParse(r.amount.text.trim()) ?? 0));
-    final extraTax = _extraRows.fold<int>(0, (s, r) {
-      final amt = int.tryParse(r.amount.text.trim()) ?? 0;
+        widget.subs.fold<num>(0, (acc, s) => acc + s.totalAmount);
+    final extraSubtotal = _extraRows.fold<num>(
+        0, (s, r) => s + (Currency.parse(r.amount.text) ?? 0));
+    final extraTax = _extraRows.fold<num>(0, (s, r) {
+      final amt = Currency.parse(r.amount.text) ?? 0;
       final tax = (int.tryParse(r.taxRate.text.trim()) ?? 0).clamp(0, 100);
-      return s + (amt * tax / 100).round();
+      return s + Currency.roundMillimes(amt * tax / 100);
     });
     final subtotal = baseTotal + extraSubtotal;
-    final total = (subtotal + extraTax - _discount).clamp(0, 999999999);
+    final stamp = _stamp;
+    final total = Currency.roundMillimes(
+        (subtotal + extraTax + stamp - _discount).clamp(0, 999999999));
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -2205,7 +2232,28 @@ class _ConfirmStepState extends State<_ConfirmStep> {
             title: l10n.tr('Discount'),
             child: TextField(
               controller: _discountCtrl,
-              keyboardType: TextInputType.number,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                prefixText: '${Currency.normalize(currency)} ',
+                hintText: '0',
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // ── Timbre fiscal (fiscal stamp) ─────────────────────────────────
+          _PreviewSection(
+            icon: Icons.receipt_outlined,
+            title: l10n.tr('Timbre Fiscal'),
+            child: TextField(
+              controller: _stampCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 prefixText: '${Currency.normalize(currency)} ',
@@ -2243,6 +2291,12 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                   _TotalPreviewRow(
                       label: l10n.tr('Discount'),
                       value: '− ${Currency.format(_discount, currency)}'),
+                ],
+                if (stamp > 0) ...[
+                  const SizedBox(height: 4),
+                  _TotalPreviewRow(
+                      label: l10n.tr('Timbre Fiscal'),
+                      value: '+ ${Currency.format(stamp, currency)}'),
                 ],
                 const Divider(height: 16),
                 _TotalPreviewRow(
@@ -2301,8 +2355,8 @@ class _ConfirmStepState extends State<_ConfirmStep> {
             child: FilledButton.icon(
               onPressed: widget.saving
                   ? null
-                  : () => widget.onSubmit(
-                      _buildExtraItems(), _customInvoiceNumber(), _discount, _saveAsDraft),
+                  : () => widget.onSubmit(_buildExtraItems(),
+                      _customInvoiceNumber(), _discount, _stamp, _saveAsDraft),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF0F766E),
                 padding: const EdgeInsets.symmetric(vertical: 15),
@@ -2373,7 +2427,8 @@ class _ExtraItemRow extends StatelessWidget {
               flex: 2,
               child: TextField(
                 controller: row.amount,
-                keyboardType: TextInputType.number,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
                 decoration: InputDecoration(
                   hintText: l10n.tr('Amount'),
                   prefixText: '${Currency.normalize(currency)} ',
@@ -2394,7 +2449,7 @@ class _ExtraItemRow extends StatelessWidget {
                 decoration: InputDecoration(
                   hintText: '0',
                   suffixText: '%',
-                  labelText: l10n.tr('Tax'),
+                  labelText: l10n.tr('TVA'),
                   border:
                       OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   contentPadding:
@@ -2410,6 +2465,26 @@ class _ExtraItemRow extends StatelessWidget {
               constraints: const BoxConstraints(),
             ),
           ],
+        ),
+        // TVA quick-presets (Tunisian rates).
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 4, left: 2),
+            child: Wrap(
+              spacing: 6,
+              children: [7, 13, 19].map((rate) {
+                return ChoiceChip(
+                  label: Text('$rate%', style: const TextStyle(fontSize: 11)),
+                  selected: row.taxRate.text.trim() == '$rate',
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  onSelected: (_) => row.taxRate.text = '$rate',
+                  selectedColor: const Color(0xFF0F766E).withValues(alpha: 0.15),
+                );
+              }).toList(),
+            ),
+          ),
         ),
       ],
     );
@@ -2872,6 +2947,11 @@ class _InvoiceSettingsDialog extends StatefulWidget {
 class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
   final _prefixCtrl = TextEditingController();
   final _startCtrl = TextEditingController();
+  final _companyCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
+  final _matriculeCtrl = TextEditingController();
+  final _stampCtrl = TextEditingController();
+  final _vatCtrl = TextEditingController();
   bool _resetCounter = false;
   bool _loading = true;
   bool _saving = false;
@@ -2890,6 +2970,11 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
   void dispose() {
     _prefixCtrl.dispose();
     _startCtrl.dispose();
+    _companyCtrl.dispose();
+    _addressCtrl.dispose();
+    _matriculeCtrl.dispose();
+    _stampCtrl.dispose();
+    _vatCtrl.dispose();
     super.dispose();
   }
 
@@ -2900,6 +2985,12 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
       setState(() {
         _prefixCtrl.text = settings.prefix;
         _startCtrl.text = settings.startNumber.toString();
+        _companyCtrl.text = settings.companyName;
+        _addressCtrl.text = settings.companyAddress;
+        _matriculeCtrl.text = settings.matriculeFiscal;
+        _stampCtrl.text =
+            Currency.formatAmount(settings.stampDuty, maxDecimals: 3);
+        _vatCtrl.text = settings.defaultVatRate.toString();
         _currentNextSeq = settings.nextSequence;
         _padding = settings.padding;
         _activePreset = _detectPreset(settings.prefix);
@@ -2966,6 +3057,11 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
         startNumber: startNumber,
         padding: _padding,
         resetCounter: _resetCounter,
+        companyName: _companyCtrl.text.trim(),
+        companyAddress: _addressCtrl.text.trim(),
+        matriculeFiscal: _matriculeCtrl.text.trim(),
+        stampDuty: Currency.parse(_stampCtrl.text) ?? 0,
+        defaultVatRate: (int.tryParse(_vatCtrl.text.trim()) ?? 19).clamp(0, 100),
       );
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -3184,6 +3280,78 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
                               fontSize: 12, color: Colors.grey.shade600),
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 20),
+                    // ── Fiscal identity (Tunisia) ───────────────────────────
+                    _SettingsLabel(l10n.tr('Fiscal (Tunisia)')),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _companyCtrl,
+                      decoration: InputDecoration(
+                        labelText: l10n.tr('Company Name'),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _addressCtrl,
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        labelText: l10n.tr('Company Address'),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _matriculeCtrl,
+                      decoration: InputDecoration(
+                        labelText: l10n.tr('Matricule Fiscal'),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _stampCtrl,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            decoration: InputDecoration(
+                              labelText: l10n.tr('Timbre Fiscal'),
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 110,
+                          child: TextField(
+                            controller: _vatCtrl,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: l10n.tr('Default TVA'),
+                              suffixText: '%',
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 12),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 16),
                     // ── Live Preview ────────────────────────────────────────

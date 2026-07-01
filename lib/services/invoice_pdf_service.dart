@@ -112,6 +112,25 @@ class InvoicePdfService {
                 invoice.invoiceNumber,
                 style: const pw.TextStyle(fontSize: 13, color: _grey),
               ),
+              // Seller identity (Tunisian matricule fiscal etc.)
+              if (invoice.sellerName.isNotEmpty) ...[
+                pw.SizedBox(height: 8),
+                pw.Text(
+                  invoice.sellerName,
+                  style: pw.TextStyle(
+                      fontSize: 11, fontWeight: pw.FontWeight.bold),
+                ),
+              ],
+              if (invoice.sellerAddress.isNotEmpty)
+                pw.Text(
+                  invoice.sellerAddress,
+                  style: const pw.TextStyle(fontSize: 10, color: _grey),
+                ),
+              if (invoice.sellerTaxId.isNotEmpty)
+                pw.Text(
+                  'Matricule Fiscal: ${invoice.sellerTaxId}',
+                  style: const pw.TextStyle(fontSize: 10, color: _grey),
+                ),
             ],
           ),
           _statusBadge(invoice),
@@ -258,9 +277,13 @@ class InvoicePdfService {
     if (invoice.discountAmount > 0) {
       rows.add(('Discount', '-${Currency.format(invoice.discountAmount, invoice.currency)}'));
     }
+    if (invoice.stampDuty > 0) {
+      rows.add(('Timbre Fiscal',
+          Currency.format(invoice.stampDuty, invoice.currency)));
+    }
+    // Always show the total. The invoice intentionally omits amount-paid /
+    // balance-due so it never reveals the outstanding (missing) amount.
     rows.add(('TOTAL', Currency.format(invoice.totalAmount, invoice.currency)));
-    rows.add(('Amount Paid', Currency.format(invoice.amountPaid, invoice.currency)));
-    rows.add(('Balance Due', Currency.format(invoice.remainingAmount, invoice.currency)));
 
     return pw.Align(
       alignment: pw.Alignment.centerRight,
@@ -274,8 +297,7 @@ class InvoicePdfService {
         child: pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.stretch,
           children: rows.asMap().entries.map((e) {
-            final isTotal = e.key == rows.length - 3;
-            final isBalanceDue = e.key == rows.length - 1;
+            final isTotal = e.key == rows.length - 1;
             return pw.Padding(
               padding: const pw.EdgeInsets.symmetric(vertical: 3),
               child: pw.Row(
@@ -284,21 +306,19 @@ class InvoicePdfService {
                   pw.Text(
                     e.value.$1,
                     style: pw.TextStyle(
-                      fontSize: isTotal || isBalanceDue ? 13 : 11,
-                      fontWeight: isTotal || isBalanceDue
-                          ? pw.FontWeight.bold
-                          : pw.FontWeight.normal,
-                      color: isBalanceDue ? _accent : null,
+                      fontSize: isTotal ? 13 : 11,
+                      fontWeight:
+                          isTotal ? pw.FontWeight.bold : pw.FontWeight.normal,
+                      color: isTotal ? _accent : null,
                     ),
                   ),
                   pw.Text(
                     e.value.$2,
                     style: pw.TextStyle(
-                      fontSize: isTotal || isBalanceDue ? 13 : 11,
-                      fontWeight: isTotal || isBalanceDue
-                          ? pw.FontWeight.bold
-                          : pw.FontWeight.normal,
-                      color: isBalanceDue ? _accent : null,
+                      fontSize: isTotal ? 13 : 11,
+                      fontWeight:
+                          isTotal ? pw.FontWeight.bold : pw.FontWeight.normal,
+                      color: isTotal ? _accent : null,
                     ),
                   ),
                 ],

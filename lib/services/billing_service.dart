@@ -2,14 +2,21 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/invoice.dart';
 import '../models/user_subscription.dart';
+import '../utils/currency.dart';
 
-/// Settings stored in Firestore for invoice numbering.
+/// Settings stored in Firestore for invoice numbering and Tunisian fiscal
+/// identity (seller company info, matricule fiscal, stamp duty, default TVA).
 class InvoiceSettings {
   const InvoiceSettings({
     this.prefix = 'INV-',
     this.startNumber = 1,
     this.nextSequence = 1,
     this.padding = 4,
+    this.companyName = '',
+    this.companyAddress = '',
+    this.matriculeFiscal = '',
+    this.stampDuty = 1.0,
+    this.defaultVatRate = 19,
   });
 
   final String prefix;
@@ -21,11 +28,34 @@ class InvoiceSettings {
   /// How many digits to pad the sequence number to (e.g. 4 → 0001).
   final int padding;
 
+  // ── Tunisian fiscal identity ───────────────────────────────────────────────
+
+  /// Seller company / gym legal name shown on the invoice.
+  final String companyName;
+
+  /// Seller postal address shown on the invoice.
+  final String companyAddress;
+
+  /// Tunisian tax identification number (matricule fiscal).
+  final String matriculeFiscal;
+
+  /// Fixed fiscal stamp (droit de timbre) applied per invoice. As of recent
+  /// years this is 1.000 TND.
+  final num stampDuty;
+
+  /// Default TVA rate (%) pre-filled for new line items (19 % standard rate).
+  final int defaultVatRate;
+
   factory InvoiceSettings.fromMap(Map<String, dynamic> map) => InvoiceSettings(
         prefix: (map['prefix'] ?? 'INV-') as String,
         startNumber: (map['startNumber'] ?? 1) as int,
         nextSequence: (map['nextSequence'] ?? map['startNumber'] ?? 1) as int,
         padding: (map['padding'] ?? 4) as int,
+        companyName: (map['companyName'] ?? '') as String,
+        companyAddress: (map['companyAddress'] ?? '') as String,
+        matriculeFiscal: (map['matriculeFiscal'] ?? '') as String,
+        stampDuty: (map['stampDuty'] as num? ?? 1.0),
+        defaultVatRate: (map['defaultVatRate'] as num? ?? 19).toInt(),
       );
 }
 
@@ -111,6 +141,11 @@ class BillingService {
     required int startNumber,
     int padding = 4,
     bool resetCounter = false,
+    String? companyName,
+    String? companyAddress,
+    String? matriculeFiscal,
+    num? stampDuty,
+    int? defaultVatRate,
   }) async {
     final current = await getInvoiceSettings();
     final nextSeq =
@@ -124,8 +159,14 @@ class BillingService {
         'startNumber': startNumber,
         'nextSequence': nextSeq,
         'padding': padding,
+        if (companyName != null) 'companyName': companyName,
+        if (companyAddress != null) 'companyAddress': companyAddress,
+        if (matriculeFiscal != null) 'matriculeFiscal': matriculeFiscal,
+        if (stampDuty != null) 'stampDuty': stampDuty,
+        if (defaultVatRate != null) 'defaultVatRate': defaultVatRate,
         if (gymId.isNotEmpty) 'gymId': gymId,
       },
+      SetOptions(merge: true),
     );
   }
 
@@ -169,7 +210,8 @@ class BillingService {
     DateTime? dueDate,
     List<InvoiceItem> extraItems = const [],
     String? customInvoiceNumber,
-    int discountAmount = 0,
+    num discountAmount = 0,
+    num? stampDuty,
     String status = InvoiceStatus.unpaid,
   }) async {
     assert(subscriptions.isNotEmpty, 'At least one subscription required');
@@ -178,6 +220,12 @@ class BillingService {
     final now = DateTime.now();
     final effectiveStatus = InvoiceStatus.validated(status);
     final currency = subscriptions.first.currency;
+
+    // Seller identity + stamp default come from gym settings; snapshotted onto
+    // the invoice so it stays accurate if settings change later.
+    final settings = await getInvoiceSettings();
+    final effectiveStamp =
+        Currency.roundMillimes(stampDuty ?? settings.stampDuty);
 
     // One base item per subscription.
     final baseItems = List<InvoiceItem>.generate(
@@ -189,9 +237,12 @@ class BillingService {
       ),
     );
     final items = [...baseItems, ...extraItems];
-    final subtotalAmount = items.fold<int>(0, (acc, item) => acc + item.amount + item.taxAmount);
+    final subtotalAmount =
+        items.fold<num>(0, (acc, item) => acc + item.amount + item.taxAmount);
     final effectiveDiscount = discountAmount.clamp(0, subtotalAmount);
-    final totalAmount = (subtotalAmount - effectiveDiscount).clamp(0, 999999999);
+    final totalAmount = Currency.roundMillimes(
+        (subtotalAmount - effectiveDiscount + effectiveStamp)
+            .clamp(0, 999999999));
 
     // Legacy fields — keep first subscription for backward compatibility.
     final subscriptionId = subscriptions.first.id;
@@ -234,6 +285,7 @@ class BillingService {
             'padding': padding,
             if (gymId.isNotEmpty) 'gymId': gymId,
           },
+          SetOptions(merge: true),
         );
       }
 
@@ -249,8 +301,12 @@ class BillingService {
         'currency': currency,
         'totalAmount': totalAmount,
         'amountPaid': 0,
-        'taxAmount': items.fold<int>(0, (s, i) => s + i.taxAmount),
+        'taxAmount': items.fold<num>(0, (s, i) => s + i.taxAmount),
         'discountAmount': effectiveDiscount,
+        'stampDuty': effectiveStamp,
+        'sellerName': settings.companyName,
+        'sellerAddress': settings.companyAddress,
+        'sellerTaxId': settings.matriculeFiscal,
         'status': effectiveStatus,
         'issuedAt': Timestamp.fromDate(now),
         if (dueDate != null) 'dueDate': Timestamp.fromDate(dueDate),
@@ -276,8 +332,12 @@ class BillingService {
       currency: currency,
       totalAmount: totalAmount,
       amountPaid: 0,
-      taxAmount: items.fold<int>(0, (s, i) => s + i.taxAmount),
+      taxAmount: items.fold<num>(0, (s, i) => s + i.taxAmount),
       discountAmount: effectiveDiscount,
+      stampDuty: effectiveStamp,
+      sellerName: settings.companyName,
+      sellerAddress: settings.companyAddress,
+      sellerTaxId: settings.matriculeFiscal,
       status: effectiveStatus,
       issuedAt: now,
       dueDate: dueDate,
@@ -309,12 +369,14 @@ class BillingService {
       // discount (clamped to the new subtotal), mirroring createInvoice so the
       // stored values keep the invariant
       // totalAmount == subtotal + taxAmount - discountAmount.
-      final newSubtotal = items.fold<int>(0, (acc, item) => acc + item.amount);
-      final newTax = items.fold<int>(0, (acc, item) => acc + item.taxAmount);
+      final newSubtotal = items.fold<num>(0, (acc, item) => acc + item.amount);
+      final newTax = items.fold<num>(0, (acc, item) => acc + item.taxAmount);
       final newDiscount =
           current.discountAmount.clamp(0, newSubtotal + newTax);
-      final newTotal =
-          (newSubtotal + newTax - newDiscount).clamp(0, 999999999);
+      // Preserve the invoice's existing fiscal stamp in the recomputed total.
+      final newTotal = Currency.roundMillimes(
+          (newSubtotal + newTax - newDiscount + current.stampDuty)
+              .clamp(0, 999999999));
       final amountPaid = current.amountPaid;
       final newStatus = amountPaid >= newTotal
           ? InvoiceStatus.paid
@@ -350,6 +412,10 @@ class BillingService {
         amountPaid: amountPaid,
         taxAmount: newTax,
         discountAmount: newDiscount,
+        stampDuty: current.stampDuty,
+        sellerName: current.sellerName,
+        sellerAddress: current.sellerAddress,
+        sellerTaxId: current.sellerTaxId,
         status: newStatus,
         issuedAt: current.issuedAt,
         dueDate: current.dueDate,
@@ -358,6 +424,8 @@ class BillingService {
         payments: current.payments,
         createdAt: current.createdAt,
         updatedAt: now,
+        isCreditNote: current.isCreditNote,
+        originalInvoiceId: current.originalInvoiceId,
       );
     });
 
@@ -384,7 +452,7 @@ class BillingService {
   /// Throws if the invoice is voided or if the payment would exceed [totalAmount].
   Future<Invoice> recordPayment(
     String invoiceId, {
-    required int amount,
+    required num amount,
     required String method,
     String notes = '',
     DateTime? date,
@@ -557,11 +625,11 @@ class BillingService {
     assert(items.isNotEmpty, 'Credit note must have at least one item');
 
     final now = DateTime.now();
-    final taxAmount = items.fold<int>(0, (s, i) => s + i.taxAmount);
+    final taxAmount = items.fold<num>(0, (s, i) => s + i.taxAmount);
     // Tax-inclusive total, mirroring createInvoice so the credit note nets off
     // cleanly against the original invoice (totalAmount == subtotal + tax).
     final totalAmount =
-        items.fold<int>(0, (s, i) => s + i.amount) + taxAmount;
+        items.fold<num>(0, (s, i) => s + i.amount) + taxAmount;
     final invoiceRef = _firestore.collection('invoices').doc();
     String invoiceNumber = '';
 
@@ -589,7 +657,7 @@ class BillingService {
           'nextSequence': nextSeq + 1,
           'padding': padding,
           if (gymId.isNotEmpty) 'gymId': gymId,
-        });
+        }, SetOptions(merge: true));
       }
 
       tx.set(invoiceRef, <String, dynamic>{
