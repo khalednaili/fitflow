@@ -1300,6 +1300,7 @@ void main() {
         memberName: 'Alice',
         memberEmail: 'a@test.com',
         memberAddress: '10 Rue de Carthage, Tunis',
+        memberTaxId: '9876543/B/C/000',
         items: const [
           InvoiceItem(description: 'Refund', amount: 200, currency: 'TND'),
         ],
@@ -1308,10 +1309,12 @@ void main() {
       expect(cn.sellerName, 'Carthage CrossFit');
       expect(cn.sellerTaxId, '1234567/A/M/000');
       expect(cn.memberAddress, '10 Rue de Carthage, Tunis');
+      expect(cn.memberTaxId, '9876543/B/C/000');
 
       final doc = await db.collection('invoices').doc(cn.id).get();
       expect(doc.data()!['sellerTaxId'], '1234567/A/M/000');
       expect(doc.data()!['memberAddress'], '10 Rue de Carthage, Tunis');
+      expect(doc.data()!['memberTaxId'], '9876543/B/C/000');
     });
   });
 
@@ -1753,6 +1756,80 @@ void main() {
       expect(inv.memberAddress, '10 Rue de Carthage, Tunis');
       final doc = await db.collection('invoices').doc(inv.id).get();
       expect(doc.data()!['memberAddress'], '10 Rue de Carthage, Tunis');
+    });
+
+    test('stores the buyer tax id (client matricule fiscal / CIN)', () async {
+      await seedFiscal();
+      final inv = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'ACME SARL',
+        memberEmail: 'acme@test.com',
+        memberTaxId: '9876543/B/C/000',
+        subscriptions: [_sub(totalAmount: 1000, currency: 'TND')],
+        planLabels: ['Basic'],
+      );
+
+      expect(inv.memberTaxId, '9876543/B/C/000');
+      final doc = await db.collection('invoices').doc(inv.id).get();
+      expect(doc.data()!['memberTaxId'], '9876543/B/C/000');
+    });
+
+    test('sellerTaxId override wins over the settings matricule', () async {
+      await seedFiscal(matricule: '1111111/A/M/000');
+      final inv = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        sellerTaxId: '2222222/Z/Z/999',
+        subscriptions: [_sub(totalAmount: 1000, currency: 'TND')],
+        planLabels: ['Basic'],
+      );
+
+      expect(inv.sellerTaxId, '2222222/Z/Z/999');
+    });
+
+    test('sellerTaxId falls back to settings when blank/absent', () async {
+      await seedFiscal(matricule: '1111111/A/M/000');
+      final inv = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'Alice',
+        memberEmail: 'a@test.com',
+        sellerTaxId: '   ', // whitespace → treated as not provided
+        subscriptions: [_sub(totalAmount: 1000, currency: 'TND')],
+        planLabels: ['Basic'],
+      );
+
+      expect(inv.sellerTaxId, '1111111/A/M/000');
+    });
+
+    test('language defaults from settings and can be overridden per invoice',
+        () async {
+      await db.collection('settings').doc('invoiceSettings_gym1').set({
+        'prefix': 'INV-',
+        'nextSequence': 1,
+        'padding': 4,
+        'gymId': 'gym1',
+        'invoiceLanguage': 'fr',
+      });
+
+      final fromSettings = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'A',
+        memberEmail: 'a@test.com',
+        subscriptions: [_sub(totalAmount: 1000, currency: 'TND')],
+        planLabels: ['Basic'],
+      );
+      expect(fromSettings.language, 'fr');
+
+      final overridden = await sut.createInvoice(
+        userId: 'u1',
+        memberName: 'A',
+        memberEmail: 'a@test.com',
+        subscriptions: [_sub(totalAmount: 1000, currency: 'TND')],
+        planLabels: ['Basic'],
+        language: 'ar',
+      );
+      expect(overridden.language, 'ar');
     });
   });
 

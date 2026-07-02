@@ -8,6 +8,132 @@ import 'package:printing/printing.dart';
 import '../models/invoice.dart';
 import '../utils/currency.dart';
 
+/// Localized labels for the invoice PDF. English / French / Arabic.
+class _PdfLabels {
+  const _PdfLabels({
+    required this.invoice,
+    required this.creditNote,
+    required this.billTo,
+    required this.issueDate,
+    required this.dueDate,
+    required this.matriculeFiscal,
+    required this.description,
+    required this.vatPct,
+    required this.amount,
+    required this.tax,
+    required this.total,
+    required this.subtotal,
+    required this.vat,
+    required this.discount,
+    required this.timbre,
+    required this.totalRow,
+    required this.notes,
+    required this.paymentHistory,
+    required this.dateCol,
+    required this.methodCol,
+    required this.pageOf,
+  });
+
+  final String invoice;
+  final String creditNote;
+  final String billTo;
+  final String issueDate;
+  final String dueDate;
+  final String matriculeFiscal;
+  final String description;
+  final String vatPct;
+  final String amount;
+  final String tax;
+  final String total;
+  final String subtotal;
+  final String vat;
+  final String discount;
+  final String timbre;
+  final String totalRow;
+  final String notes;
+  final String paymentHistory;
+  final String dateCol;
+  final String methodCol;
+  final String Function(int page, int pages) pageOf;
+
+  static _PdfLabels forLanguage(String lang) {
+    switch (lang) {
+      case 'fr':
+        return _PdfLabels(
+          invoice: 'FACTURE',
+          creditNote: "FACTURE D'AVOIR",
+          billTo: 'FACTURÉ À',
+          issueDate: "Date d'émission",
+          dueDate: 'Échéance',
+          matriculeFiscal: 'Matricule Fiscal',
+          description: 'Désignation',
+          vatPct: 'TVA %',
+          amount: 'Montant',
+          tax: 'TVA',
+          total: 'Total',
+          subtotal: 'Sous-total',
+          vat: 'TVA',
+          discount: 'Remise',
+          timbre: 'Timbre Fiscal',
+          totalRow: 'TOTAL TTC',
+          notes: 'NOTES',
+          paymentHistory: 'HISTORIQUE DES PAIEMENTS',
+          dateCol: 'Date',
+          methodCol: 'Mode',
+          pageOf: (p, t) => 'Page $p / $t',
+        );
+      case 'ar':
+        return _PdfLabels(
+          invoice: 'فاتورة',
+          creditNote: 'إشعار دائن',
+          billTo: 'فوترة إلى',
+          issueDate: 'تاريخ الإصدار',
+          dueDate: 'تاريخ الاستحقاق',
+          matriculeFiscal: 'المعرّف الجبائي',
+          description: 'البيان',
+          vatPct: 'الأداء ٪',
+          amount: 'المبلغ',
+          tax: 'الأداء',
+          total: 'المجموع',
+          subtotal: 'المجموع الفرعي',
+          vat: 'الأداء على القيمة المضافة',
+          discount: 'تخفيض',
+          timbre: 'الطابع الجبائي',
+          totalRow: 'المجموع الكلي',
+          notes: 'ملاحظات',
+          paymentHistory: 'سجل الدفعات',
+          dateCol: 'التاريخ',
+          methodCol: 'طريقة الدفع',
+          pageOf: (p, t) => 'صفحة $p من $t',
+        );
+      default: // 'en'
+        return _PdfLabels(
+          invoice: 'INVOICE',
+          creditNote: 'CREDIT NOTE',
+          billTo: 'BILL TO',
+          issueDate: 'Issue Date',
+          dueDate: 'Due Date',
+          matriculeFiscal: 'Matricule Fiscal',
+          description: 'Description',
+          vatPct: 'VAT %',
+          amount: 'Amount',
+          tax: 'Tax',
+          total: 'Total',
+          subtotal: 'Subtotal',
+          vat: 'VAT / Tax',
+          discount: 'Discount',
+          timbre: 'Timbre Fiscal',
+          totalRow: 'TOTAL',
+          notes: 'NOTES',
+          paymentHistory: 'PAYMENT HISTORY',
+          dateCol: 'Date',
+          methodCol: 'Method',
+          pageOf: (p, t) => 'Page $p of $t',
+        );
+    }
+  }
+}
+
 /// Generates, prints, and shares PDF invoices.
 class InvoicePdfService {
   static const _brand = PdfColor.fromInt(0xFF0F4C45);
@@ -20,10 +146,10 @@ class InvoicePdfService {
 
   /// Builds and returns the raw PDF bytes for [invoice].
   ///
-  /// Uses Unicode-capable fonts (Noto Sans + Noto Sans Arabic fallback) so that
-  /// non-Latin content — Arabic member names, accented notes, etc. — renders
-  /// correctly. The `pdf` package's built-in Helvetica is Latin-1 only and
-  /// throws ("Helvetica has no Unicode support") on any other glyph.
+  /// Labels are rendered in [Invoice.language] ('en' | 'fr' | 'ar'); Arabic
+  /// lays out right-to-left. Uses Unicode-capable fonts (Noto Sans + Noto Sans
+  /// Arabic fallback) so non-Latin content renders correctly. The `pdf`
+  /// package's built-in Helvetica is Latin-1 only and throws on other glyphs.
   static Future<Uint8List> generateBytes(Invoice invoice) async {
     final theme = pw.ThemeData.withFont(
       base: await PdfGoogleFonts.notoSansRegular(),
@@ -36,29 +162,34 @@ class InvoicePdfService {
       ],
     );
 
+    final labels = _PdfLabels.forLanguage(invoice.language);
+    final isRtl = invoice.language == 'ar';
     final pdf = pw.Document(theme: theme);
-    final dateFmt = DateFormat('d MMM yyyy');
+    // Locale-neutral numeric date (standard on Tunisian invoices), so month
+    // names never need locale data.
+    final dateFmt = DateFormat('dd/MM/yyyy');
 
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(40),
-        header: (ctx) => _header(invoice),
-        footer: (ctx) => _footer(ctx),
+        textDirection: isRtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
+        header: (ctx) => _header(invoice, labels),
+        footer: (ctx) => _footer(ctx, labels),
         build: (ctx) => [
           pw.SizedBox(height: 24),
-          _billTo(invoice, dateFmt),
+          _billTo(invoice, dateFmt, labels),
           pw.SizedBox(height: 20),
-          _itemsTable(invoice),
+          _itemsTable(invoice, labels),
           pw.SizedBox(height: 12),
-          _totals(invoice),
+          _totals(invoice, labels),
           if (invoice.notes.isNotEmpty) ...[
             pw.SizedBox(height: 20),
-            _notesSection(invoice),
+            _notesSection(invoice, labels),
           ],
           if (invoice.payments.isNotEmpty) ...[
             pw.SizedBox(height: 20),
-            _paymentHistory(invoice, dateFmt),
+            _paymentHistory(invoice, dateFmt, labels),
           ],
         ],
       ),
@@ -84,7 +215,7 @@ class InvoicePdfService {
 
   // ── PDF sections ──────────────────────────────────────────────────────────
 
-  static pw.Widget _header(Invoice invoice) {
+  static pw.Widget _header(Invoice invoice, _PdfLabels labels) {
     return pw.Container(
       padding: const pw.EdgeInsets.only(bottom: 12),
       decoration: const pw.BoxDecoration(
@@ -100,7 +231,7 @@ class InvoicePdfService {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Text(
-                invoice.isCreditNote ? 'CREDIT NOTE' : 'INVOICE',
+                invoice.isCreditNote ? labels.creditNote : labels.invoice,
                 style: pw.TextStyle(
                   fontSize: 28,
                   fontWeight: pw.FontWeight.bold,
@@ -128,7 +259,7 @@ class InvoicePdfService {
                 ),
               if (invoice.sellerTaxId.isNotEmpty)
                 pw.Text(
-                  'Matricule Fiscal: ${invoice.sellerTaxId}',
+                  '${labels.matriculeFiscal}: ${invoice.sellerTaxId}',
                   style: const pw.TextStyle(fontSize: 10, color: _grey),
                 ),
             ],
@@ -166,7 +297,8 @@ class InvoicePdfService {
     );
   }
 
-  static pw.Widget _billTo(Invoice invoice, DateFormat dateFmt) {
+  static pw.Widget _billTo(
+      Invoice invoice, DateFormat dateFmt, _PdfLabels labels) {
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -174,7 +306,7 @@ class InvoicePdfService {
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              _label('BILL TO'),
+              _label(labels.billTo),
               pw.SizedBox(height: 4),
               pw.Text(invoice.memberName,
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
@@ -187,6 +319,9 @@ class InvoicePdfService {
               if (invoice.memberAddress.isNotEmpty)
                 pw.Text(invoice.memberAddress,
                     style: const pw.TextStyle(color: _grey, fontSize: 11)),
+              if (invoice.memberTaxId.isNotEmpty)
+                pw.Text('${labels.matriculeFiscal}: ${invoice.memberTaxId}',
+                    style: const pw.TextStyle(color: _grey, fontSize: 11)),
             ],
           ),
         ),
@@ -194,9 +329,9 @@ class InvoicePdfService {
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
-              _dateRow('Issue Date', dateFmt.format(invoice.issuedAt)),
+              _dateRow(labels.issueDate, dateFmt.format(invoice.issuedAt)),
               if (invoice.dueDate != null)
-                _dateRow('Due Date', dateFmt.format(invoice.dueDate!)),
+                _dateRow(labels.dueDate, dateFmt.format(invoice.dueDate!)),
             ],
           ),
         ),
@@ -220,15 +355,15 @@ class InvoicePdfService {
     );
   }
 
-  static pw.Widget _itemsTable(Invoice invoice) {
+  static pw.Widget _itemsTable(Invoice invoice, _PdfLabels labels) {
     final hasVat = invoice.items.any((i) => i.taxRate > 0);
 
     final headers = [
-      'Description',
-      if (hasVat) 'VAT %',
-      'Amount',
-      if (hasVat) 'Tax',
-      'Total',
+      labels.description,
+      if (hasVat) labels.vatPct,
+      labels.amount,
+      if (hasVat) labels.tax,
+      labels.total,
     ];
 
     final rows = invoice.items.map((item) {
@@ -268,25 +403,29 @@ class InvoicePdfService {
     );
   }
 
-  static pw.Widget _totals(Invoice invoice) {
+  static pw.Widget _totals(Invoice invoice, _PdfLabels labels) {
     final rows = <(String, String)>[];
 
     if (invoice.taxAmount > 0 || invoice.discountAmount > 0) {
-      rows.add(('Subtotal', Currency.format(invoice.subtotal, invoice.currency)));
+      rows.add(
+          (labels.subtotal, Currency.format(invoice.subtotal, invoice.currency)));
     }
     if (invoice.taxAmount > 0) {
-      rows.add(('VAT / Tax', Currency.format(invoice.taxAmount, invoice.currency)));
+      rows.add(
+          (labels.vat, Currency.format(invoice.taxAmount, invoice.currency)));
     }
     if (invoice.discountAmount > 0) {
-      rows.add(('Discount', '-${Currency.format(invoice.discountAmount, invoice.currency)}'));
+      rows.add((labels.discount,
+          '-${Currency.format(invoice.discountAmount, invoice.currency)}'));
     }
     if (invoice.stampDuty > 0) {
-      rows.add(('Timbre Fiscal',
+      rows.add((labels.timbre,
           Currency.format(invoice.stampDuty, invoice.currency)));
     }
     // Always show the total. The invoice intentionally omits amount-paid /
     // balance-due so it never reveals the outstanding (missing) amount.
-    rows.add(('TOTAL', Currency.format(invoice.totalAmount, invoice.currency)));
+    rows.add(
+        (labels.totalRow, Currency.format(invoice.totalAmount, invoice.currency)));
 
     return pw.Align(
       alignment: pw.Alignment.centerRight,
@@ -333,11 +472,11 @@ class InvoicePdfService {
     );
   }
 
-  static pw.Widget _notesSection(Invoice invoice) {
+  static pw.Widget _notesSection(Invoice invoice, _PdfLabels labels) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        _label('NOTES'),
+        _label(labels.notes),
         pw.SizedBox(height: 4),
         pw.Container(
           width: double.infinity,
@@ -354,14 +493,19 @@ class InvoicePdfService {
   }
 
   static pw.Widget _paymentHistory(
-      Invoice invoice, DateFormat dateFmt) {
+      Invoice invoice, DateFormat dateFmt, _PdfLabels labels) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        _label('PAYMENT HISTORY'),
+        _label(labels.paymentHistory),
         pw.SizedBox(height: 4),
         pw.TableHelper.fromTextArray(
-          headers: ['Date', 'Method', 'Amount', 'Notes'],
+          headers: [
+            labels.dateCol,
+            labels.methodCol,
+            labels.amount,
+            labels.notes,
+          ],
           data: invoice.payments
               .map((p) => [
                     dateFmt.format(p.date),
@@ -386,12 +530,12 @@ class InvoicePdfService {
     );
   }
 
-  static pw.Widget _footer(pw.Context ctx) {
+  static pw.Widget _footer(pw.Context ctx, _PdfLabels labels) {
     return pw.Container(
       alignment: pw.Alignment.centerRight,
       margin: const pw.EdgeInsets.only(top: 8),
       child: pw.Text(
-        'Page ${ctx.pageNumber} of ${ctx.pagesCount}',
+        labels.pageOf(ctx.pageNumber, ctx.pagesCount),
         style: const pw.TextStyle(fontSize: 9, color: _grey),
       ),
     );

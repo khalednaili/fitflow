@@ -76,6 +76,7 @@ class Invoice {
     required this.memberEmail,
     this.memberPhone = '',
     this.memberAddress = '',
+    this.memberTaxId = '',
     required this.subscriptionId,
     required this.planName,
     required this.currency,
@@ -87,6 +88,7 @@ class Invoice {
     this.sellerName = '',
     this.sellerAddress = '',
     this.sellerTaxId = '',
+    this.language = 'en',
     required this.status,
     required this.issuedAt,
     this.dueDate,
@@ -111,6 +113,10 @@ class Invoice {
 
   /// Buyer's postal address, shown on the invoice for legal compliance.
   final String memberAddress;
+
+  /// Buyer's tax identifier (matricule fiscal for a business, or CIN for an
+  /// individual). Shown on the invoice when present; snapshotted per invoice.
+  final String memberTaxId;
   final String subscriptionId;
   final String planName;
   final String currency;
@@ -136,6 +142,10 @@ class Invoice {
   final String sellerName;
   final String sellerAddress;
   final String sellerTaxId;
+
+  /// Language the invoice document (PDF) is rendered in: `'en'`, `'fr'`, or
+  /// `'ar'`. Snapshotted per invoice.
+  final String language;
 
   /// See [InvoiceStatus] constants.
   final String status;
@@ -192,6 +202,7 @@ class Invoice {
       memberEmail: (data['memberEmail'] ?? '') as String,
       memberPhone: (data['memberPhone'] ?? '') as String,
       memberAddress: (data['memberAddress'] ?? '') as String,
+      memberTaxId: (data['memberTaxId'] ?? '') as String,
       subscriptionId: (data['subscriptionId'] ?? '') as String,
       planName: (data['planName'] ?? '') as String,
       currency: (data['currency'] ?? Currency.defaultCode) as String,
@@ -203,6 +214,7 @@ class Invoice {
       sellerName: (data['sellerName'] ?? '') as String,
       sellerAddress: (data['sellerAddress'] ?? '') as String,
       sellerTaxId: (data['sellerTaxId'] ?? '') as String,
+      language: (data['language'] ?? 'en') as String,
       status: InvoiceStatus.validated((data['status'] ?? '') as String),
       issuedAt: (data['issuedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       dueDate: (data['dueDate'] as Timestamp?)?.toDate(),
@@ -226,6 +238,7 @@ class Invoice {
         'memberEmail': memberEmail,
         'memberPhone': memberPhone,
         'memberAddress': memberAddress,
+        'memberTaxId': memberTaxId,
         'subscriptionId': subscriptionId,
         'planName': planName,
         'currency': currency,
@@ -237,6 +250,7 @@ class Invoice {
         'sellerName': sellerName,
         'sellerAddress': sellerAddress,
         'sellerTaxId': sellerTaxId,
+        'language': language,
         'status': status,
         'issuedAt': Timestamp.fromDate(issuedAt),
         if (dueDate != null) 'dueDate': Timestamp.fromDate(dueDate!),

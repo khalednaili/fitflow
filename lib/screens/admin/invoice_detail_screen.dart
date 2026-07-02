@@ -394,6 +394,9 @@ class _InvoiceView extends StatelessWidget {
                     if (invoice.memberAddress.isNotEmpty)
                       _InfoRow(
                           Icons.location_on_outlined, invoice.memberAddress),
+                    if (invoice.memberTaxId.isNotEmpty)
+                      _InfoRow(Icons.badge_outlined,
+                          '${context.l10n.tr('Matricule Fiscal')}: ${invoice.memberTaxId}'),
                     const SizedBox(height: 24),
 
                     // ── Line items ────────────────────────────────────────

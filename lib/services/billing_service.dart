@@ -19,6 +19,7 @@ class InvoiceSettings {
     this.defaultVatRate = 19,
     this.creditNotePrefix = 'CN-',
     this.creditNoteNextSequence = 1,
+    this.invoiceLanguage = 'en',
   });
 
   /// Suggested Tunisian fiscal stamp (droit de timbre) offered as a default in
@@ -60,6 +61,9 @@ class InvoiceSettings {
   /// Next sequence number for credit notes (separate from [nextSequence]).
   final int creditNoteNextSequence;
 
+  /// Default language for generated invoice PDFs: `'en'`, `'fr'`, or `'ar'`.
+  final String invoiceLanguage;
+
   factory InvoiceSettings.fromMap(Map<String, dynamic> map) => InvoiceSettings(
         prefix: (map['prefix'] ?? 'INV-') as String,
         startNumber: (map['startNumber'] ?? 1) as int,
@@ -73,6 +77,7 @@ class InvoiceSettings {
         creditNotePrefix: (map['creditNotePrefix'] ?? 'CN-') as String,
         creditNoteNextSequence:
             (map['creditNoteNextSequence'] as num? ?? 1).toInt(),
+        invoiceLanguage: (map['invoiceLanguage'] ?? 'en') as String,
       );
 }
 
@@ -163,6 +168,7 @@ class BillingService {
     String? matriculeFiscal,
     num? stampDuty,
     int? defaultVatRate,
+    String? invoiceLanguage,
   }) async {
     final current = await getInvoiceSettings();
     final nextSeq =
@@ -181,6 +187,7 @@ class BillingService {
         if (matriculeFiscal != null) 'matriculeFiscal': matriculeFiscal,
         if (stampDuty != null) 'stampDuty': stampDuty,
         if (defaultVatRate != null) 'defaultVatRate': defaultVatRate,
+        if (invoiceLanguage != null) 'invoiceLanguage': invoiceLanguage,
         if (gymId.isNotEmpty) 'gymId': gymId,
       },
       SetOptions(merge: true),
@@ -222,6 +229,7 @@ class BillingService {
     required String memberEmail,
     String memberPhone = '',
     String memberAddress = '',
+    String memberTaxId = '',
     required List<UserSubscription> subscriptions,
     required List<String> planLabels,
     String notes = '',
@@ -230,6 +238,8 @@ class BillingService {
     String? customInvoiceNumber,
     num discountAmount = 0,
     num? stampDuty,
+    String? sellerTaxId,
+    String? language,
     String status = InvoiceStatus.unpaid,
   }) async {
     assert(subscriptions.isNotEmpty, 'At least one subscription required');
@@ -244,6 +254,16 @@ class BillingService {
     final settings = await getInvoiceSettings();
     final effectiveStamp =
         Currency.roundMillimes(stampDuty ?? settings.stampDuty);
+    // Seller matricule fiscal defaults to the gym setting, but can be
+    // overridden per invoice when [sellerTaxId] is provided (non-empty).
+    final effectiveSellerTaxId =
+        (sellerTaxId != null && sellerTaxId.trim().isNotEmpty)
+            ? sellerTaxId.trim()
+            : settings.matriculeFiscal;
+    final effectiveLanguage =
+        (language != null && language.trim().isNotEmpty)
+            ? language.trim()
+            : settings.invoiceLanguage;
 
     // One base item per subscription.
     final baseItems = List<InvoiceItem>.generate(
@@ -318,6 +338,7 @@ class BillingService {
         'memberEmail': memberEmail,
         'memberPhone': memberPhone,
         'memberAddress': memberAddress,
+        'memberTaxId': memberTaxId,
         'subscriptionId': subscriptionId,
         'planName': planName,
         'currency': currency,
@@ -328,7 +349,8 @@ class BillingService {
         'stampDuty': effectiveStamp,
         'sellerName': settings.companyName,
         'sellerAddress': settings.companyAddress,
-        'sellerTaxId': settings.matriculeFiscal,
+        'sellerTaxId': effectiveSellerTaxId,
+        'language': effectiveLanguage,
         'status': effectiveStatus,
         'issuedAt': Timestamp.fromDate(now),
         if (dueDate != null) 'dueDate': Timestamp.fromDate(dueDate),
@@ -350,6 +372,7 @@ class BillingService {
       memberEmail: memberEmail,
       memberPhone: memberPhone,
       memberAddress: memberAddress,
+      memberTaxId: memberTaxId,
       subscriptionId: subscriptionId,
       planName: planName,
       currency: currency,
@@ -360,7 +383,8 @@ class BillingService {
       stampDuty: effectiveStamp,
       sellerName: settings.companyName,
       sellerAddress: settings.companyAddress,
-      sellerTaxId: settings.matriculeFiscal,
+      sellerTaxId: effectiveSellerTaxId,
+      language: effectiveLanguage,
       status: effectiveStatus,
       issuedAt: now,
       dueDate: dueDate,
@@ -429,6 +453,7 @@ class BillingService {
         memberEmail: current.memberEmail,
         memberPhone: current.memberPhone,
         memberAddress: current.memberAddress,
+        memberTaxId: current.memberTaxId,
         subscriptionId: current.subscriptionId,
         planName: current.planName,
         currency: current.currency,
@@ -440,6 +465,7 @@ class BillingService {
         sellerName: current.sellerName,
         sellerAddress: current.sellerAddress,
         sellerTaxId: current.sellerTaxId,
+        language: current.language,
         status: newStatus,
         issuedAt: current.issuedAt,
         dueDate: current.dueDate,
@@ -532,6 +558,7 @@ class BillingService {
         memberEmail: current.memberEmail,
         memberPhone: current.memberPhone,
         memberAddress: current.memberAddress,
+        memberTaxId: current.memberTaxId,
         subscriptionId: current.subscriptionId,
         planName: current.planName,
         currency: current.currency,
@@ -539,6 +566,11 @@ class BillingService {
         amountPaid: newAmountPaid,
         taxAmount: current.taxAmount,
         discountAmount: current.discountAmount,
+        stampDuty: current.stampDuty,
+        sellerName: current.sellerName,
+        sellerAddress: current.sellerAddress,
+        sellerTaxId: current.sellerTaxId,
+        language: current.language,
         status: newStatus,
         issuedAt: current.issuedAt,
         dueDate: current.dueDate,
@@ -657,6 +689,7 @@ class BillingService {
     required String memberEmail,
     String memberPhone = '',
     String memberAddress = '',
+    String memberTaxId = '',
     required List<InvoiceItem> items,
     String notes = '',
     DateTime? dueDate,
@@ -715,6 +748,7 @@ class BillingService {
         'memberEmail': memberEmail,
         'memberPhone': memberPhone,
         'memberAddress': memberAddress,
+        'memberTaxId': memberTaxId,
         'subscriptionId': '',
         'planName': '',
         'currency': items.first.currency,
@@ -725,6 +759,7 @@ class BillingService {
         'sellerName': settings.companyName,
         'sellerAddress': settings.companyAddress,
         'sellerTaxId': settings.matriculeFiscal,
+        'language': settings.invoiceLanguage,
         'status': InvoiceStatus.unpaid,
         'issuedAt': Timestamp.fromDate(now),
         if (dueDate != null) 'dueDate': Timestamp.fromDate(dueDate),
@@ -747,6 +782,7 @@ class BillingService {
       memberEmail: memberEmail,
       memberPhone: memberPhone,
       memberAddress: memberAddress,
+      memberTaxId: memberTaxId,
       subscriptionId: '',
       planName: '',
       currency: items.first.currency,
@@ -756,6 +792,7 @@ class BillingService {
       sellerName: settings.companyName,
       sellerAddress: settings.companyAddress,
       sellerTaxId: settings.matriculeFiscal,
+      language: settings.invoiceLanguage,
       status: InvoiceStatus.unpaid,
       issuedAt: now,
       dueDate: dueDate,

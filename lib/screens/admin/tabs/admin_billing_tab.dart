@@ -1124,6 +1124,8 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
   String _invoiceNumberHint = '';
   num _stampDefault = 0;
   int _vatDefault = 19;
+  String _matriculeDefault = '';
+  String _languageDefault = 'en';
 
   bool _loadingMembers = true;
   bool _loadingSubs = false;
@@ -1269,6 +1271,8 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
           _invoiceNumberHint = hint;
           _stampDefault = settings.stampDuty;
           _vatDefault = settings.defaultVatRate;
+          _matriculeDefault = settings.matriculeFiscal;
+          _languageDefault = settings.invoiceLanguage;
           _error = '';
           _step = _InvoiceStep.confirm;
         });
@@ -1279,9 +1283,7 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
     }
   }
 
-  Future<void> _createInvoice(
-      List<InvoiceItem> extraItems, String? customInvoiceNumber,
-      num discount, num stamp, bool saveAsDraft) async {
+  Future<void> _createInvoice(_InvoiceConfirmData data) async {
     if (_selectedMember == null || _selectedSubs.isEmpty) return;
     setState(() {
       _saving = true;
@@ -1293,15 +1295,18 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
         memberName: _selectedMember!.displayName,
         memberEmail: _selectedMember!.email,
         memberPhone: _selectedMember!.phoneNumber,
-        memberAddress: _selectedMember!.address,
+        memberAddress: data.memberAddress,
+        memberTaxId: data.memberTaxId,
         subscriptions: _selectedSubs,
         planLabels: _selectedPlanLabels,
         notes: _notesController.text.trim(),
-        extraItems: extraItems,
-        customInvoiceNumber: customInvoiceNumber,
-        discountAmount: discount,
-        stampDuty: stamp,
-        status: saveAsDraft ? InvoiceStatus.draft : InvoiceStatus.unpaid,
+        extraItems: data.extraItems,
+        customInvoiceNumber: data.customInvoiceNumber,
+        discountAmount: data.discount,
+        stampDuty: data.stamp,
+        sellerTaxId: data.sellerTaxId,
+        language: data.language,
+        status: data.saveAsDraft ? InvoiceStatus.draft : InvoiceStatus.unpaid,
       );
       widget.onCreated(invoice);
     } catch (e, s) {
@@ -1439,6 +1444,8 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
                             invoiceNumberHint: _invoiceNumberHint,
                             defaultStampDuty: _stampDefault,
                             defaultVatRate: _vatDefault,
+                            defaultSellerTaxId: _matriculeDefault,
+                            defaultLanguage: _languageDefault,
                             notesController: _notesController,
                             error: _error,
                             saving: _saving,
@@ -2002,6 +2009,37 @@ class _ItemRowControllers {
   }
 }
 
+/// Values collected on the confirm step and handed to the create call.
+class _InvoiceConfirmData {
+  const _InvoiceConfirmData({
+    required this.extraItems,
+    required this.customInvoiceNumber,
+    required this.discount,
+    required this.stamp,
+    required this.saveAsDraft,
+    required this.memberAddress,
+    required this.memberTaxId,
+    required this.sellerTaxId,
+    required this.language,
+  });
+  final List<InvoiceItem> extraItems;
+  final String? customInvoiceNumber;
+  final num discount;
+  final num stamp;
+  final bool saveAsDraft;
+  final String memberAddress;
+  final String memberTaxId;
+  final String sellerTaxId;
+  final String language;
+}
+
+/// Supported invoice languages → display label for chips.
+const Map<String, String> kInvoiceLanguages = {
+  'en': 'English',
+  'fr': 'Français',
+  'ar': 'العربية',
+};
+
 class _ConfirmStep extends StatefulWidget {
   const _ConfirmStep({
     required this.member,
@@ -2010,6 +2048,8 @@ class _ConfirmStep extends StatefulWidget {
     required this.invoiceNumberHint,
     required this.defaultStampDuty,
     required this.defaultVatRate,
+    required this.defaultSellerTaxId,
+    required this.defaultLanguage,
     required this.notesController,
     required this.error,
     required this.saving,
@@ -2026,13 +2066,19 @@ class _ConfirmStep extends StatefulWidget {
 
   /// TVA rate (%) pre-filled for new line items.
   final int defaultVatRate;
+
+  /// Seller matricule fiscal pre-filled from gym settings (overridable here).
+  final String defaultSellerTaxId;
+
+  /// Invoice language pre-filled from gym settings ('en' | 'fr' | 'ar').
+  final String defaultLanguage;
   final TextEditingController notesController;
   final String error;
   final bool saving;
   final AppLocalizations l10n;
-  /// Called with extra items, optional custom invoice number, discount amount,
-  /// stamp duty, and saveAsDraft flag.
-  final void Function(List<InvoiceItem>, String?, num, num, bool) onSubmit;
+
+  /// Called with the collected confirm-step data.
+  final void Function(_InvoiceConfirmData) onSubmit;
 
   @override
   State<_ConfirmStep> createState() => _ConfirmStepState();
@@ -2043,6 +2089,11 @@ class _ConfirmStepState extends State<_ConfirmStep> {
   late final TextEditingController _invoiceNumberController;
   final _discountCtrl = TextEditingController(text: '0');
   late final TextEditingController _stampCtrl;
+  // Editable billing details, snapshotted onto this invoice only.
+  late final TextEditingController _addressCtrl;
+  late final TextEditingController _buyerTaxCtrl;
+  late final TextEditingController _sellerTaxCtrl;
+  late String _language;
   bool _saveAsDraft = false;
 
   @override
@@ -2052,6 +2103,12 @@ class _ConfirmStepState extends State<_ConfirmStep> {
         TextEditingController(text: widget.invoiceNumberHint);
     _stampCtrl = TextEditingController(
         text: Currency.formatAmount(widget.defaultStampDuty, maxDecimals: 3));
+    _addressCtrl = TextEditingController(text: widget.member.address);
+    _buyerTaxCtrl = TextEditingController(text: widget.member.cinNumber);
+    _sellerTaxCtrl = TextEditingController(text: widget.defaultSellerTaxId);
+    _language = kInvoiceLanguages.containsKey(widget.defaultLanguage)
+        ? widget.defaultLanguage
+        : 'en';
   }
 
   @override
@@ -2062,6 +2119,9 @@ class _ConfirmStepState extends State<_ConfirmStep> {
     _invoiceNumberController.dispose();
     _discountCtrl.dispose();
     _stampCtrl.dispose();
+    _addressCtrl.dispose();
+    _buyerTaxCtrl.dispose();
+    _sellerTaxCtrl.dispose();
     super.dispose();
   }
 
@@ -2171,6 +2231,85 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                   style: const TextStyle(fontWeight: FontWeight.w700)),
               subtitle: Text(widget.member.email,
                   style: const TextStyle(fontSize: 12)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          // ── Billing details (editable per invoice) ───────────────────────
+          _PreviewSection(
+            icon: Icons.badge_outlined,
+            title: l10n.tr('Billing Details'),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _addressCtrl,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: l10n.tr('Billing Address'),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 10),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _buyerTaxCtrl,
+                  decoration: InputDecoration(
+                    labelText: l10n.tr('Client Matricule Fiscal / CIN'),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 10),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _sellerTaxCtrl,
+                  decoration: InputDecoration(
+                    labelText: l10n.tr('Seller Matricule Fiscal'),
+                    helperText: l10n.tr(
+                        'From facility settings — override for this invoice if needed'),
+                    helperMaxLines: 2,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 10),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    l10n.tr('Invoice Language'),
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
+                    spacing: 8,
+                    children: kInvoiceLanguages.entries.map((e) {
+                      final active = _language == e.key;
+                      return ChoiceChip(
+                        label: Text(e.value),
+                        selected: active,
+                        onSelected: (_) => setState(() => _language = e.key),
+                        selectedColor:
+                            const Color(0xFF0F766E).withValues(alpha: 0.15),
+                        labelStyle: TextStyle(
+                          fontWeight:
+                              active ? FontWeight.w700 : FontWeight.w500,
+                          color: active ? const Color(0xFF0F766E) : null,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 12),
@@ -2365,8 +2504,17 @@ class _ConfirmStepState extends State<_ConfirmStep> {
             child: FilledButton.icon(
               onPressed: widget.saving
                   ? null
-                  : () => widget.onSubmit(_buildExtraItems(),
-                      _customInvoiceNumber(), _discount, _stamp, _saveAsDraft),
+                  : () => widget.onSubmit(_InvoiceConfirmData(
+                        extraItems: _buildExtraItems(),
+                        customInvoiceNumber: _customInvoiceNumber(),
+                        discount: _discount,
+                        stamp: _stamp,
+                        saveAsDraft: _saveAsDraft,
+                        memberAddress: _addressCtrl.text.trim(),
+                        memberTaxId: _buyerTaxCtrl.text.trim(),
+                        sellerTaxId: _sellerTaxCtrl.text.trim(),
+                        language: _language,
+                      )),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF0F766E),
                 padding: const EdgeInsets.symmetric(vertical: 15),
@@ -2968,6 +3116,7 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
   String? _error;
   int _currentNextSeq = 1;
   int _padding = 4;
+  String _invoiceLanguage = 'en';
   String? _activePreset; // 'inv' | 'year' | 'yearmonth' | null (custom)
 
   @override
@@ -3006,6 +3155,9 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
                 : InvoiceSettings.suggestedStampDutyTND,
             maxDecimals: 3);
         _vatCtrl.text = settings.defaultVatRate.toString();
+        _invoiceLanguage = kInvoiceLanguages.containsKey(settings.invoiceLanguage)
+            ? settings.invoiceLanguage
+            : 'en';
         _currentNextSeq = settings.nextSequence;
         _padding = settings.padding;
         _activePreset = _detectPreset(settings.prefix);
@@ -3077,6 +3229,7 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
         matriculeFiscal: _matriculeCtrl.text.trim(),
         stampDuty: Currency.parse(_stampCtrl.text) ?? 0,
         defaultVatRate: (int.tryParse(_vatCtrl.text.trim()) ?? 19).clamp(0, 100),
+        invoiceLanguage: _invoiceLanguage,
       );
       if (!mounted) return;
       Navigator.of(context).pop();
@@ -3367,6 +3520,28 @@ class _InvoiceSettingsDialogState extends State<_InvoiceSettingsDialog> {
                           ),
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 12),
+                    _SettingsLabel(l10n.tr('Default Invoice Language')),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: kInvoiceLanguages.entries.map((e) {
+                        final active = _invoiceLanguage == e.key;
+                        return ChoiceChip(
+                          label: Text(e.value),
+                          selected: active,
+                          onSelected: (_) =>
+                              setState(() => _invoiceLanguage = e.key),
+                          selectedColor:
+                              const Color(0xFF0F766E).withValues(alpha: 0.15),
+                          labelStyle: TextStyle(
+                            fontWeight:
+                                active ? FontWeight.w700 : FontWeight.w500,
+                            color: active ? const Color(0xFF0F766E) : null,
+                          ),
+                        );
+                      }).toList(),
                     ),
                     const SizedBox(height: 16),
                     // ── Live Preview ────────────────────────────────────────
