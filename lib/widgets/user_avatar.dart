@@ -47,10 +47,17 @@ class _UserAvatarState extends State<UserAvatar> {
       backgroundImage: _showImage ? NetworkImage(widget.photoUrl) : null,
       onBackgroundImageError: _showImage
           ? (exception, stackTrace) {
-              // Called on 429, 404, network errors etc.
-              if (mounted && widget.photoUrl == _lastUrl) {
-                setState(() => _imageError = true);
-              }
+              // Called on 429, 404, network errors etc. This can fire
+              // synchronously while Flutter is still building/laying out the
+              // current frame (e.g. a cached image resolving immediately), so
+              // defer the setState to the next frame to avoid "Build
+              // scheduled during frame" errors.
+              if (!mounted || widget.photoUrl != _lastUrl) return;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && widget.photoUrl == _lastUrl) {
+                  setState(() => _imageError = true);
+                }
+              });
             }
           : null,
       child: !_showImage

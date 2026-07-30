@@ -1292,7 +1292,7 @@ class _CreateInvoiceSheetState extends State<CreateInvoiceSheet> {
     try {
       final invoice = await widget.billingService.createInvoice(
         userId: _selectedMember!.id,
-        memberName: _selectedMember!.displayName,
+        memberName: data.memberNameOverride ?? _selectedMember!.displayName,
         memberEmail: _selectedMember!.email,
         memberPhone: _selectedMember!.phoneNumber,
         memberAddress: data.memberAddress,
@@ -2021,6 +2021,7 @@ class _InvoiceConfirmData {
     required this.memberTaxId,
     required this.sellerTaxId,
     required this.language,
+    this.memberNameOverride,
   });
   final List<InvoiceItem> extraItems;
   final String? customInvoiceNumber;
@@ -2031,7 +2032,15 @@ class _InvoiceConfirmData {
   final String memberTaxId;
   final String sellerTaxId;
   final String language;
+
+  /// When "Invoice to a company" is enabled, the buyer name to print on the
+  /// invoice instead of the member's own display name (per the chosen
+  /// company/member name format). Null when invoicing the member directly.
+  final String? memberNameOverride;
 }
+
+/// How the buyer name is composed when invoicing a company.
+enum _BuyerNameFormat { companyOnly, companyAndMember, memberOnly }
 
 /// Supported invoice languages → display label for chips.
 const Map<String, String> kInvoiceLanguages = {
@@ -2093,8 +2102,20 @@ class _ConfirmStepState extends State<_ConfirmStep> {
   late final TextEditingController _addressCtrl;
   late final TextEditingController _buyerTaxCtrl;
   late final TextEditingController _sellerTaxCtrl;
+  late final TextEditingController _companyNameCtrl;
   late String _language;
   bool _saveAsDraft = false;
+
+  /// Whether this invoice is billed to the member's company rather than the
+  /// member directly. One-off per invoice — not persisted to the member.
+  bool _invoiceToCompany = false;
+  _BuyerNameFormat _buyerNameFormat = _BuyerNameFormat.companyAndMember;
+
+  // Secondary sections collapse by default to keep the form short; the
+  // essentials (invoice number, member, offers, totals) stay always visible.
+  bool _billingDetailsExpanded = false;
+  bool _extrasExpanded = false;
+  bool _notesExpanded = false;
 
   @override
   void initState() {
@@ -2106,6 +2127,7 @@ class _ConfirmStepState extends State<_ConfirmStep> {
     _addressCtrl = TextEditingController(text: widget.member.address);
     _buyerTaxCtrl = TextEditingController(text: widget.member.cinNumber);
     _sellerTaxCtrl = TextEditingController(text: widget.defaultSellerTaxId);
+    _companyNameCtrl = TextEditingController();
     _language = kInvoiceLanguages.containsKey(widget.defaultLanguage)
         ? widget.defaultLanguage
         : 'en';
@@ -2122,7 +2144,68 @@ class _ConfirmStepState extends State<_ConfirmStep> {
     _addressCtrl.dispose();
     _buyerTaxCtrl.dispose();
     _sellerTaxCtrl.dispose();
+    _companyNameCtrl.dispose();
     super.dispose();
+  }
+
+  /// Resolved buyer display name honoring the company toggle and chosen
+  /// name format; null when invoicing the member directly (no override).
+  String? get _buyerNameOverride {
+    if (!_invoiceToCompany) return null;
+    final company = _companyNameCtrl.text.trim();
+    if (company.isEmpty) return null;
+    switch (_buyerNameFormat) {
+      case _BuyerNameFormat.companyOnly:
+        return company;
+      case _BuyerNameFormat.memberOnly:
+        return null;
+      case _BuyerNameFormat.companyAndMember:
+        return '$company — ${widget.member.displayName}';
+    }
+  }
+
+  /// One-line summary shown in the Billing Details header when collapsed.
+  String _billingDetailsSummary(AppLocalizations l10n) {
+    final parts = <String>[];
+    if (_invoiceToCompany) {
+      final company = _companyNameCtrl.text.trim();
+      parts.add(company.isNotEmpty
+          ? l10n.tr('Company: $company')
+          : l10n.tr('Invoice to a Company'));
+    }
+    if (_buyerTaxCtrl.text.trim().isNotEmpty) {
+      parts.add(l10n.tr('Tax ID set'));
+    }
+    parts.add(kInvoiceLanguages[_language] ?? _language);
+    return parts.join(' • ');
+  }
+
+  /// One-line summary shown in the Additional Items / Adjustments header
+  /// when collapsed.
+  String _extrasSummary(AppLocalizations l10n) {
+    final parts = <String>[];
+    if (_extraRows.isNotEmpty) {
+      parts.add(l10n.tr(_extraRows.length == 1
+          ? '1 extra item'
+          : '${_extraRows.length} extra items'));
+    }
+    if (_discount > 0) {
+      parts.add(l10n.tr('Discount applied'));
+    }
+    if (_stamp > 0) {
+      parts.add(l10n.tr('Timbre fiscal set'));
+    }
+    return parts.isEmpty ? l10n.tr('None') : parts.join(' • ');
+  }
+
+  /// One-line summary shown in the Notes / Draft header when collapsed.
+  String _notesSummary(AppLocalizations l10n) {
+    final parts = <String>[];
+    if (_saveAsDraft) parts.add(l10n.tr('Saving as Draft'));
+    if (widget.notesController.text.trim().isNotEmpty) {
+      parts.add(l10n.tr('Note added'));
+    }
+    return parts.isEmpty ? l10n.tr('None') : parts.join(' • ');
   }
 
   void _addRow() {
@@ -2235,9 +2318,13 @@ class _ConfirmStepState extends State<_ConfirmStep> {
           ),
           const SizedBox(height: 12),
           // ── Billing details (editable per invoice) ───────────────────────
-          _PreviewSection(
+          _CollapsibleSection(
             icon: Icons.badge_outlined,
             title: l10n.tr('Billing Details'),
+            expanded: _billingDetailsExpanded,
+            onToggle: () => setState(
+                () => _billingDetailsExpanded = !_billingDetailsExpanded),
+            summary: _billingDetailsSummary(l10n),
             child: Column(
               children: [
                 TextField(
@@ -2263,12 +2350,95 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                   ),
                 ),
                 const SizedBox(height: 10),
+                SwitchListTile(
+                  value: _invoiceToCompany,
+                  onChanged: (v) => setState(() => _invoiceToCompany = v),
+                  title: Text(l10n.tr('Invoice to a Company'),
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(l10n.tr(
+                      'Bill this invoice to the member\'s employer instead of them directly')),
+                  activeColor: const Color(0xFF0F766E),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                if (_invoiceToCompany) ...[
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _companyNameCtrl,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      labelText: l10n.tr('Company Name'),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 10),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      l10n.tr('Show on invoice as'),
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade600),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  SegmentedButton<_BuyerNameFormat>(
+                    segments: [
+                      ButtonSegment(
+                        value: _BuyerNameFormat.companyOnly,
+                        label: Text(l10n.tr('Company only')),
+                      ),
+                      ButtonSegment(
+                        value: _BuyerNameFormat.companyAndMember,
+                        label: Text(l10n.tr('Company + Member')),
+                      ),
+                      ButtonSegment(
+                        value: _BuyerNameFormat.memberOnly,
+                        label: Text(l10n.tr('Member only')),
+                      ),
+                    ],
+                    selected: {_buyerNameFormat},
+                    onSelectionChanged: (s) =>
+                        setState(() => _buyerNameFormat = s.first),
+                  ),
+                  if (_buyerTaxCtrl.text.trim().isEmpty) ...[
+                    const SizedBox(height: 10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.amber.shade200),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.warning_amber_rounded,
+                              size: 18, color: Colors.amber.shade800),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              l10n.tr(
+                                  'No matricule fiscal entered for this company. The invoice can still be created, but many companies require it for reimbursement.'),
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.amber.shade900),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+                const SizedBox(height: 10),
                 TextField(
                   controller: _sellerTaxCtrl,
                   decoration: InputDecoration(
-                    labelText: l10n.tr('Seller Matricule Fiscal'),
+                    labelText: l10n.tr('Your Gym\'s Matricule Fiscal'),
                     helperText: l10n.tr(
-                        'From facility settings — override for this invoice if needed'),
+                        'Your gym/admin account\'s own matricule fiscal, from facility settings — override for this invoice if needed'),
                     helperMaxLines: 2,
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8)),
@@ -2336,10 +2506,14 @@ class _ConfirmStepState extends State<_ConfirmStep> {
             ),
           ),
           const SizedBox(height: 12),
-          // ── Extra items ──────────────────────────────────────────────────
-          _PreviewSection(
+          // ── Extra items, discount, timbre fiscal (advanced adjustments) ──
+          _CollapsibleSection(
             icon: Icons.add_shopping_cart_outlined,
-            title: l10n.tr('Additional Items'),
+            title: l10n.tr('Additional Items & Adjustments'),
+            expanded: _extrasExpanded,
+            onToggle: () =>
+                setState(() => _extrasExpanded = !_extrasExpanded),
+            summary: _extrasSummary(l10n),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2371,47 +2545,49 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                     padding: const EdgeInsets.symmetric(horizontal: 0),
                   ),
                 ),
+                const SizedBox(height: 12),
+                Text(l10n.tr('Discount'),
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _discountCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    prefixText: '${Currency.normalize(currency)} ',
+                    hintText: '0',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 10),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(l10n.tr('Timbre Fiscal'),
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _stampCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    prefixText: '${Currency.normalize(currency)} ',
+                    hintText: '0',
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 10),
+                  ),
+                ),
               ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          // ── Discount ─────────────────────────────────────────────────────
-          _PreviewSection(
-            icon: Icons.local_offer_outlined,
-            title: l10n.tr('Discount'),
-            child: TextField(
-              controller: _discountCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                prefixText: '${Currency.normalize(currency)} ',
-                hintText: '0',
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          // ── Timbre fiscal (fiscal stamp) ─────────────────────────────────
-          _PreviewSection(
-            icon: Icons.receipt_outlined,
-            title: l10n.tr('Timbre Fiscal'),
-            child: TextField(
-              controller: _stampCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                prefixText: '${Currency.normalize(currency)} ',
-                hintText: '0',
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -2457,31 +2633,45 @@ class _ConfirmStepState extends State<_ConfirmStep> {
             ),
           ),
           const SizedBox(height: 12),
-          // ── Save as draft toggle ─────────────────────────────────────────
-          SwitchListTile(
-            value: _saveAsDraft,
-            onChanged: (v) => setState(() => _saveAsDraft = v),
-            title: Text(l10n.tr('Save as Draft'),
-                style: const TextStyle(fontWeight: FontWeight.w600)),
-            subtitle: Text(l10n.tr(
-                'Draft invoices are not sent to the member automatically')),
-            activeColor: const Color(0xFF0F766E),
-            contentPadding: EdgeInsets.zero,
-          ),
-          const SizedBox(height: 12),
-          // ── Notes ────────────────────────────────────────────────────────
-          _PreviewSection(
+          // ── Notes & save-as-draft (advanced/optional) ────────────────────
+          _CollapsibleSection(
             icon: Icons.notes_outlined,
-            title: l10n.tr('Notes (optional)'),
-            child: TextField(
-              controller: widget.notesController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: l10n.tr('Add a note to this invoice…'),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8)),
-                contentPadding: const EdgeInsets.all(10),
-              ),
+            title: l10n.tr('Notes & Draft Options'),
+            expanded: _notesExpanded,
+            onToggle: () => setState(() => _notesExpanded = !_notesExpanded),
+            summary: _notesSummary(l10n),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SwitchListTile(
+                  value: _saveAsDraft,
+                  onChanged: (v) => setState(() => _saveAsDraft = v),
+                  title: Text(l10n.tr('Save as Draft'),
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: Text(l10n.tr(
+                      'Draft invoices are not sent to the member automatically')),
+                  activeColor: const Color(0xFF0F766E),
+                  contentPadding: EdgeInsets.zero,
+                ),
+                const SizedBox(height: 8),
+                Text(l10n.tr('Notes (optional)'),
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: widget.notesController,
+                  maxLines: 3,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: l10n.tr('Add a note to this invoice…'),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.all(10),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
@@ -2514,6 +2704,7 @@ class _ConfirmStepState extends State<_ConfirmStep> {
                         memberTaxId: _buyerTaxCtrl.text.trim(),
                         sellerTaxId: _sellerTaxCtrl.text.trim(),
                         language: _language,
+                        memberNameOverride: _buyerNameOverride,
                       )),
               style: FilledButton.styleFrom(
                 backgroundColor: const Color(0xFF0F766E),
@@ -2710,6 +2901,103 @@ class _PreviewSection extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           child,
+        ],
+      ),
+    );
+  }
+}
+
+/// A secondary form section that collapses to a compact summary row by
+/// default, keeping the invoice form short. Tap the header to expand/collapse.
+class _CollapsibleSection extends StatelessWidget {
+  const _CollapsibleSection({
+    required this.icon,
+    required this.title,
+    required this.expanded,
+    required this.onToggle,
+    required this.child,
+    this.summary,
+  });
+
+  final IconData icon;
+  final String title;
+  final bool expanded;
+  final VoidCallback onToggle;
+  final Widget child;
+
+  /// Short one-line preview of the section's contents, shown next to the
+  /// title when collapsed (e.g. "2 extra items • Discount applied").
+  final String? summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: onToggle,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Icon(icon, size: 14, color: const Color(0xFF0F766E)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF0F766E),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        if (!expanded &&
+                            summary != null &&
+                            summary!.isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            summary!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 12.5, color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(Icons.keyboard_arrow_down,
+                        size: 20, color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox(width: double.infinity, height: 0),
+            secondChild: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: child,
+            ),
+            crossFadeState:
+                expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
+            sizeCurve: Curves.easeInOut,
+          ),
         ],
       ),
     );

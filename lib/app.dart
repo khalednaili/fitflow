@@ -28,6 +28,12 @@ Future<void> initializeFirebase() async {
   // are always printed to the console. On non-web they are also forwarded
   // to Firebase Crashlytics.
   FlutterError.onError = (details) {
+    // Restores Flutter's default console output (including the
+    // "The relevant error-causing widget was: ..." section derived from
+    // `details.context`), which a custom onError handler otherwise
+    // suppresses. This makes the offending widget identifiable at a glance
+    // instead of requiring a manual stack-trace scan.
+    FlutterError.presentError(details);
     CrashLogger.log(
       details.exception,
       details.stack,

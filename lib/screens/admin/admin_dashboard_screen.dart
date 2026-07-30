@@ -13,6 +13,7 @@ import 'tabs/admin_attendance_tab.dart';
 import 'tabs/admin_checkin_tab.dart';
 import 'tabs/admin_classes_tab.dart';
 import 'tabs/admin_dropins_tab.dart';
+import 'tabs/admin_home_tab.dart';
 import 'tabs/admin_members_tab.dart';
 import 'tabs/admin_offers_tab.dart';
 import 'tabs/admin_templates_tab.dart';
@@ -43,6 +44,12 @@ class _AdminTab {
 //    admin_shell.dart (_adminSections + _buildContent) for the web sidebar,
 //    otherwise the new tab will be invisible on Chrome/web.
 const _tabs = <_AdminTab>[
+  _AdminTab(
+    label: 'Dashboard',
+    icon: Icons.dashboard_outlined,
+    activeIcon: Icons.dashboard,
+    color: Color(0xFF0F766E),
+  ),
   _AdminTab(
     label: 'Calendar',
     icon: Icons.calendar_month_outlined,
@@ -164,6 +171,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   }
 
   List<Widget> _buildTabChildren(String gymId, String? uid) => [
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminHomeTab(gymId: gymId)),
         _WithAdminBanner(
             gymId: gymId,
             userId: uid,
@@ -689,10 +698,14 @@ class _AdminTabBar extends StatelessWidget {
 
 // Maps section label → tab indices
 const _sidebarGroups = <(String, List<int>)>[
-  ('SCHEDULE', [0, 1, 2, 3]),
-  ('PEOPLE', [4, 5, 6, 7, 8, 9, 10]),
-  ('FINANCE', [11, 12]),
-  ('COMMS', [13]),
+  ('OVERVIEW', [0]),
+  ('SCHEDULE', [1, 2, 3, 4]),
+  ('PEOPLE', [5, 6, 7, 8, 9, 10, 11]),
+  ('FINANCE', [12, 13]),
+  // NOTE: Announcements (15) was missing from this list before the Dashboard
+  // tab was inserted at index 0 — included here alongside Finance (14) so
+  // both remain reachable from the sidebar.
+  ('COMMS', [14, 15]),
 ];
 
 class _AdminSidebar extends StatelessWidget {

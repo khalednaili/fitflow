@@ -2151,4 +2151,103 @@ void main() {
       expect(result, BookingResult.booked);
     });
   });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 13. GYM-WIDE STREAMS (admin dashboard)
+  // ══════════════════════════════════════════════════════════════════════════
+  group('13 • gym-wide streams (admin dashboard)', () {
+    test('streamAllBookingsForGym only returns bookings for the scoped gym',
+        () async {
+      final scoped = BookingService(gymId: 'gymA', firestore: db);
+      await db.collection('bookings').add({
+        'userId': 'u1',
+        'classId': 'c1',
+        'gymId': 'gymA',
+        'createdAt': Timestamp.now(),
+      });
+      await db.collection('bookings').add({
+        'userId': 'u2',
+        'classId': 'c2',
+        'gymId': 'gymB',
+        'createdAt': Timestamp.now(),
+      });
+
+      final bookings = await scoped.streamAllBookingsForGym().first;
+
+      expect(bookings, hasLength(1));
+      expect(bookings.single.userId, 'u1');
+    });
+
+    test('streamAllBookingsForGym returns every gym when gymId is empty',
+        () async {
+      await db.collection('bookings').add({
+        'userId': 'u1',
+        'classId': 'c1',
+        'gymId': 'gymA',
+        'createdAt': Timestamp.now(),
+      });
+      await db.collection('bookings').add({
+        'userId': 'u2',
+        'classId': 'c2',
+        'gymId': 'gymB',
+        'createdAt': Timestamp.now(),
+      });
+
+      final bookings = await sut.streamAllBookingsForGym().first;
+
+      expect(bookings, hasLength(2));
+    });
+
+    test(
+        'streamAllBookingsForGym carries classStartTime/classEndTime/checkedIn '
+        'through for stats computed on top of it', () async {
+      final scoped = BookingService(gymId: 'gymA', firestore: db);
+      final start = DateTime(2030, 1, 1, 9, 0);
+      final end = DateTime(2030, 1, 1, 10, 0);
+      await db.collection('bookings').add({
+        'userId': 'u1',
+        'classId': 'c1',
+        'gymId': 'gymA',
+        'createdAt': Timestamp.now(),
+        'classStartTime': Timestamp.fromDate(start),
+        'classEndTime': Timestamp.fromDate(end),
+        'checkedIn': false,
+      });
+
+      final bookings = await scoped.streamAllBookingsForGym().first;
+
+      expect(bookings.single.classStartTime, start);
+      expect(bookings.single.classEndTime, end);
+      expect(bookings.single.checkedIn, isFalse);
+    });
+
+    test(
+        'streamLateCancellationsForGym only returns records for the scoped gym, '
+        'sorted most-recent-first', () async {
+      final scoped = BookingService(gymId: 'gymA', firestore: db);
+      final older = DateTime(2030, 1, 1);
+      final newer = DateTime(2030, 1, 5);
+      await db.collection('late_cancellations').add({
+        'userId': 'u1',
+        'gymId': 'gymA',
+        'cancelledAt': Timestamp.fromDate(older),
+      });
+      await db.collection('late_cancellations').add({
+        'userId': 'u2',
+        'gymId': 'gymA',
+        'cancelledAt': Timestamp.fromDate(newer),
+      });
+      await db.collection('late_cancellations').add({
+        'userId': 'u3',
+        'gymId': 'gymB',
+        'cancelledAt': Timestamp.fromDate(newer),
+      });
+
+      final records = await scoped.streamLateCancellationsForGym().first;
+
+      expect(records, hasLength(2));
+      expect(records.first['userId'], 'u2');
+      expect(records.last['userId'], 'u1');
+    });
+  });
 }

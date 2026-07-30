@@ -14,6 +14,7 @@ import 'tabs/admin_attendance_tab.dart';
 import 'tabs/admin_checkin_tab.dart';
 import 'tabs/admin_classes_tab.dart';
 import 'tabs/admin_dropins_tab.dart';
+import 'tabs/admin_home_tab.dart';
 import 'tabs/admin_members_tab.dart';
 import 'tabs/admin_offers_tab.dart';
 import 'tabs/admin_personal_training_tab.dart';
@@ -70,6 +71,15 @@ class _ToolItem {
 //    admin_dashboard_screen.dart (_tabs + _buildTabChildren + _sidebarGroups)
 //    for the mobile sidebar, otherwise the new tab will be invisible on mobile.
 const _adminSections = <_AdminSection>[
+  _AdminSection(title: 'OVERVIEW', items: [
+    _AdminItem(
+      index: 16,
+      label: 'Dashboard',
+      icon: Icons.dashboard_outlined,
+      activeIcon: Icons.dashboard,
+      color: Color(0xFF0F766E),
+    ),
+  ]),
   _AdminSection(title: 'SCHEDULING', items: [
     _AdminItem(
       index: 0,
@@ -251,7 +261,7 @@ class AdminShell extends StatefulWidget {
 }
 
 class _AdminShellState extends State<AdminShell> {
-  int _selectedIndex = 0;
+  int _selectedIndex = 16;
   bool _sidebarExpanded = true;
   final _notificationService = NotificationService();
 
@@ -275,6 +285,7 @@ class _AdminShellState extends State<AdminShell> {
   Widget _buildContent() {
     final gymId = widget.appUser?.gymId ?? '';
     return switch (_selectedIndex) {
+      16 => AdminHomeTab(gymId: gymId),
       0 => AdminCalendarScreen(gymId: gymId),
       1 => AdminClassesTab(gymId: gymId),
       2 => AdminTemplatesTab(gymId: gymId),

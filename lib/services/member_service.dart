@@ -10,10 +10,18 @@ class MemberService {
     FirebaseAuth? auth,
     this.gymId = '',
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+        _authOverride = auth;
 
   final FirebaseFirestore _firestore;
-  final FirebaseAuth _auth;
+
+  /// Explicit override passed by callers (e.g. tests). When null, resolved
+  /// lazily via [_auth] so constructing a [MemberService] never touches
+  /// [FirebaseAuth.instance] unless auth is actually needed — this lets
+  /// widgets that only stream Firestore data (like the admin dashboard) be
+  /// tested without a real Firebase app.
+  final FirebaseAuth? _authOverride;
+
+  FirebaseAuth get _auth => _authOverride ?? FirebaseAuth.instance;
 
   /// When non-empty, all queries are scoped to this gym.
   final String gymId;

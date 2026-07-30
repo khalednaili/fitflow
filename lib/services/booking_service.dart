@@ -52,6 +52,38 @@ class BookingService {
     return query;
   }
 
+  /// Streams every booking for the gym. Filtering/sorting (e.g. by day, by
+  /// user) is done client-side by callers — mirrors the pattern used by
+  /// [SubscriptionService.streamAllUserSubscriptions] so no extra composite
+  /// indexes are required. Used by admin overview widgets (today's booking
+  /// counts, no-shows, last-attended dates).
+  Stream<List<Booking>> streamAllBookingsForGym() {
+    return _bookingsQuery.snapshots().map(
+      (query) => List<Booking>.unmodifiable(
+        query.docs.map((doc) => Booking.fromSnapshot(doc)),
+      ),
+    );
+  }
+
+  /// Streams all late-cancellation penalty records for the gym (not scoped
+  /// to a single user). Used by the admin dashboard's "cancellations today"
+  /// stat.
+  Stream<List<Map<String, dynamic>>> streamLateCancellationsForGym() {
+    return _lateCancellationsQuery.snapshots().map((snap) {
+      final list = snap.docs
+          .map((d) => <String, dynamic>{...d.data(), 'id': d.id})
+          .toList();
+      list.sort((a, b) {
+        final aTs =
+            (a['cancelledAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+        final bTs =
+            (b['cancelledAt'] as Timestamp?)?.millisecondsSinceEpoch ?? 0;
+        return bTs.compareTo(aTs);
+      });
+      return list;
+    });
+  }
+
   Stream<List<Booking>> streamBookingsForUser(String userId) {
     return _bookingsQuery.where('userId', isEqualTo: userId).snapshots().map(
       (query) {
