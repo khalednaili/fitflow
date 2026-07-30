@@ -154,7 +154,10 @@ class _AdminMembersTabState extends State<AdminMembersTab> {
     );
     if (created == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.tr('Member created.'))),
+        SnackBar(
+          content: Text(context.l10n
+              .tr('Member created. A confirmation email has been sent.')),
+        ),
       );
     }
   }

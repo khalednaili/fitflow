@@ -152,6 +152,7 @@ class BookingService {
       },
       SetOptions(merge: true),
     );
+    _rulesCache = null; // invalidate cache
   }
 
   /// Returns the late-cancellation penalty threshold in minutes.
@@ -171,6 +172,7 @@ class BookingService {
       },
       SetOptions(merge: true),
     );
+    _rulesCache = null; // invalidate cache
   }
 
   /// Returns the minimum advance booking time in minutes.
@@ -190,6 +192,7 @@ class BookingService {
       },
       SetOptions(merge: true),
     );
+    _rulesCache = null; // invalidate cache
   }
 
   /// When true, a member cannot book a class whose time slot overlaps with

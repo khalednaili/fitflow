@@ -502,6 +502,8 @@ class AppLocalizations {
         "Couldn't load members. Please try again.",
     'Book Drop-in': 'Book Drop-in',
     'Member created.': 'Member created.',
+    'Member created. A confirmation email has been sent.':
+        'Member created. A confirmation email has been sent.',
     'activated.': 'activated.',
     'paused.': 'paused.',
     'Delete member?': 'Delete member?',
@@ -1547,6 +1549,8 @@ class AppLocalizations {
         'Impossible de charger les membres. Veuillez réessayer.',
     'Book Drop-in': 'Réserver un drop-in',
     'Member created.': 'Membre créé.',
+    'Member created. A confirmation email has been sent.':
+        'Membre créé. Un e-mail de confirmation a été envoyé.',
     'activated.': 'activé.',
     'paused.': 'fait une pause.',
     'Delete member?': 'Supprimer un membre ?',

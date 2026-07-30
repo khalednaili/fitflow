@@ -167,6 +167,7 @@ class MemberService {
     String emergencyContactName = '',
     String emergencyContactPhone = '',
     String healthNotes = '',
+    bool sendConfirmationEmail = true,
   }) async {
     final effectiveRoles = roles.isNotEmpty ? roles : [role];
     final primaryRole = _primaryRole(effectiveRoles);
@@ -221,6 +222,16 @@ class MemberService {
         'createdAt': Timestamp.now(),
         'updatedAt': Timestamp.now(),
       });
+
+      if (sendConfirmationEmail) {
+        try {
+          await createdUser.sendEmailVerification();
+        } catch (_) {
+          // Non-fatal: the account/member record is already created, so a
+          // transient email-sending failure (e.g. quota, network) should
+          // not surface as an account-creation error to the admin.
+        }
+      }
     } finally {
       final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
       await secondaryAuth.signOut();

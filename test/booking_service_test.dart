@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:fit_flow/models/booking.dart';
 import 'package:fit_flow/services/booking_service.dart';
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -138,7 +139,7 @@ extension _Setup on FakeFirebaseFirestore {
         if (classTypeId.isNotEmpty) 'classTypeId': classTypeId,
       });
 
-  Future<void> createWaitlistEntry({
+  Future<DocumentReference<Map<String, dynamic>>> createWaitlistEntry({
     required String userId,
     required String classId,
     DateTime? createdAt,
@@ -2248,6 +2249,892 @@ void main() {
       expect(records, hasLength(2));
       expect(records.first['userId'], 'u2');
       expect(records.last['userId'], 'u1');
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 21. leaveWaitlist
+  // ══════════════════════════════════════════════════════════════════════════
+  group('21 • leaveWaitlist', () {
+    test('removes the waitlist doc and decrements waitlistCount', () async {
+      await db.createClass(
+          classId: 'c1', startTime: _futureClass, waitlistCount: 1);
+      await db.createWaitlistEntry(userId: 'u1', classId: 'c1');
+
+      await sut.leaveWaitlist(userId: 'u1', classId: 'c1');
+
+      final waitlist = await db.collection('waitlists').get();
+      expect(waitlist.docs, isEmpty);
+      final classDoc = await db.collection('classes').doc('c1').get();
+      expect(classDoc.data()!['waitlistCount'], 0);
+    });
+
+    test('waitlistCount never goes negative', () async {
+      await db.createClass(
+          classId: 'c1', startTime: _futureClass, waitlistCount: 0);
+      await db.createWaitlistEntry(userId: 'u1', classId: 'c1');
+
+      await sut.leaveWaitlist(userId: 'u1', classId: 'c1');
+
+      final classDoc = await db.collection('classes').doc('c1').get();
+      expect(classDoc.data()!['waitlistCount'], 0);
+    });
+
+    test('does nothing (no throw) when no waitlist entry exists', () async {
+      await db.createClass(classId: 'c1', startTime: _futureClass);
+      await sut.leaveWaitlist(userId: 'u1', classId: 'c1');
+      final waitlist = await db.collection('waitlists').get();
+      expect(waitlist.docs, isEmpty);
+    });
+
+    test('deletes the waitlist doc even if the class no longer exists',
+        () async {
+      await db.createWaitlistEntry(userId: 'u1', classId: 'ghost');
+      await sut.leaveWaitlist(userId: 'u1', classId: 'ghost');
+      final waitlist = await db.collection('waitlists').get();
+      expect(waitlist.docs, isEmpty);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 22. checkInMember / undoCheckIn
+  // ══════════════════════════════════════════════════════════════════════════
+  group('22 • checkInMember / undoCheckIn', () {
+    test('checkInMember creates an attendance record and flags the booking',
+        () async {
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: _futureClass);
+
+      await sut.checkInMember(
+          classId: 'c1', userId: 'u1', checkedInBy: 'admin1');
+
+      final attendance = await db
+          .collection('attendance')
+          .where('userId', isEqualTo: 'u1')
+          .where('classId', isEqualTo: 'c1')
+          .get();
+      expect(attendance.docs, hasLength(1));
+      expect(attendance.docs.single.data()['checkedInBy'], 'admin1');
+
+      final booking = await db.collection('bookings').get();
+      expect(booking.docs.single.data()['checkedIn'], isTrue);
+    });
+
+    test('checkInMember is idempotent — calling twice creates only one record',
+        () async {
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: _futureClass);
+
+      await sut.checkInMember(classId: 'c1', userId: 'u1', checkedInBy: 'a');
+      await sut.checkInMember(classId: 'c1', userId: 'u1', checkedInBy: 'a');
+
+      final attendance = await db
+          .collection('attendance')
+          .where('userId', isEqualTo: 'u1')
+          .where('classId', isEqualTo: 'c1')
+          .get();
+      expect(attendance.docs, hasLength(1));
+    });
+
+    test('undoCheckIn removes the attendance record and resets the flag',
+        () async {
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: _futureClass);
+      await sut.checkInMember(classId: 'c1', userId: 'u1', checkedInBy: 'a');
+
+      await sut.undoCheckIn(classId: 'c1', userId: 'u1');
+
+      final attendance = await db.collection('attendance').get();
+      expect(attendance.docs, isEmpty);
+      final booking = await db.collection('bookings').get();
+      expect(booking.docs.single.data()['checkedIn'], isFalse);
+    });
+
+    test('undoCheckIn does nothing when there is no attendance record',
+        () async {
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: _futureClass);
+      await sut.undoCheckIn(classId: 'c1', userId: 'u1');
+      final booking = await db.collection('bookings').get();
+      expect(booking.docs.single.data()['checkedIn'], isFalse);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 23. bulkCheckInAll
+  // ══════════════════════════════════════════════════════════════════════════
+  group('23 • bulkCheckInAll', () {
+    test('checks in every pending member booking and returns the count',
+        () async {
+      final ref1 = await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: _futureClass);
+      final ref2 = await db.createBookingDoc(
+          userId: 'u2', classId: 'c1', bookingDate: _futureClass);
+
+      final bookings = [
+        Booking(
+            id: ref1.id,
+            userId: 'u1',
+            classId: 'c1',
+            createdAt: DateTime.now()),
+        Booking(
+            id: ref2.id,
+            userId: 'u2',
+            classId: 'c1',
+            createdAt: DateTime.now()),
+      ];
+
+      final count = await sut.bulkCheckInAll(
+          classId: 'c1', bookings: bookings, checkedInBy: 'admin1');
+
+      expect(count, 2);
+      final attendance = await db.collection('attendance').get();
+      expect(attendance.docs, hasLength(2));
+      final b1 = await ref1.get();
+      expect(b1.data()!['checkedIn'], isTrue);
+    });
+
+    test('skips bookings already checked in', () async {
+      final ref1 = await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: _futureClass);
+
+      final bookings = [
+        Booking(
+            id: ref1.id,
+            userId: 'u1',
+            classId: 'c1',
+            createdAt: DateTime.now(),
+            checkedIn: true),
+      ];
+
+      final count = await sut.bulkCheckInAll(
+          classId: 'c1', bookings: bookings, checkedInBy: 'admin1');
+
+      expect(count, 0);
+      final attendance = await db.collection('attendance').get();
+      expect(attendance.docs, isEmpty);
+    });
+
+    test('skips guest bookings (empty userId)', () async {
+      final bookings = [
+        Booking(
+            id: 'guestBooking',
+            userId: '',
+            classId: 'c1',
+            createdAt: DateTime.now()),
+      ];
+
+      final count = await sut.bulkCheckInAll(
+          classId: 'c1', bookings: bookings, checkedInBy: 'admin1');
+
+      expect(count, 0);
+    });
+
+    test('returns 0 and writes nothing for an empty booking list', () async {
+      final count = await sut.bulkCheckInAll(
+          classId: 'c1', bookings: [], checkedInBy: 'admin1');
+      expect(count, 0);
+      final attendance = await db.collection('attendance').get();
+      expect(attendance.docs, isEmpty);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 24. streamAttendanceForUser / streamWaitlistForClass / position
+  // ══════════════════════════════════════════════════════════════════════════
+  group('24 • attendance & waitlist streams', () {
+    test('streamAttendanceForUser sorts most-recent-first', () async {
+      final older = DateTime(2030, 1, 1);
+      final newer = DateTime(2030, 1, 5);
+      await db.collection('attendance').add({
+        'userId': 'u1',
+        'classId': 'c1',
+        'checkedInAt': Timestamp.fromDate(older),
+      });
+      await db.collection('attendance').add({
+        'userId': 'u1',
+        'classId': 'c2',
+        'checkedInAt': Timestamp.fromDate(newer),
+      });
+
+      final list = await sut.streamAttendanceForUser('u1').first;
+
+      expect(list, hasLength(2));
+      expect(list.first['classId'], 'c2');
+    });
+
+    test('streamWaitlistForClass returns entries in FIFO order', () async {
+      await db.createWaitlistEntry(
+          userId: 'u2', classId: 'c1', createdAt: DateTime(2030, 1, 2));
+      await db.createWaitlistEntry(
+          userId: 'u1', classId: 'c1', createdAt: DateTime(2030, 1, 1));
+
+      final entries = await sut.streamWaitlistForClass('c1').first;
+
+      expect(entries.map((e) => e.userId).toList(), ['u1', 'u2']);
+    });
+
+    test('streamUserWaitlistPosition returns the 1-based FIFO position',
+        () async {
+      await db.createWaitlistEntry(
+          userId: 'u1', classId: 'c1', createdAt: DateTime(2030, 1, 1));
+      await db.createWaitlistEntry(
+          userId: 'u2', classId: 'c1', createdAt: DateTime(2030, 1, 2));
+
+      final pos1 = await sut.streamUserWaitlistPosition('u1', 'c1').first;
+      final pos2 = await sut.streamUserWaitlistPosition('u2', 'c1').first;
+
+      expect(pos1, 1);
+      expect(pos2, 2);
+    });
+
+    test('streamUserWaitlistPosition emits null when not on the waitlist',
+        () async {
+      await db.createWaitlistEntry(userId: 'u1', classId: 'c1');
+      final pos = await sut.streamUserWaitlistPosition('u2', 'c1').first;
+      expect(pos, isNull);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 25. promoteWaitlistedEntry (admin: promote a specific entry)
+  // ══════════════════════════════════════════════════════════════════════════
+  group('25 • promoteWaitlistedEntry', () {
+    test('promotes the given entry into a booking and sends a notification',
+        () async {
+      await db.createClass(
+          classId: 'c1',
+          startTime: _futureClass,
+          capacity: 5,
+          bookedCount: 2,
+          waitlistCount: 1);
+      final entryRef =
+          await db.createWaitlistEntry(userId: 'u1', classId: 'c1');
+
+      await sut.promoteWaitlistedEntry(
+          classId: 'c1', entryId: entryRef.id, userId: 'u1', memberName: 'U1');
+
+      final waitlist = await db.collection('waitlists').get();
+      expect(waitlist.docs, isEmpty);
+      final booking = await db
+          .collection('bookings')
+          .where('userId', isEqualTo: 'u1')
+          .get();
+      expect(booking.docs, hasLength(1));
+      final classDoc = await db.collection('classes').doc('c1').get();
+      expect(classDoc.data()!['bookedCount'], 3);
+      expect(classDoc.data()!['waitlistCount'], 0);
+      final notifications = await db.collection('notifications').get();
+      expect(notifications.docs, hasLength(1));
+    });
+
+    test('preserves drop-in fields when promoting a drop-in waitlist entry',
+        () async {
+      await db.createClass(
+          classId: 'c1', startTime: _futureClass, capacity: 5, bookedCount: 0);
+      final entryRef = await db.createWaitlistEntry(
+          userId: 'u1',
+          classId: 'c1',
+          isDropIn: true,
+          dropInPaymentStatus: 'paid',
+          dropInPrice: 15.0);
+
+      await sut.promoteWaitlistedEntry(
+          classId: 'c1', entryId: entryRef.id, userId: 'u1', memberName: 'U1');
+
+      final booking =
+          (await db.collection('bookings').get()).docs.single.data();
+      expect(booking['isDropIn'], isTrue);
+      expect(booking['dropInPaymentStatus'], 'paid');
+      expect(booking['dropInPrice'], 15.0);
+    });
+
+    test('throws when the waitlist entry no longer exists', () async {
+      await db.createClass(classId: 'c1', startTime: _futureClass);
+      expect(
+        () => sut.promoteWaitlistedEntry(
+            classId: 'c1',
+            entryId: 'missing',
+            userId: 'u1',
+            memberName: 'U1'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('throws when the class is still full', () async {
+      await db.createClass(
+          classId: 'c1', startTime: _futureClass, capacity: 2, bookedCount: 2);
+      final entryRef =
+          await db.createWaitlistEntry(userId: 'u1', classId: 'c1');
+
+      expect(
+        () => sut.promoteWaitlistedEntry(
+            classId: 'c1',
+            entryId: entryRef.id,
+            userId: 'u1',
+            memberName: 'U1'),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 26. markAbsent / undoAbsent / streamAbsentUserIds
+  // ══════════════════════════════════════════════════════════════════════════
+  group('26 • markAbsent / undoAbsent', () {
+    test('markAbsent creates a record and streamAbsentUserIds reflects it',
+        () async {
+      await sut.markAbsent(classId: 'c1', userId: 'u1', markedBy: 'admin1');
+
+      final absentIds = await sut.streamAbsentUserIds('c1').first;
+      expect(absentIds, {'u1'});
+    });
+
+    test('markAbsent is idempotent', () async {
+      await sut.markAbsent(classId: 'c1', userId: 'u1', markedBy: 'admin1');
+      await sut.markAbsent(classId: 'c1', userId: 'u1', markedBy: 'admin1');
+
+      final absences = await db.collection('absences').get();
+      expect(absences.docs, hasLength(1));
+    });
+
+    test('undoAbsent removes the record', () async {
+      await sut.markAbsent(classId: 'c1', userId: 'u1', markedBy: 'admin1');
+      await sut.undoAbsent(classId: 'c1', userId: 'u1');
+
+      final absentIds = await sut.streamAbsentUserIds('c1').first;
+      expect(absentIds, isEmpty);
+    });
+
+    test('undoAbsent does nothing when no record exists', () async {
+      await sut.undoAbsent(classId: 'c1', userId: 'u1');
+      final absences = await db.collection('absences').get();
+      expect(absences.docs, isEmpty);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 27. bookGuestDropIn
+  // ══════════════════════════════════════════════════════════════════════════
+  group('27 • bookGuestDropIn', () {
+    test('books a guest as a drop-in and increments bookedCount', () async {
+      await db.createClass(
+          classId: 'c1',
+          startTime: _futureClass,
+          capacity: 5,
+          dropInEnabled: true,
+          dropInPrice: 20.0);
+
+      await sut.bookGuestDropIn(
+          classId: 'c1', guestName: 'Guest One', guestEmail: 'G@Ex.com');
+
+      final booking =
+          (await db.collection('bookings').get()).docs.single.data();
+      expect(booking['userId'], '');
+      expect(booking['memberName'], 'Guest One');
+      expect(booking['guestEmail'], 'g@ex.com');
+      expect(booking['isDropIn'], isTrue);
+      expect(booking['dropInPrice'], 20.0);
+      final classDoc = await db.collection('classes').doc('c1').get();
+      expect(classDoc.data()!['bookedCount'], 1);
+    });
+
+    test('throws when drop-ins are disabled for the class', () async {
+      await db.createClass(
+          classId: 'c1', startTime: _futureClass, dropInEnabled: false);
+      expect(
+        () => sut.bookGuestDropIn(
+            classId: 'c1', guestName: 'G', guestEmail: 'g@ex.com'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('throws when the class has no drop-in price set', () async {
+      await db.createClass(
+          classId: 'c1',
+          startTime: _futureClass,
+          dropInEnabled: true,
+          dropInPrice: 0);
+      expect(
+        () => sut.bookGuestDropIn(
+            classId: 'c1', guestName: 'G', guestEmail: 'g@ex.com'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('throws when the class is full', () async {
+      await db.createClass(
+          classId: 'c1',
+          startTime: _futureClass,
+          capacity: 1,
+          bookedCount: 1,
+          dropInEnabled: true,
+          dropInPrice: 20.0);
+      expect(
+        () => sut.bookGuestDropIn(
+            classId: 'c1', guestName: 'G', guestEmail: 'g@ex.com'),
+        throwsA(isA<Exception>()),
+      );
+    });
+
+    test('throws when the class does not exist', () async {
+      expect(
+        () => sut.bookGuestDropIn(
+            classId: 'ghost', guestName: 'G', guestEmail: 'g@ex.com'),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 28. forceBookAndCheckIn
+  // ══════════════════════════════════════════════════════════════════════════
+  group('28 • forceBookAndCheckIn', () {
+    test('creates a checked-in booking bypassing offer/capacity rules',
+        () async {
+      await db.createUser(userId: 'u1', displayName: 'Force Member');
+      await db.createClass(
+          classId: 'c1', startTime: _futureClass, capacity: 1, bookedCount: 1);
+
+      await sut.forceBookAndCheckIn(
+          classId: 'c1', userId: 'u1', adminId: 'admin1');
+
+      final booking =
+          (await db.collection('bookings').get()).docs.single.data();
+      expect(booking['userId'], 'u1');
+      expect(booking['memberName'], 'Force Member');
+      expect(booking['checkedIn'], isTrue);
+      final classDoc = await db.collection('classes').doc('c1').get();
+      expect(classDoc.data()!['bookedCount'], 2);
+      final attendance = await db.collection('attendance').get();
+      expect(attendance.docs, hasLength(1));
+    });
+
+    test('removes an existing waitlist entry for the member', () async {
+      await db.createUser(userId: 'u1');
+      await db.createClass(
+          classId: 'c1', startTime: _futureClass, waitlistCount: 1);
+      await db.createWaitlistEntry(userId: 'u1', classId: 'c1');
+
+      await sut.forceBookAndCheckIn(classId: 'c1', userId: 'u1');
+
+      final waitlist = await db.collection('waitlists').get();
+      expect(waitlist.docs, isEmpty);
+      final classDoc = await db.collection('classes').doc('c1').get();
+      expect(classDoc.data()!['waitlistCount'], 0);
+    });
+
+    test('is idempotent when the member is already booked — only flags '
+        'check-in, does not duplicate the booking or bookedCount', () async {
+      await db.createUser(userId: 'u1');
+      await db.createClass(
+          classId: 'c1', startTime: _futureClass, bookedCount: 1);
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: _futureClass);
+
+      await sut.forceBookAndCheckIn(classId: 'c1', userId: 'u1');
+
+      final bookings = await db
+          .collection('bookings')
+          .where('userId', isEqualTo: 'u1')
+          .get();
+      expect(bookings.docs, hasLength(1));
+      expect(bookings.docs.single.data()['checkedIn'], isTrue);
+      final classDoc = await db.collection('classes').doc('c1').get();
+      expect(classDoc.data()!['bookedCount'], 1);
+    });
+
+    test('does not duplicate the attendance record on repeat calls',
+        () async {
+      await db.createUser(userId: 'u1');
+      await db.createClass(classId: 'c1', startTime: _futureClass);
+
+      await sut.forceBookAndCheckIn(classId: 'c1', userId: 'u1');
+      await sut.forceBookAndCheckIn(classId: 'c1', userId: 'u1');
+
+      final attendance = await db.collection('attendance').get();
+      expect(attendance.docs, hasLength(1));
+    });
+
+    test('throws when the class does not exist', () async {
+      await db.createUser(userId: 'u1');
+      expect(
+        () => sut.forceBookAndCheckIn(classId: 'ghost', userId: 'u1'),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 29. streamAllDropIns
+  // ══════════════════════════════════════════════════════════════════════════
+  group('29 • streamAllDropIns', () {
+    test('returns only drop-in bookings, newest first', () async {
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: _futureClass);
+      await db.collection('bookings').add({
+        'userId': 'u2',
+        'classId': 'c2',
+        'gymId': '',
+        'createdAt': Timestamp.fromDate(DateTime(2020, 1, 1)),
+        'isDropIn': true,
+      });
+      await db.collection('bookings').add({
+        'userId': 'u3',
+        'classId': 'c3',
+        'gymId': '',
+        'createdAt': Timestamp.fromDate(DateTime(2025, 1, 1)),
+        'isDropIn': true,
+      });
+
+      final dropIns = await sut.streamAllDropIns().first;
+
+      expect(dropIns, hasLength(2));
+      expect(dropIns.first.userId, 'u3');
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 30. checkInByGymQr / checkInForClass / checkInByClassQr
+  // ══════════════════════════════════════════════════════════════════════════
+  group('30 • QR check-in flows', () {
+    test('checkInByGymQr returns error for an invalid token', () async {
+      await db.collection('settings').doc('gym').set({'gymQrToken': 'ABC'});
+      final result =
+          await sut.checkInByGymQr(gymToken: 'WRONG', userId: 'u1');
+      expect(result['status'], 'error');
+    });
+
+    test('checkInByGymQr returns error when the member has no bookings',
+        () async {
+      await db.collection('settings').doc('gym').set({'gymQrToken': 'ABC'});
+      final result = await sut.checkInByGymQr(gymToken: 'ABC', userId: 'u1');
+      expect(result['status'], 'error');
+      expect(result['message'], contains('no bookings'));
+    });
+
+    test('checkInByGymQr auto-checks-in when exactly one class is in window',
+        () async {
+      await db.collection('settings').doc('gym').set({'gymQrToken': 'ABC'});
+      final start = DateTime.now().add(const Duration(minutes: 10));
+      await db.createClass(classId: 'c1', startTime: start);
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: start);
+
+      final result = await sut.checkInByGymQr(gymToken: 'ABC', userId: 'u1');
+
+      expect(result['status'], 'success');
+      final attendance = await db.collection('attendance').get();
+      expect(attendance.docs, hasLength(1));
+    });
+
+    test('checkInByGymQr returns "pick" when multiple classes are in window',
+        () async {
+      await db.collection('settings').doc('gym').set({'gymQrToken': 'ABC'});
+      final start = DateTime.now().add(const Duration(minutes: 5));
+      await db.createClass(classId: 'c1', startTime: start);
+      await db.createClass(classId: 'c2', startTime: start);
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: start);
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c2', bookingDate: start);
+
+      final result = await sut.checkInByGymQr(gymToken: 'ABC', userId: 'u1');
+
+      expect(result['status'], 'pick');
+      expect((result['classes'] as List).length, 2);
+    });
+
+    test('checkInByGymQr returns error when no class is within the time window',
+        () async {
+      await db.collection('settings').doc('gym').set({'gymQrToken': 'ABC'});
+      await db.createClass(classId: 'c1', startTime: _futureClass);
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: _futureClass);
+
+      final result = await sut.checkInByGymQr(gymToken: 'ABC', userId: 'u1');
+
+      expect(result['status'], 'error');
+      expect(result['message'], contains('No active class'));
+    });
+
+    test('checkInByGymQr is gym-scoped via settings/{gymId}', () async {
+      final scoped = BookingService(gymId: 'gymA', firestore: db);
+      await db.collection('settings').doc('gymA').set({'gymQrToken': 'ABC'});
+      final start = DateTime.now().add(const Duration(minutes: 5));
+      await db.collection('classes').doc('c1').set({
+        'title': 'c1',
+        'startTime': Timestamp.fromDate(start),
+        'endTime': Timestamp.fromDate(start.add(const Duration(hours: 1))),
+        'capacity': 10,
+        'bookedCount': 0,
+      });
+      await db.collection('bookings').add({
+        'userId': 'u1',
+        'classId': 'c1',
+        'gymId': 'gymA',
+        'createdAt': Timestamp.now(),
+      });
+
+      final result = await scoped.checkInByGymQr(gymToken: 'ABC', userId: 'u1');
+      expect(result['status'], 'success');
+    });
+
+    test('checkInForClass checks in directly for the given class', () async {
+      await db.createClass(classId: 'c1', startTime: _futureClass);
+      final result =
+          await sut.checkInForClass(classId: 'c1', userId: 'u1');
+      expect(result['status'], 'success');
+    });
+
+    test('checkInForClass returns already_checked_in on repeat call',
+        () async {
+      await db.createClass(classId: 'c1', startTime: _futureClass);
+      await sut.checkInForClass(classId: 'c1', userId: 'u1');
+      final result = await sut.checkInForClass(classId: 'c1', userId: 'u1');
+      expect(result['status'], 'already_checked_in');
+    });
+
+    test('checkInByClassQr succeeds when booked and within the time window',
+        () async {
+      final start = DateTime.now().add(const Duration(minutes: 30));
+      await db.createClass(classId: 'c1', startTime: start);
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: start);
+
+      final result =
+          await sut.checkInByClassQr(classId: 'c1', userId: 'u1');
+
+      expect(result['status'], 'success');
+    });
+
+    test('checkInByClassQr rejects too early (more than 1h before start)',
+        () async {
+      final start = DateTime.now().add(const Duration(hours: 2));
+      await db.createClass(classId: 'c1', startTime: start);
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: start);
+
+      final result =
+          await sut.checkInByClassQr(classId: 'c1', userId: 'u1');
+
+      expect(result['status'], 'error');
+      expect(result['message'], contains('Check-in opens in'));
+    });
+
+    test('checkInByClassQr rejects after the class has ended', () async {
+      final start = DateTime.now().subtract(const Duration(hours: 3));
+      await db.createClass(classId: 'c1', startTime: start);
+      await db.createBookingDoc(
+          userId: 'u1', classId: 'c1', bookingDate: start);
+
+      final result =
+          await sut.checkInByClassQr(classId: 'c1', userId: 'u1');
+
+      expect(result['status'], 'error');
+      expect(result['message'], contains('already ended'));
+    });
+
+    test('checkInByClassQr rejects when the member has no booking', () async {
+      final start = DateTime.now().add(const Duration(minutes: 10));
+      await db.createClass(classId: 'c1', startTime: start);
+
+      final result =
+          await sut.checkInByClassQr(classId: 'c1', userId: 'u1');
+
+      expect(result['status'], 'error');
+      expect(result['message'], contains("don't have a booking"));
+    });
+
+    test('checkInByClassQr returns error when the class does not exist',
+        () async {
+      final result =
+          await sut.checkInByClassQr(classId: 'ghost', userId: 'u1');
+      expect(result['status'], 'error');
+      expect(result['message'], 'Class not found.');
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 31. markDropInPaid (edge cases beyond group 15b)
+  // ══════════════════════════════════════════════════════════════════════════
+  group('31 • markDropInPaid extra cases', () {
+    test('throws when marking a booking that does not exist', () async {
+      expect(
+        () => sut.markDropInPaid('missing'),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 32. notifyClassMembers
+  // ══════════════════════════════════════════════════════════════════════════
+  group('32 • notifyClassMembers', () {
+    test('creates a notification for every member booking', () async {
+      final bookings = [
+        Booking(
+            id: 'b1', userId: 'u1', classId: 'c1', createdAt: DateTime.now()),
+        Booking(
+            id: 'b2', userId: 'u2', classId: 'c1', createdAt: DateTime.now()),
+      ];
+
+      await sut.notifyClassMembers(
+        bookings: bookings,
+        title: 'Class update',
+        body: 'The class time changed.',
+        classId: 'c1',
+      );
+
+      final notifications = await db.collection('notifications').get();
+      expect(notifications.docs, hasLength(2));
+    });
+
+    test('skips guest bookings with an empty userId', () async {
+      final bookings = [
+        Booking(id: 'g1', userId: '', classId: 'c1', createdAt: DateTime.now()),
+      ];
+
+      await sut.notifyClassMembers(
+        bookings: bookings,
+        title: 'Class update',
+        body: 'body',
+        classId: 'c1',
+      );
+
+      final notifications = await db.collection('notifications').get();
+      expect(notifications.docs, isEmpty);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 33. booking-rule getters/setters (direct coverage)
+  // ══════════════════════════════════════════════════════════════════════════
+  group('33 • booking-rule getters/setters', () {
+    test('getMaxBookingsPerDay defaults to 0 and setMaxBookingsPerDay persists',
+        () async {
+      expect(await sut.getMaxBookingsPerDay(), 0);
+      await sut.setMaxBookingsPerDay(5);
+      expect(await sut.getMaxBookingsPerDay(), 5);
+    });
+
+    test('getLateCancellationMinutes defaults to 0 and set persists',
+        () async {
+      expect(await sut.getLateCancellationMinutes(), 0);
+      await sut.setLateCancellationMinutes(120);
+      expect(await sut.getLateCancellationMinutes(), 120);
+    });
+
+    test('getMinAdvanceBookingMinutes defaults to 0 and set persists',
+        () async {
+      expect(await sut.getMinAdvanceBookingMinutes(), 0);
+      await sut.setMinAdvanceBookingMinutes(60);
+      expect(await sut.getMinAdvanceBookingMinutes(), 60);
+    });
+
+    test(
+        'getPreventOverlappingBookings defaults to false and set persists',
+        () async {
+      expect(await sut.getPreventOverlappingBookings(), isFalse);
+      await sut.setPreventOverlappingBookings(true);
+      expect(await sut.getPreventOverlappingBookings(), isTrue);
+    });
+
+    test('getPreventSameClassTypePerDay defaults to false and set persists',
+        () async {
+      expect(await sut.getPreventSameClassTypePerDay(), isFalse);
+      await sut.setPreventSameClassTypePerDay(true);
+      expect(await sut.getPreventSameClassTypePerDay(), isTrue);
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 34. per-class / per-user booking streams
+  // ══════════════════════════════════════════════════════════════════════════
+  group('34 • streamBookingsForClass / streamBookingsForUser / classId sets',
+      () {
+    test('streamBookingsForClass returns only bookings for that class, '
+        'sorted oldest-first', () async {
+      await db.collection('bookings').add({
+        'userId': 'u1',
+        'classId': 'c1',
+        'gymId': '',
+        'createdAt': Timestamp.fromDate(DateTime(2030, 1, 2)),
+      });
+      await db.collection('bookings').add({
+        'userId': 'u2',
+        'classId': 'c1',
+        'gymId': '',
+        'createdAt': Timestamp.fromDate(DateTime(2030, 1, 1)),
+      });
+      await db.collection('bookings').add({
+        'userId': 'u3',
+        'classId': 'c2',
+        'gymId': '',
+        'createdAt': Timestamp.now(),
+      });
+
+      final bookings = await sut.streamBookingsForClass('c1').first;
+
+      expect(bookings, hasLength(2));
+      expect(bookings.first.userId, 'u2');
+    });
+
+    test('streamBookingsForUser sorts newest-first', () async {
+      await db.collection('bookings').add({
+        'userId': 'u1',
+        'classId': 'c1',
+        'gymId': '',
+        'createdAt': Timestamp.fromDate(DateTime(2030, 1, 1)),
+      });
+      await db.collection('bookings').add({
+        'userId': 'u1',
+        'classId': 'c2',
+        'gymId': '',
+        'createdAt': Timestamp.fromDate(DateTime(2030, 1, 5)),
+      });
+
+      final bookings = await sut.streamBookingsForUser('u1').first;
+
+      expect(bookings.first.classId, 'c2');
+    });
+
+    test('streamBookedClassIds returns the set of classIds a user booked',
+        () async {
+      await db.collection('bookings').add({
+        'userId': 'u1',
+        'classId': 'c1',
+        'gymId': '',
+        'createdAt': Timestamp.now(),
+      });
+      await db.collection('bookings').add({
+        'userId': 'u1',
+        'classId': 'c2',
+        'gymId': '',
+        'createdAt': Timestamp.now(),
+      });
+
+      final ids = await sut.streamBookedClassIds('u1').first;
+      expect(ids, {'c1', 'c2'});
+    });
+
+    test('streamWaitlistedClassIds returns the set of classIds a user is '
+        'waitlisted for', () async {
+      await db.createWaitlistEntry(userId: 'u1', classId: 'c1');
+      await db.createWaitlistEntry(userId: 'u1', classId: 'c2');
+      await db.createWaitlistEntry(userId: 'u2', classId: 'c3');
+
+      final ids = await sut.streamWaitlistedClassIds('u1').first;
+      expect(ids, {'c1', 'c2'});
+    });
+
+    test('streamCheckedInUserIds returns userIds with attendance for a class',
+        () async {
+      await db.collection('attendance').add({'userId': 'u1', 'classId': 'c1'});
+      await db.collection('attendance').add({'userId': 'u2', 'classId': 'c2'});
+
+      final ids = await sut.streamCheckedInUserIds('c1').first;
+      expect(ids, {'u1'});
     });
   });
 }
