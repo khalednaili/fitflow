@@ -24,6 +24,9 @@ import 'tabs/admin_wod_tab.dart';
 import 'tabs/admin_billing_tab.dart';
 import 'tabs/admin_finance_tab.dart';
 import 'tabs/admin_announcements_tab.dart';
+import 'tabs/admin_pos_tab.dart';
+import 'tabs/admin_products_tab.dart';
+import 'tabs/admin_sales_tab.dart';
 import '../../l10n/app_localizations.dart';
 
 // Tab definition
@@ -140,6 +143,24 @@ const _tabs = <_AdminTab>[
     activeIcon: Icons.campaign_rounded,
     color: Color(0xFF7C3AED),
   ),
+  _AdminTab(
+    label: 'POS',
+    icon: Icons.point_of_sale_outlined,
+    activeIcon: Icons.point_of_sale,
+    color: Color(0xFFDC2626),
+  ),
+  _AdminTab(
+    label: 'Products',
+    icon: Icons.inventory_2_outlined,
+    activeIcon: Icons.inventory_2,
+    color: Color(0xFFDC2626),
+  ),
+  _AdminTab(
+    label: 'Sales',
+    icon: Icons.receipt_outlined,
+    activeIcon: Icons.receipt,
+    color: Color(0xFFDC2626),
+  ),
 ];
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -211,6 +232,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             gymId: gymId,
             userId: uid,
             child: AdminAnnouncementsTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminPosTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminProductsTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminSalesTab(gymId: gymId)),
       ];
 
   @override
@@ -706,6 +733,7 @@ const _sidebarGroups = <(String, List<int>)>[
   // tab was inserted at index 0 — included here alongside Finance (14) so
   // both remain reachable from the sidebar.
   ('COMMS', [14, 15]),
+  ('STORE', [16, 17, 18]),
 ];
 
 class _AdminSidebar extends StatelessWidget {

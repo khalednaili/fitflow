@@ -26,6 +26,9 @@ import 'tabs/admin_wod_tab.dart';
 import 'tabs/admin_billing_tab.dart';
 import 'tabs/admin_finance_tab.dart';
 import 'tabs/admin_announcements_tab.dart';
+import 'tabs/admin_pos_tab.dart';
+import 'tabs/admin_products_tab.dart';
+import 'tabs/admin_sales_tab.dart';
 import '../../l10n/app_localizations.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -200,6 +203,29 @@ const _adminSections = <_AdminSection>[
       color: Color(0xFF7C3AED),
     ),
   ]),
+  _AdminSection(title: 'STORE', items: [
+    _AdminItem(
+      index: 17,
+      label: 'POS',
+      icon: Icons.point_of_sale_outlined,
+      activeIcon: Icons.point_of_sale,
+      color: Color(0xFFDC2626),
+    ),
+    _AdminItem(
+      index: 18,
+      label: 'Products',
+      icon: Icons.inventory_2_outlined,
+      activeIcon: Icons.inventory_2,
+      color: Color(0xFFDC2626),
+    ),
+    _AdminItem(
+      index: 19,
+      label: 'Sales',
+      icon: Icons.receipt_outlined,
+      activeIcon: Icons.receipt,
+      color: Color(0xFFDC2626),
+    ),
+  ]),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -302,6 +328,9 @@ class _AdminShellState extends State<AdminShell> {
       11 => AdminBillingTab(gymId: gymId),
       12 => AdminFinanceTab(gymId: gymId),
       13 => AdminAnnouncementsTab(gymId: gymId),
+      17 => AdminPosTab(gymId: gymId),
+      18 => AdminProductsTab(gymId: gymId),
+      19 => AdminSalesTab(gymId: gymId),
       _ => AdminCalendarScreen(gymId: gymId),
     };
   }
