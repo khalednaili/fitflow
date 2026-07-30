@@ -1,0 +1,82 @@
+name: Test, Build APK & Distribute
+
+# Runs on every push (any branch). The APK build + Firebase App
+# Distribution upload only happen for pushes to `main` — other branches
+# only run analyze/test so PRs get fast feedback without needing an APK.
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch: {}
+
+env:
+  FLUTTER_VERSION: '3.29.0'
+
+jobs:
+  test:
+    name: Analyze & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      # These files are gitignored (contain project config) and are
+      # reconstructed here from repo secrets so the app compiles in CI.
+      - name: Restore Firebase config files
+        run: |
+          echo "${{ secrets.FIREBASE_OPTIONS_DART_B64 }}" | base64 --decode > lib/firebase_options.dart
+          mkdir -p android/app
+          echo "${{ secrets.GOOGLE_SERVICES_JSON_B64 }}" | base64 --decode > android/app/google-services.json
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: dart analyze lib/ test/
+
+      - name: Run tests
+        run: flutter test
+
+  build-and-distribute:
+    name: Build APK & Distribute to Firebase
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Restore Firebase config files
+        run: |
+          echo "${{ secrets.FIREBASE_OPTIONS_DART_B64 }}" | base64 --decode > lib/firebase_options.dart
+          mkdir -p android/app
+          echo "${{ secrets.GOOGLE_SERVICES_JSON_B64 }}" | base64 --decode > android/app/google-services.json
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Distribute to Firebase App Distribution
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          groups: ${{ vars.FIREBASE_DISTRIBUTION_GROUPS }}
+          file: build/app/outputs/flutter-apk/app-release.apk
+          releaseNotes: |
+            Automated build from commit ${{ github.sha }} on ${{ github.ref_name }}.
+            ${{ github.event.head_commit.message }}
