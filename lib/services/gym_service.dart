@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../models/gym.dart';
 
@@ -36,6 +37,24 @@ class GymService {
     final doc = await _gyms.doc(gymId).get();
     if (!doc.exists) return null;
     return Gym.fromSnapshot(doc);
+  }
+
+  /// Fetch several gyms by ID at once (e.g. gyms a multi-gym member joined).
+  /// Ignores IDs that don't exist. Firestore `whereIn` supports up to 30
+  /// values per query, so batches are chunked defensively.
+  Future<List<Gym>> getGymsByIds(List<String> gymIds) async {
+    final ids = gymIds.toSet().toList();
+    if (ids.isEmpty) return [];
+
+    final results = <Gym>[];
+    for (var i = 0; i < ids.length; i += 30) {
+      final chunk = ids.sublist(i, i + 30 > ids.length ? ids.length : i + 30);
+      final snap = await _gyms
+          .where(FieldPath.documentId, whereIn: chunk)
+          .get();
+      results.addAll(snap.docs.map(Gym.fromSnapshot));
+    }
+    return results;
   }
 
   /// Update gym status: 'active' | 'suspended'.
@@ -86,6 +105,61 @@ class GymService {
         .count()
         .get();
     return snap.count ?? 0;
+  }
+
+  /// Distance in kilometers between two coordinates (haversine formula).
+  /// Pure/static so it's trivially unit-testable without location services.
+  static double distanceKm(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
+    return Geolocator.distanceBetween(lat1, lon1, lat2, lon2) / 1000.0;
+  }
+
+  /// Sorts [gyms] by distance from ([fromLat], [fromLon]) ascending. Gyms
+  /// without coordinates are placed at the end, in their original relative
+  /// order.
+  static List<Gym> sortByDistance(
+    List<Gym> gyms,
+    double fromLat,
+    double fromLon,
+  ) {
+    final located = gyms.where((g) => g.hasLocation).toList()
+      ..sort((a, b) {
+        final da = distanceKm(fromLat, fromLon, a.latitude!, a.longitude!);
+        final db = distanceKm(fromLat, fromLon, b.latitude!, b.longitude!);
+        return da.compareTo(db);
+      });
+    final unlocated = gyms.where((g) => !g.hasLocation).toList();
+    return [...located, ...unlocated];
+  }
+
+  /// Requests (if needed) and returns the device's current position.
+  /// Returns null when permission is denied or location services are off —
+  /// callers should fall back to unsorted / alphabetical order in that case.
+  Future<Position?> getCurrentPosition() async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) return null;
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      return null;
+    }
+
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.medium),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Permanently deletes a gym and all Firestore data scoped to it.

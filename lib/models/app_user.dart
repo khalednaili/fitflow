@@ -10,6 +10,7 @@ class AppUser {
     required this.membershipPlanId,
     required this.subscriptionStatus,
     this.gymId = '',
+    this.gymIds = const [],
     this.phoneNumber = '',
     this.photoUrl = '',
     this.gender = '',
@@ -37,8 +38,13 @@ class AppUser {
   final String membershipPlanId;
   final String subscriptionStatus;
 
-  /// The gym this user belongs to. Empty for super_admin accounts.
+  /// The gym currently "active"/selected for this user — drives which gym's
+  /// classes/bookings/products/etc. they see. Empty for super_admin accounts.
   final String gymId;
+
+  /// All gyms this member currently belongs to (multi-gym membership).
+  /// Falls back to [gymId] when empty for backward compatibility.
+  final List<String> gymIds;
 
   // Personal info
   final String phoneNumber;
@@ -71,6 +77,18 @@ class AppUser {
       effectiveRoles.contains('admin') || effectiveRoles.contains('owner');
   bool get isStaff => effectiveRoles.contains('staff');
   bool get isCoach => effectiveRoles.contains('coach');
+
+  /// All gyms the member belongs to (deduped, `gymId` first). Falls back to
+  /// [gymId] alone when [gymIds] hasn't been populated yet.
+  List<String> get effectiveGymIds {
+    final combined = <String>[
+      if (gymId.isNotEmpty) gymId,
+      ...gymIds.where((g) => g.isNotEmpty),
+    ];
+    return combined.toSet().toList();
+  }
+
+  bool get isMultiGymMember => effectiveGymIds.length > 1;
 
   int? get age {
     if (dateOfBirth == null) return null;
@@ -105,6 +123,10 @@ class AppUser {
       membershipPlanId: (data['membershipPlanId'] ?? '') as String,
       subscriptionStatus: (data['subscriptionStatus'] ?? 'none') as String,
       gymId: (data['gymId'] ?? '') as String,
+      gymIds: (data['gymIds'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .where((e) => e.isNotEmpty)
+          .toList(),
       phoneNumber: (data['phoneNumber'] ?? '') as String,
       photoUrl: (data['photoUrl'] ?? '') as String,
       gender: (data['gender'] ?? '') as String,
@@ -144,6 +166,7 @@ class AppUser {
       'role': role,
       'roles': effectiveRoles,
       'gymId': gymId,
+      'gymIds': effectiveGymIds,
       'membershipPlanId': membershipPlanId,
       'subscriptionStatus': subscriptionStatus,
       'phoneNumber': phoneNumber,

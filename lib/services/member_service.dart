@@ -361,7 +361,55 @@ class MemberService {
   }) async {
     await _firestore.collection('users').doc(userId).update(<String, dynamic>{
       'gymId': gymId,
+      'gymIds': FieldValue.arrayUnion([gymId]),
       'updatedAt': Timestamp.now(),
     });
+  }
+
+  /// Adds an additional gym to a member's memberships without switching the
+  /// active gym (used for "join another gym" while multi-gym is enabled).
+  Future<void> joinAdditionalGym({
+    required String userId,
+    required String gymId,
+  }) async {
+    await _firestore.collection('users').doc(userId).update(<String, dynamic>{
+      'gymIds': FieldValue.arrayUnion([gymId]),
+      'updatedAt': Timestamp.now(),
+    });
+  }
+
+  /// Switches which gym is "active" (drives classes/bookings/products) for a
+  /// member who already belongs to it.
+  Future<void> switchActiveGym({
+    required String userId,
+    required String gymId,
+  }) async {
+    await _firestore.collection('users').doc(userId).update(<String, dynamic>{
+      'gymId': gymId,
+      'gymIds': FieldValue.arrayUnion([gymId]),
+      'updatedAt': Timestamp.now(),
+    });
+  }
+
+  /// Removes a gym from a member's memberships. If it was the active gym,
+  /// switches active gym to another remaining membership (or clears it).
+  Future<void> leaveGym({
+    required String userId,
+    required String gymId,
+  }) async {
+    final docRef = _firestore.collection('users').doc(userId);
+    final snap = await docRef.get();
+    final user = AppUser.fromSnapshot(snap);
+    final remaining =
+        user.effectiveGymIds.where((g) => g != gymId).toList();
+
+    final updates = <String, dynamic>{
+      'gymIds': FieldValue.arrayRemove([gymId]),
+      'updatedAt': Timestamp.now(),
+    };
+    if (user.gymId == gymId) {
+      updates['gymId'] = remaining.isNotEmpty ? remaining.first : '';
+    }
+    await docRef.update(updates);
   }
 }

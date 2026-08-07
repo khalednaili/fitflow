@@ -15,6 +15,7 @@ import 'membership_screen.dart';
 import 'my_offers_screen.dart';
 import 'friends_screen.dart';
 import 'gyms_map_screen.dart';
+import 'my_gyms_screen.dart';
 
 // ── Brand colours (mirror home_shell.dart) ────────────────────────────────
 const _kTeal = Color(0xFF0F766E);
@@ -572,6 +573,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               builder: (_) =>
                                                   const GymsMapScreen())),
                                     );
+                                    final myGymsCard = _NavCard(
+                                      icon: Icons.fitness_center_outlined,
+                                      iconColor: _kOrange,
+                                      label: l10n.tr('My Gyms'),
+                                      subtitle: l10n.tr(
+                                          'Switch, join, or leave gyms near you'),
+                                      onTap: () => Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                              builder: (_) =>
+                                                  const MyGymsScreen())),
+                                    );
                                     if (isWide) {
                                       return Column(
                                         children: [
@@ -590,6 +602,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               Expanded(child: gymsMapCard),
                                             ],
                                           ),
+                                          SizedBox(height: 10),
+                                          myGymsCard,
                                         ],
                                       );
                                     }
@@ -602,6 +616,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         friendsCard,
                                         SizedBox(height: 10),
                                         gymsMapCard,
+                                        SizedBox(height: 10),
+                                        myGymsCard,
                                       ],
                                     );
                                   }),

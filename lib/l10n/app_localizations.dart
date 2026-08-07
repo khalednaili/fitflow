@@ -1104,6 +1104,20 @@ class AppLocalizations {
         'Tap the map to set the gym location',
     '{count} gym(s) not yet shown on the map':
         '{count} gym(s) not yet shown on the map',
+    'My Gyms': 'My Gyms',
+    'Switch, join, or leave gyms near you':
+        'Switch, join, or leave gyms near you',
+    'Set Active': 'Set Active',
+    'Leave Gym': 'Leave Gym',
+    'Join Another Gym': 'Join Another Gym',
+    'No other gyms available yet.': 'No other gyms available yet.',
+    'Enable location access to sort gyms by distance.':
+        'Enable location access to sort gyms by distance.',
+    "You haven't joined any gyms yet.": "You haven't joined any gyms yet.",
+    'Switched active gym to {name}': 'Switched active gym to {name}',
+    'Are you sure you want to leave {name}?':
+        'Are you sure you want to leave {name}?',
+    'Joined {name}': 'Joined {name}',
   };
 
   static const _fr = <String, String>{
@@ -2214,6 +2228,21 @@ class AppLocalizations {
         'Touchez la carte pour définir l\'emplacement de la salle',
     '{count} gym(s) not yet shown on the map':
         '{count} salle(s) pas encore affichée(s) sur la carte',
+    'My Gyms': 'Mes salles',
+    'Switch, join, or leave gyms near you':
+        'Changer, rejoindre ou quitter des salles près de vous',
+    'Set Active': 'Définir comme active',
+    'Leave Gym': 'Quitter la salle',
+    'Join Another Gym': 'Rejoindre une autre salle',
+    'No other gyms available yet.': 'Aucune autre salle disponible pour le moment.',
+    'Enable location access to sort gyms by distance.':
+        'Activez la localisation pour trier les salles par distance.',
+    "You haven't joined any gyms yet.":
+        "Vous n'avez rejoint aucune salle pour le moment.",
+    'Switched active gym to {name}': 'Salle active changée pour {name}',
+    'Are you sure you want to leave {name}?':
+        'Êtes-vous sûr de vouloir quitter {name} ?',
+    'Joined {name}': 'A rejoint {name}',
   };
 
   static AppLocalizations of(BuildContext context) {
