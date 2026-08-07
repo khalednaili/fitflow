@@ -1064,6 +1064,46 @@ class AppLocalizations {
     'Booking': 'Booking',
     'Member Profile': 'Member Profile',
     'Attendance History': 'Attendance History',
+    'Store': 'Store',
+    'My Orders': 'My Orders',
+    'Category': 'Category',
+    'All categories': 'All categories',
+    'Search': 'Search',
+    'No products found': 'No products found',
+    'Out of stock': 'Out of stock',
+    'Cart': 'Cart',
+    'Cart is empty': 'Cart is empty',
+    'Place Order': 'Place Order',
+    'Order placed! Pick up and pay at the gym.':
+        'Order placed! Pick up and pay at the gym.',
+    'Could not place order: {error}': 'Could not place order: {error}',
+    'ready': 'Ready',
+    "You haven't placed any orders yet.":
+        "You haven't placed any orders yet.",
+    'Orders': 'Orders',
+    'Mark Ready': 'Mark Ready',
+    'Mark Completed': 'Mark Completed',
+    'Cancel Order': 'Cancel Order',
+    'Cancel order?': 'Cancel order?',
+    'This will restore stock for all items in this order.':
+        'This will restore stock for all items in this order.',
+    'Order cancelled': 'Order cancelled',
+    'Could not update order: {error}': 'Could not update order: {error}',
+    '{count} pending': '{count} pending',
+    'Exported {count} order(s)': 'Exported {count} order(s)',
+    'Order Details': 'Order Details',
+    'Location': 'Location',
+    'Not set': 'Not set',
+    'Set Location': 'Set Location',
+    'Gym Location': 'Gym Location',
+    'Explore Gyms': 'Explore Gyms',
+    'Find gym locations on the map': 'Find gym locations on the map',
+    'Get Directions': 'Get Directions',
+    'No gym locations available yet.': 'No gym locations available yet.',
+    'Tap the map to set the gym location':
+        'Tap the map to set the gym location',
+    '{count} gym(s) not yet shown on the map':
+        '{count} gym(s) not yet shown on the map',
   };
 
   static const _fr = <String, String>{
@@ -2132,6 +2172,48 @@ class AppLocalizations {
     'Invoice #': 'Facture n°',
     'Issued': 'Émise le',
     'Due': 'Échéance',
+    'Store': 'Boutique',
+    'My Orders': 'Mes commandes',
+    'Category': 'Catégorie',
+    'All categories': 'Toutes les catégories',
+    'Search': 'Rechercher',
+    'No products found': 'Aucun produit trouvé',
+    'Out of stock': 'Rupture de stock',
+    'Cart': 'Panier',
+    'Cart is empty': 'Le panier est vide',
+    'Place Order': 'Passer la commande',
+    'Order placed! Pick up and pay at the gym.':
+        'Commande passée ! Récupérez-la et payez à la salle.',
+    'Could not place order: {error}': 'Impossible de passer la commande : {error}',
+    'ready': 'Prête',
+    "You haven't placed any orders yet.":
+        "Vous n'avez pas encore passé de commande.",
+    'Orders': 'Commandes',
+    'Mark Ready': 'Marquer prête',
+    'Mark Completed': 'Marquer terminée',
+    'Cancel Order': 'Annuler la commande',
+    'Cancel order?': 'Annuler la commande ?',
+    'This will restore stock for all items in this order.':
+        'Cela restaurera le stock de tous les articles de cette commande.',
+    'Order cancelled': 'Commande annulée',
+    'Could not update order: {error}':
+        'Impossible de mettre à jour la commande : {error}',
+    '{count} pending': '{count} en attente',
+    'Exported {count} order(s)': '{count} commande(s) exportée(s)',
+    'Order Details': 'Détails de la commande',
+    'Location': 'Emplacement',
+    'Not set': 'Non défini',
+    'Set Location': 'Définir l\'emplacement',
+    'Gym Location': 'Emplacement de la salle',
+    'Explore Gyms': 'Explorer les salles',
+    'Find gym locations on the map': 'Trouvez les salles sur la carte',
+    'Get Directions': 'Itinéraire',
+    'No gym locations available yet.':
+        'Aucun emplacement de salle disponible pour le moment.',
+    'Tap the map to set the gym location':
+        'Touchez la carte pour définir l\'emplacement de la salle',
+    '{count} gym(s) not yet shown on the map':
+        '{count} salle(s) pas encore affichée(s) sur la carte',
   };
 
   static AppLocalizations of(BuildContext context) {

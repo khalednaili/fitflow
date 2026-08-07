@@ -104,6 +104,8 @@ exports.superAdminCreateGym = functions.https.onCall(async (data, context) => {
   const gymName = (data.gymName || '').trim();
   const gymAddress = (data.gymAddress || '').trim();
   const gymDescription = (data.gymDescription || '').trim();
+  const gymLatitude = typeof data.gymLatitude === 'number' ? data.gymLatitude : null;
+  const gymLongitude = typeof data.gymLongitude === 'number' ? data.gymLongitude : null;
   const adminEmail = (data.adminEmail || '').trim();
   const adminPassword = (data.adminPassword || '').trim();
   const adminName = (data.adminName || '').trim();
@@ -144,6 +146,8 @@ exports.superAdminCreateGym = functions.https.onCall(async (data, context) => {
       address: gymAddress,
       description: gymDescription,
       logoUrl: '',
+      ...(gymLatitude !== null ? { latitude: gymLatitude } : {}),
+      ...(gymLongitude !== null ? { longitude: gymLongitude } : {}),
       adminUid,
       adminEmail,
       status: 'active',

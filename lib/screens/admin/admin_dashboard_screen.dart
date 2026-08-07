@@ -26,6 +26,7 @@ import 'tabs/admin_finance_tab.dart';
 import 'tabs/admin_announcements_tab.dart';
 import 'tabs/admin_pos_tab.dart';
 import 'tabs/admin_products_tab.dart';
+import 'tabs/admin_orders_tab.dart';
 import 'tabs/admin_sales_tab.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -161,6 +162,12 @@ const _tabs = <_AdminTab>[
     activeIcon: Icons.receipt,
     color: Color(0xFFDC2626),
   ),
+  _AdminTab(
+    label: 'Orders',
+    icon: Icons.list_alt_outlined,
+    activeIcon: Icons.list_alt,
+    color: Color(0xFFDC2626),
+  ),
 ];
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -238,6 +245,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             gymId: gymId, userId: uid, child: AdminProductsTab(gymId: gymId)),
         _WithAdminBanner(
             gymId: gymId, userId: uid, child: AdminSalesTab(gymId: gymId)),
+        _WithAdminBanner(
+            gymId: gymId, userId: uid, child: AdminOrdersTab(gymId: gymId)),
       ];
 
   @override
@@ -733,7 +742,7 @@ const _sidebarGroups = <(String, List<int>)>[
   // tab was inserted at index 0 — included here alongside Finance (14) so
   // both remain reachable from the sidebar.
   ('COMMS', [14, 15]),
-  ('STORE', [16, 17, 18]),
+  ('STORE', [16, 17, 18, 19]),
 ];
 
 class _AdminSidebar extends StatelessWidget {

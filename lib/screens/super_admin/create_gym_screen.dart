@@ -1,7 +1,9 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:fit_flow/utils/crash_logger.dart';
 import '../../l10n/app_localizations.dart';
+import '../../widgets/location_picker_map.dart';
 
 class CreateGymScreen extends StatefulWidget {
   const CreateGymScreen({super.key});
@@ -21,6 +23,7 @@ class _CreateGymScreenState extends State<CreateGymScreen> {
   final _adminNameController = TextEditingController();
   final _adminEmailController = TextEditingController();
   final _adminPasswordController = TextEditingController();
+  LatLng? _gymLocation;
 
   @override
   void dispose() {
@@ -48,6 +51,8 @@ class _CreateGymScreenState extends State<CreateGymScreen> {
         'gymName': _gymNameController.text.trim(),
         'gymAddress': _gymAddressController.text.trim(),
         'gymDescription': _gymDescriptionController.text.trim(),
+        if (_gymLocation != null) 'gymLatitude': _gymLocation!.latitude,
+        if (_gymLocation != null) 'gymLongitude': _gymLocation!.longitude,
         'adminName': _adminNameController.text.trim(),
         'adminEmail': _adminEmailController.text.trim(),
         'adminPassword': _adminPasswordController.text,
@@ -131,6 +136,16 @@ class _CreateGymScreenState extends State<CreateGymScreen> {
                       prefixIcon: Icon(Icons.description_outlined),
                     ),
                     maxLines: 3,
+                  ),
+                  SizedBox(height: 16),
+                  Text(context.l10n.tr('Location'),
+                      style: Theme.of(context).textTheme.titleSmall),
+                  SizedBox(height: 8),
+                  LocationPickerMap(
+                    initialLatitude: _gymLocation?.latitude,
+                    initialLongitude: _gymLocation?.longitude,
+                    onChanged: (point) =>
+                        setState(() => _gymLocation = point),
                   ),
                   SizedBox(height: 32),
 

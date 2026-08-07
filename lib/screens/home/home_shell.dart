@@ -15,6 +15,7 @@ import '../wod/wod_screen.dart';
 import 'classes_screen.dart';
 import 'dashboard_screen.dart';
 import 'my_bookings_screen.dart';
+import 'products_screen.dart';
 import 'profile_screen.dart';
 
 class HomeShell extends StatefulWidget {
@@ -74,6 +75,7 @@ class _HomeShellState extends State<HomeShell> {
       ClassesScreen(gymId: gymId, appUser: appUser),
       WodScreen(gymId: gymId),
       MyBookingsScreen(gymId: gymId),
+      ProductsScreen(gymId: gymId),
       ProfileScreen(gymId: gymId),
     ];
     if (showScanTab) screens.add(QrScannerScreen(gymId: gymId));
@@ -111,6 +113,12 @@ class _HomeShellState extends State<HomeShell> {
         icon: Icons.event_note_outlined,
         activeIcon: Icons.event_note,
         label: l10n.tr('Bookings'),
+        color: _primaryTeal,
+      ),
+      _NavItem(
+        icon: Icons.shopping_bag_outlined,
+        activeIcon: Icons.shopping_bag,
+        label: l10n.tr('Store'),
         color: _primaryTeal,
       ),
       _NavItem(

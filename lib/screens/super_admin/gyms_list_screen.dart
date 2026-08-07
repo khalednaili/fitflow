@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 
 import 'package:fit_flow/utils/crash_logger.dart';
 import '../../models/gym.dart';
 import '../../services/gym_service.dart';
+import '../../widgets/location_picker_map.dart';
 import 'create_gym_screen.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -342,6 +344,67 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     }
   }
 
+  Future<void> _editLocation() async {
+    final result = await showDialog<LatLng?>(
+      context: context,
+      builder: (dialogContext) {
+        LatLng? picked = _gym.hasLocation
+            ? LatLng(_gym.latitude!, _gym.longitude!)
+            : null;
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            title: Text(dialogContext.l10n.tr('Gym Location')),
+            content: SizedBox(
+              width: 420,
+              child: LocationPickerMap(
+                initialLatitude: picked?.latitude,
+                initialLongitude: picked?.longitude,
+                onChanged: (point) => setDialogState(() => picked = point),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text(dialogContext.l10n.tr('Cancel')),
+              ),
+              FilledButton(
+                onPressed: picked == null
+                    ? null
+                    : () => Navigator.pop(dialogContext, picked),
+                child: Text(dialogContext.l10n.tr('Save')),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+
+    if (result == null || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await _gymService.updateGym(
+        _gym.id,
+        latitude: result.latitude,
+        longitude: result.longitude,
+      );
+      final updated = await _gymService.getGym(_gym.id);
+      if (updated != null && mounted) {
+        setState(() => _gym = updated);
+      }
+    } catch (e, s) {
+      await CrashLogger.log(e, s, reason: 'updateGymLocation');
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('${context.l10n.tr('Error')}: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -393,6 +456,27 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                     label: context.l10n.tr('Description'),
                     value: _gym.description,
                   ),
+                _InfoRow(
+                  label: context.l10n.tr('Location'),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _gym.hasLocation
+                              ? '${_gym.latitude!.toStringAsFixed(5)}, '
+                                  '${_gym.longitude!.toStringAsFixed(5)}'
+                              : context.l10n.tr('Not set'),
+                          style: TextStyle(fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _editLocation,
+                        child: Text(context.l10n.tr(
+                            _gym.hasLocation ? 'Edit' : 'Set Location')),
+                      ),
+                    ],
+                  ),
+                ),
                 _InfoRow(
                   label: context.l10n.tr('Created'),
                   value:

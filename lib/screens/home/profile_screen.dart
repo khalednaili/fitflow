@@ -14,6 +14,7 @@ import '../../widgets/user_avatar.dart';
 import 'membership_screen.dart';
 import 'my_offers_screen.dart';
 import 'friends_screen.dart';
+import 'gyms_map_screen.dart';
 
 // ── Brand colours (mirror home_shell.dart) ────────────────────────────────
 const _kTeal = Color(0xFF0F766E);
@@ -560,6 +561,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               builder: (_) => FriendsScreen(
                                                   gymId: widget.gymId))),
                                     );
+                                    final gymsMapCard = _NavCard(
+                                      icon: Icons.map_outlined,
+                                      iconColor: _kTeal,
+                                      label: l10n.tr('Explore Gyms'),
+                                      subtitle:
+                                          l10n.tr('Find gym locations on the map'),
+                                      onTap: () => Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                              builder: (_) =>
+                                                  const GymsMapScreen())),
+                                    );
                                     if (isWide) {
                                       return Column(
                                         children: [
@@ -571,7 +583,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                             ],
                                           ),
                                           SizedBox(height: 10),
-                                          friendsCard,
+                                          Row(
+                                            children: [
+                                              Expanded(child: friendsCard),
+                                              SizedBox(width: 10),
+                                              Expanded(child: gymsMapCard),
+                                            ],
+                                          ),
                                         ],
                                       );
                                     }
@@ -582,6 +600,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         membershipCard,
                                         SizedBox(height: 10),
                                         friendsCard,
+                                        SizedBox(height: 10),
+                                        gymsMapCard,
                                       ],
                                     );
                                   }),

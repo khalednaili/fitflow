@@ -53,6 +53,8 @@ class GymService {
     String? description,
     String? address,
     String? logoUrl,
+    double? latitude,
+    double? longitude,
   }) async {
     final updates = <String, dynamic>{
       'updatedAt': FieldValue.serverTimestamp(),
@@ -61,6 +63,8 @@ class GymService {
     if (description != null) updates['description'] = description;
     if (address != null) updates['address'] = address;
     if (logoUrl != null) updates['logoUrl'] = logoUrl;
+    if (latitude != null) updates['latitude'] = latitude;
+    if (longitude != null) updates['longitude'] = longitude;
     await _gyms.doc(gymId).update(updates);
   }
 

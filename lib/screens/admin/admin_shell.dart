@@ -28,6 +28,7 @@ import 'tabs/admin_finance_tab.dart';
 import 'tabs/admin_announcements_tab.dart';
 import 'tabs/admin_pos_tab.dart';
 import 'tabs/admin_products_tab.dart';
+import 'tabs/admin_orders_tab.dart';
 import 'tabs/admin_sales_tab.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -225,6 +226,13 @@ const _adminSections = <_AdminSection>[
       activeIcon: Icons.receipt,
       color: Color(0xFFDC2626),
     ),
+    _AdminItem(
+      index: 20,
+      label: 'Orders',
+      icon: Icons.list_alt_outlined,
+      activeIcon: Icons.list_alt,
+      color: Color(0xFFDC2626),
+    ),
   ]),
 ];
 
@@ -331,6 +339,7 @@ class _AdminShellState extends State<AdminShell> {
       17 => AdminPosTab(gymId: gymId),
       18 => AdminProductsTab(gymId: gymId),
       19 => AdminSalesTab(gymId: gymId),
+      20 => AdminOrdersTab(gymId: gymId),
       _ => AdminCalendarScreen(gymId: gymId),
     };
   }

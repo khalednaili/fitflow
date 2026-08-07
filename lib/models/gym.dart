@@ -7,6 +7,8 @@ class Gym {
     this.description = '',
     this.address = '',
     this.logoUrl = '',
+    this.latitude,
+    this.longitude,
     required this.adminUid,
     required this.adminEmail,
     required this.status,
@@ -19,6 +21,12 @@ class Gym {
   final String description;
   final String address;
   final String logoUrl;
+
+  /// Gym's geographic coordinates, set by staff when placing it on the map.
+  /// Null when the gym hasn't been located yet.
+  final double? latitude;
+  final double? longitude;
+
   final String adminUid;
   final String adminEmail;
 
@@ -31,6 +39,9 @@ class Gym {
 
   bool get isActive => status == 'active';
 
+  /// Whether this gym has been placed on the map.
+  bool get hasLocation => latitude != null && longitude != null;
+
   factory Gym.fromSnapshot(DocumentSnapshot<Map<String, dynamic>> snapshot) {
     final data = snapshot.data() ?? <String, dynamic>{};
     return Gym(
@@ -39,6 +50,8 @@ class Gym {
       description: (data['description'] ?? '') as String,
       address: (data['address'] ?? '') as String,
       logoUrl: (data['logoUrl'] ?? '') as String,
+      latitude: (data['latitude'] as num?)?.toDouble(),
+      longitude: (data['longitude'] as num?)?.toDouble(),
       adminUid: (data['adminUid'] ?? '') as String,
       adminEmail: (data['adminEmail'] ?? '') as String,
       status: (data['status'] ?? 'active') as String,
@@ -52,6 +65,8 @@ class Gym {
         'description': description,
         'address': address,
         'logoUrl': logoUrl,
+        if (latitude != null) 'latitude': latitude,
+        if (longitude != null) 'longitude': longitude,
         'adminUid': adminUid,
         'adminEmail': adminEmail,
         'status': status,
@@ -64,6 +79,8 @@ class Gym {
     String? description,
     String? address,
     String? logoUrl,
+    double? latitude,
+    double? longitude,
     String? adminUid,
     String? adminEmail,
     String? status,
@@ -74,6 +91,8 @@ class Gym {
       description: description ?? this.description,
       address: address ?? this.address,
       logoUrl: logoUrl ?? this.logoUrl,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
       adminUid: adminUid ?? this.adminUid,
       adminEmail: adminEmail ?? this.adminEmail,
       status: status ?? this.status,
