@@ -1,13 +1,23 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../models/gym.dart';
 
 class GymService {
-  GymService({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  GymService({FirebaseFirestore? firestore, FirebaseAuth? auth})
+      : _firestore = firestore ?? FirebaseFirestore.instance,
+        _authOverride = auth;
 
   final FirebaseFirestore _firestore;
+
+  /// Explicit override passed by callers (e.g. tests). When null, resolved
+  /// lazily via [_auth] so constructing a [GymService] never touches
+  /// [FirebaseAuth.instance] unless auth is actually needed.
+  final FirebaseAuth? _authOverride;
+
+  FirebaseAuth get _auth => _authOverride ?? FirebaseAuth.instance;
 
   CollectionReference<Map<String, dynamic>> get _gyms =>
       _firestore.collection('gyms');
@@ -105,6 +115,113 @@ class GymService {
         .count()
         .get();
     return snap.count ?? 0;
+  }
+
+  /// Creates a new gym and its admin account entirely client-side (no Cloud
+  /// Function dependency — this app's Firebase project is on the free Spark
+  /// plan, which does not support Cloud Functions). Uses a temporary
+  /// secondary Firebase app to create the admin's Auth account so the
+  /// currently signed-in super admin session is left untouched, mirroring
+  /// [MemberService.createMember].
+  ///
+  /// Returns the new gym's ID. Throws [FirebaseAuthException] if the admin
+  /// email is already in use, or rethrows any Firestore error after rolling
+  /// back the created Auth account so no orphaned account is left behind.
+  Future<String> createGymWithAdmin({
+    required String gymName,
+    required String adminEmail,
+    required String adminPassword,
+    String gymAddress = '',
+    String gymDescription = '',
+    double? gymLatitude,
+    double? gymLongitude,
+    String adminName = '',
+  }) async {
+    final createdBy = _auth.currentUser?.uid ?? '';
+
+    // Use a temporary secondary app so creating the gym admin's Auth account
+    // does not sign out (replace) the currently signed-in super admin.
+    final appName = 'gym-create-${DateTime.now().microsecondsSinceEpoch}';
+    final secondaryApp = await Firebase.initializeApp(
+      name: appName,
+      options: Firebase.app().options,
+    );
+
+    String? adminUid;
+    try {
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+      final credential = await secondaryAuth.createUserWithEmailAndPassword(
+        email: adminEmail,
+        password: adminPassword,
+      );
+
+      final createdUser = credential.user;
+      if (createdUser == null) {
+        throw FirebaseAuthException(
+          code: 'user-creation-failed',
+          message: 'Firebase Auth user creation returned no user.',
+        );
+      }
+      adminUid = createdUser.uid;
+      if (adminName.isNotEmpty) {
+        await createdUser.updateDisplayName(adminName);
+      }
+
+      try {
+        final gymRef = _gyms.doc();
+        final batch = _firestore.batch();
+
+        batch.set(gymRef, <String, dynamic>{
+          'name': gymName,
+          'address': gymAddress,
+          'description': gymDescription,
+          'logoUrl': '',
+          if (gymLatitude != null) 'latitude': gymLatitude,
+          if (gymLongitude != null) 'longitude': gymLongitude,
+          'adminUid': adminUid,
+          'adminEmail': adminEmail,
+          'status': 'active',
+          'createdAt': FieldValue.serverTimestamp(),
+          'createdBy': createdBy,
+        });
+
+        batch.set(_firestore.collection('users').doc(adminUid),
+            <String, dynamic>{
+          'email': adminEmail,
+          'displayName': adminName,
+          'role': 'admin',
+          'roles': ['admin'],
+          'gymId': gymRef.id,
+          'gymIds': [gymRef.id],
+          'membershipPlanId': '',
+          'subscriptionStatus': 'none',
+          'phoneNumber': '',
+          'photoUrl': '',
+          'gender': '',
+          'dateOfBirth': null,
+          'fitnessLevel': '',
+          'emergencyContactName': '',
+          'emergencyContactPhone': '',
+          'healthNotes': '',
+          'joinDate': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+
+        await batch.commit();
+        return gymRef.id;
+      } catch (_) {
+        // Roll back the Auth account so no orphaned admin login is left.
+        try {
+          await createdUser.delete();
+        } catch (_) {}
+        rethrow;
+      }
+    } finally {
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+      await secondaryAuth.signOut();
+      await secondaryApp.delete();
+    }
   }
 
   /// Distance in kilometers between two coordinates (haversine formula).

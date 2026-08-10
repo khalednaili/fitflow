@@ -1118,6 +1118,8 @@ class AppLocalizations {
     'Are you sure you want to leave {name}?':
         'Are you sure you want to leave {name}?',
     'Joined {name}': 'Joined {name}',
+    'This admin email is already in use by another account.':
+        'This admin email is already in use by another account.',
   };
 
   static const _fr = <String, String>{
@@ -2243,6 +2245,8 @@ class AppLocalizations {
     'Are you sure you want to leave {name}?':
         'Êtes-vous sûr de vouloir quitter {name} ?',
     'Joined {name}': 'A rejoint {name}',
+    'This admin email is already in use by another account.':
+        'Cet e-mail administrateur est déjà utilisé par un autre compte.',
   };
 
   static AppLocalizations of(BuildContext context) {

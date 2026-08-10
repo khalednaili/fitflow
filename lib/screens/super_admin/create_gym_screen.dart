@@ -1,8 +1,9 @@
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:fit_flow/utils/crash_logger.dart';
 import '../../l10n/app_localizations.dart';
+import '../../services/gym_service.dart';
 import '../../widgets/location_picker_map.dart';
 
 class CreateGymScreen extends StatefulWidget {
@@ -14,6 +15,7 @@ class CreateGymScreen extends StatefulWidget {
 
 class _CreateGymScreenState extends State<CreateGymScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _gymService = GymService();
   bool _loading = false;
   bool _obscurePassword = true;
 
@@ -45,18 +47,16 @@ class _CreateGymScreenState extends State<CreateGymScreen> {
 
     setState(() => _loading = true);
     try {
-      final callable =
-          FirebaseFunctions.instance.httpsCallable('superAdminCreateGym');
-      await callable.call(<String, dynamic>{
-        'gymName': _gymNameController.text.trim(),
-        'gymAddress': _gymAddressController.text.trim(),
-        'gymDescription': _gymDescriptionController.text.trim(),
-        if (_gymLocation != null) 'gymLatitude': _gymLocation!.latitude,
-        if (_gymLocation != null) 'gymLongitude': _gymLocation!.longitude,
-        'adminName': _adminNameController.text.trim(),
-        'adminEmail': _adminEmailController.text.trim(),
-        'adminPassword': _adminPasswordController.text,
-      });
+      await _gymService.createGymWithAdmin(
+        gymName: _gymNameController.text.trim(),
+        gymAddress: _gymAddressController.text.trim(),
+        gymDescription: _gymDescriptionController.text.trim(),
+        gymLatitude: _gymLocation?.latitude,
+        gymLongitude: _gymLocation?.longitude,
+        adminName: _adminNameController.text.trim(),
+        adminEmail: _adminEmailController.text.trim(),
+        adminPassword: _adminPasswordController.text,
+      );
 
       messenger.showSnackBar(
         SnackBar(
@@ -69,11 +69,14 @@ class _CreateGymScreenState extends State<CreateGymScreen> {
         ),
       );
       nav.pop();
-    } on FirebaseFunctionsException catch (e, s) {
+    } on FirebaseAuthException catch (e, s) {
       await CrashLogger.log(e, s, reason: 'createGym');
+      final message = e.code == 'email-already-in-use'
+          ? l10n.tr('This admin email is already in use by another account.')
+          : (e.message ?? l10n.tr('An error occurred'));
       messenger.showSnackBar(
         SnackBar(
-          content: Text(e.message ?? l10n.tr('An error occurred')),
+          content: Text(message),
           backgroundColor: Colors.red,
         ),
       );
