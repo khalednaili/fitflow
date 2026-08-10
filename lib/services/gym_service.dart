@@ -168,48 +168,17 @@ class GymService {
       }
 
       try {
-        final gymRef = _gyms.doc();
-        final batch = _firestore.batch();
-
-        batch.set(gymRef, <String, dynamic>{
-          'name': gymName,
-          'address': gymAddress,
-          'description': gymDescription,
-          'logoUrl': '',
-          if (gymLatitude != null) 'latitude': gymLatitude,
-          if (gymLongitude != null) 'longitude': gymLongitude,
-          'adminUid': adminUid,
-          'adminEmail': adminEmail,
-          'status': 'active',
-          'createdAt': FieldValue.serverTimestamp(),
-          'createdBy': createdBy,
-        });
-
-        batch.set(_firestore.collection('users').doc(adminUid),
-            <String, dynamic>{
-          'email': adminEmail,
-          'displayName': adminName,
-          'role': 'admin',
-          'roles': ['admin'],
-          'gymId': gymRef.id,
-          'gymIds': [gymRef.id],
-          'membershipPlanId': '',
-          'subscriptionStatus': 'none',
-          'phoneNumber': '',
-          'photoUrl': '',
-          'gender': '',
-          'dateOfBirth': null,
-          'fitnessLevel': '',
-          'emergencyContactName': '',
-          'emergencyContactPhone': '',
-          'healthNotes': '',
-          'joinDate': FieldValue.serverTimestamp(),
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-
-        await batch.commit();
-        return gymRef.id;
+        return await writeGymAndAdminDocs(
+          gymName: gymName,
+          adminEmail: adminEmail,
+          adminUid: adminUid,
+          createdBy: createdBy,
+          gymAddress: gymAddress,
+          gymDescription: gymDescription,
+          gymLatitude: gymLatitude,
+          gymLongitude: gymLongitude,
+          adminName: adminName,
+        );
       } catch (_) {
         // Roll back the Auth account so no orphaned admin login is left.
         try {
@@ -222,6 +191,64 @@ class GymService {
       await secondaryAuth.signOut();
       await secondaryApp.delete();
     }
+  }
+
+  /// Writes the gym document + its admin's `users` document in a single
+  /// batch. Split out from [createGymWithAdmin] so the pure Firestore-write
+  /// logic (gym/user document shape) can be unit-tested without needing a
+  /// real Firebase Auth account — [adminUid] is assumed to already exist.
+  Future<String> writeGymAndAdminDocs({
+    required String gymName,
+    required String adminEmail,
+    required String adminUid,
+    required String createdBy,
+    String gymAddress = '',
+    String gymDescription = '',
+    double? gymLatitude,
+    double? gymLongitude,
+    String adminName = '',
+  }) async {
+    final gymRef = _gyms.doc();
+    final batch = _firestore.batch();
+
+    batch.set(gymRef, <String, dynamic>{
+      'name': gymName,
+      'address': gymAddress,
+      'description': gymDescription,
+      'logoUrl': '',
+      if (gymLatitude != null) 'latitude': gymLatitude,
+      if (gymLongitude != null) 'longitude': gymLongitude,
+      'adminUid': adminUid,
+      'adminEmail': adminEmail,
+      'status': 'active',
+      'createdAt': FieldValue.serverTimestamp(),
+      'createdBy': createdBy,
+    });
+
+    batch.set(_firestore.collection('users').doc(adminUid), <String, dynamic>{
+      'email': adminEmail,
+      'displayName': adminName,
+      'role': 'admin',
+      'roles': ['admin'],
+      'gymId': gymRef.id,
+      'gymIds': [gymRef.id],
+      'membershipPlanId': '',
+      'subscriptionStatus': 'none',
+      'phoneNumber': '',
+      'photoUrl': '',
+      'gender': '',
+      'dateOfBirth': null,
+      'fitnessLevel': '',
+      'emergencyContactName': '',
+      'emergencyContactPhone': '',
+      'healthNotes': '',
+      'joinDate': FieldValue.serverTimestamp(),
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+    return gymRef.id;
   }
 
   /// Distance in kilometers between two coordinates (haversine formula).

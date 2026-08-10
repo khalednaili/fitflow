@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
@@ -7,7 +8,10 @@ import '../../services/gym_service.dart';
 import '../../widgets/location_picker_map.dart';
 
 class CreateGymScreen extends StatefulWidget {
-  const CreateGymScreen({super.key});
+  const CreateGymScreen({super.key, this.firestore});
+
+  /// Optional override for tests — avoids touching real Firebase.
+  final FirebaseFirestore? firestore;
 
   @override
   State<CreateGymScreen> createState() => _CreateGymScreenState();
@@ -15,7 +19,7 @@ class CreateGymScreen extends StatefulWidget {
 
 class _CreateGymScreenState extends State<CreateGymScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _gymService = GymService();
+  late final _gymService = GymService(firestore: widget.firestore);
   bool _loading = false;
   bool _obscurePassword = true;
 

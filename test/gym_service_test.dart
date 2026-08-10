@@ -183,4 +183,98 @@ void main() {
       expect(gyms, isEmpty);
     });
   });
+
+  group('GymService.writeGymAndAdminDocs', () {
+    late FakeFirebaseFirestore firestore;
+    late GymService service;
+
+    setUp(() {
+      firestore = FakeFirebaseFirestore();
+      service = GymService(firestore: firestore);
+    });
+
+    test('creates gym doc with expected fields and status active', () async {
+      final gymId = await service.writeGymAndAdminDocs(
+        gymName: 'Iron Gym',
+        gymAddress: '123 Main St',
+        gymDescription: 'A great gym',
+        adminEmail: 'admin@iron.com',
+        adminUid: 'admin-uid-1',
+        createdBy: 'super1',
+        adminName: 'Admin One',
+      );
+
+      final gymDoc = await firestore.collection('gyms').doc(gymId).get();
+      final data = gymDoc.data()!;
+
+      expect(data['name'], 'Iron Gym');
+      expect(data['address'], '123 Main St');
+      expect(data['description'], 'A great gym');
+      expect(data['adminUid'], 'admin-uid-1');
+      expect(data['adminEmail'], 'admin@iron.com');
+      expect(data['status'], 'active');
+      expect(data['createdBy'], 'super1');
+      expect(data.containsKey('latitude'), isFalse);
+      expect(data.containsKey('longitude'), isFalse);
+    });
+
+    test('includes coordinates only when provided', () async {
+      final gymId = await service.writeGymAndAdminDocs(
+        gymName: 'Located Gym',
+        adminEmail: 'admin@located.com',
+        adminUid: 'admin-uid-2',
+        createdBy: 'super1',
+        gymLatitude: 36.8065,
+        gymLongitude: 10.1815,
+      );
+
+      final gymDoc = await firestore.collection('gyms').doc(gymId).get();
+      final data = gymDoc.data()!;
+
+      expect(data['latitude'], 36.8065);
+      expect(data['longitude'], 10.1815);
+    });
+
+    test('creates an admin user doc scoped to the new gym', () async {
+      final gymId = await service.writeGymAndAdminDocs(
+        gymName: 'Iron Gym',
+        adminEmail: 'admin@iron.com',
+        adminUid: 'admin-uid-3',
+        createdBy: 'super1',
+        adminName: 'Admin Three',
+      );
+
+      final userDoc =
+          await firestore.collection('users').doc('admin-uid-3').get();
+      final data = userDoc.data()!;
+
+      expect(data['email'], 'admin@iron.com');
+      expect(data['displayName'], 'Admin Three');
+      expect(data['role'], 'admin');
+      expect(data['roles'], ['admin']);
+      expect(data['gymId'], gymId);
+      expect(data['gymIds'], [gymId]);
+      expect(data['subscriptionStatus'], 'none');
+    });
+
+    test('each call creates a distinct gym with a unique id', () async {
+      final gymId1 = await service.writeGymAndAdminDocs(
+        gymName: 'Gym One',
+        adminEmail: 'a1@x.com',
+        adminUid: 'admin-uid-4',
+        createdBy: 'super1',
+      );
+      final gymId2 = await service.writeGymAndAdminDocs(
+        gymName: 'Gym Two',
+        adminEmail: 'a2@x.com',
+        adminUid: 'admin-uid-5',
+        createdBy: 'super1',
+      );
+
+      expect(gymId1, isNot(gymId2));
+
+      final allGyms = await firestore.collection('gyms').get();
+      expect(allGyms.docs, hasLength(2));
+    });
+  });
 }
