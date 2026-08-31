@@ -16,6 +16,7 @@ import 'my_offers_screen.dart';
 import 'friends_screen.dart';
 import 'gyms_map_screen.dart';
 import 'my_gyms_screen.dart';
+import 'pr_calculator_screen.dart';
 
 // ── Brand colours (mirror home_shell.dart) ────────────────────────────────
 const _kTeal = Color(0xFF0F766E);
@@ -584,6 +585,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                               builder: (_) =>
                                                   const MyGymsScreen())),
                                     );
+                                    final personalRecordsCard = _NavCard(
+                                      icon: Icons.emoji_events_outlined,
+                                      iconColor: _kTeal,
+                                      label: l10n.tr('Personal Records'),
+                                      subtitle: l10n.tr(
+                                          'Log PRs & calculate workout percentages'),
+                                      onTap: () => Navigator.of(context).push(
+                                          MaterialPageRoute<void>(
+                                              builder: (_) => PersonalRecordsScreen(
+                                                  gymId: widget.gymId,
+                                                  defaultUnit: appUser
+                                                          ?.preferredWeightUnit ??
+                                                      'kg'))),
+                                    );
                                     if (isWide) {
                                       return Column(
                                         children: [
@@ -603,7 +618,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                             ],
                                           ),
                                           SizedBox(height: 10),
-                                          myGymsCard,
+                                          Row(
+                                            children: [
+                                              Expanded(child: myGymsCard),
+                                              SizedBox(width: 10),
+                                              Expanded(child: personalRecordsCard),
+                                            ],
+                                          ),
                                         ],
                                       );
                                     }
@@ -618,9 +639,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         gymsMapCard,
                                         SizedBox(height: 10),
                                         myGymsCard,
+                                        SizedBox(height: 10),
+                                        personalRecordsCard,
                                       ],
                                     );
                                   }),
+                                  SizedBox(height: 20),
+
+                                  // ── Preferred weight unit ──────────────────
+                                  _WeightUnitTile(
+                                    preferredUnit:
+                                        appUser?.preferredWeightUnit ?? 'kg',
+                                    onChanged: (unit) {
+                                      final uid = FirebaseAuth
+                                          .instance.currentUser?.uid;
+                                      if (uid != null) {
+                                        _memberService
+                                            .updateWeightUnitPreference(
+                                          userId: uid,
+                                          preferredWeightUnit: unit,
+                                        );
+                                      }
+                                    },
+                                  ),
                                   SizedBox(height: 20),
 
                                   // ── Sign out ───────────────────────────────
@@ -1302,6 +1343,74 @@ class _NavCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ── Preferred weight unit tile ───────────────────────────────────────────────
+
+class _WeightUnitTile extends StatelessWidget {
+  const _WeightUnitTile({required this.preferredUnit, required this.onChanged});
+
+  final String preferredUnit;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final cs = Theme.of(context).colorScheme;
+    final unit = preferredUnit == 'lbs' ? 'lbs' : 'kg';
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cs.outline.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(9),
+            decoration: BoxDecoration(
+              color: _kTeal.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.straighten_outlined, size: 20, color: _kTeal),
+          ),
+          SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.tr('Preferred weight unit'),
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  l10n.tr('Used to log and display your personal records by default.'),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: 10),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'kg', label: Text('kg')),
+              ButtonSegment(value: 'lbs', label: Text('lb')),
+            ],
+            selected: {unit},
+            onSelectionChanged: (s) => onChanged(s.first),
+            style: ButtonStyle(visualDensity: VisualDensity.compact),
+          ),
+        ],
       ),
     );
   }

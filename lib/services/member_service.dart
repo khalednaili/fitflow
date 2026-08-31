@@ -283,6 +283,18 @@ class MemberService {
     });
   }
 
+  /// Updates the member's default unit ('kg' or 'lbs') for logging and
+  /// displaying personal records / workout percentages.
+  Future<void> updateWeightUnitPreference({
+    required String userId,
+    required String preferredWeightUnit,
+  }) async {
+    await _firestore.collection('users').doc(userId).update(<String, dynamic>{
+      'preferredWeightUnit': preferredWeightUnit,
+      'updatedAt': Timestamp.now(),
+    });
+  }
+
   Future<void> updateAdminNote({
     required String userId,
     required String adminNote,

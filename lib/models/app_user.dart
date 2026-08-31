@@ -23,6 +23,7 @@ class AppUser {
     this.cinNumber = '',
     this.address = '',
     this.adminNote = '',
+    this.preferredWeightUnit = 'kg',
   });
 
   final String id;
@@ -67,6 +68,10 @@ class AppUser {
 
   // Metadata
   final DateTime? joinDate;
+
+  /// Default unit ('kg' or 'lbs') used to display/log personal records and
+  /// workout percentages. Can be overridden per personal-record entry.
+  final String preferredWeightUnit;
 
   /// All effective roles — falls back to [role] when [roles] is empty.
   List<String> get effectiveRoles =>
@@ -140,6 +145,7 @@ class AppUser {
       adminNote: (data['adminNote'] ?? '') as String,
       joinDate: (data['joinDate'] as Timestamp?)?.toDate() ??
           (data['createdAt'] as Timestamp?)?.toDate(),
+      preferredWeightUnit: (data['preferredWeightUnit'] ?? 'kg') as String,
     );
   }
 
@@ -180,6 +186,7 @@ class AppUser {
       'cinNumber': cinNumber,
       'address': address,
       'adminNote': adminNote,
+      'preferredWeightUnit': preferredWeightUnit,
     };
   }
 }

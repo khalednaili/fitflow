@@ -1120,6 +1120,27 @@ class AppLocalizations {
     'Joined {name}': 'Joined {name}',
     'This admin email is already in use by another account.':
         'This admin email is already in use by another account.',
+    'Personal Records': 'Personal Records',
+    'Log PRs & calculate workout percentages': 'Log PRs & calculate workout percentages',
+    'Log a Personal Record': 'Log a Personal Record',
+    'Date achieved': 'Date achieved',
+    'Save Record': 'Save Record',
+    'Please enter an exercise name': 'Please enter an exercise name',
+    'Search or type an exercise': 'Search or type an exercise',
+    'Please enter a valid weight': 'Please enter a valid weight',
+    'Personal record saved': 'Personal record saved',
+    'Could not save personal record': 'Could not save personal record',
+    'Percentage Calculator': 'Percentage Calculator',
+    'Select a PR to calculate percentages for it.':
+        'Select a PR to calculate percentages for it.',
+    'Log a weight-based PR to use the calculator.':
+        'Log a weight-based PR to use the calculator.',
+    'Current PR': 'Current PR',
+    'Custom %': 'Custom %',
+    'Result': 'Result',
+    'Preferred weight unit': 'Preferred weight unit',
+    'Used to log and display your personal records by default.':
+        'Used to log and display your personal records by default.',
   };
 
   static const _fr = <String, String>{
@@ -2247,6 +2268,29 @@ class AppLocalizations {
     'Joined {name}': 'A rejoint {name}',
     'This admin email is already in use by another account.':
         'Cet e-mail administrateur est déjà utilisé par un autre compte.',
+    'Personal Records': 'Records personnels',
+    'Log PRs & calculate workout percentages':
+        'Enregistrez vos records et calculez des pourcentages d\'entraînement',
+    'Log a Personal Record': 'Enregistrer un record personnel',
+    'Date achieved': 'Date obtenue',
+    'Save Record': 'Enregistrer',
+    'Please enter an exercise name': 'Veuillez saisir un nom d\'exercice',
+    'Search or type an exercise': 'Rechercher ou saisir un exercice',
+    'Please enter a valid weight': 'Veuillez saisir un poids valide',
+    'Personal record saved': 'Record personnel enregistré',
+    'Could not save personal record':
+        'Impossible d\'enregistrer le record personnel',
+    'Percentage Calculator': 'Calculateur de pourcentage',
+    'Select a PR to calculate percentages for it.':
+        'Sélectionnez un record pour calculer ses pourcentages.',
+    'Log a weight-based PR to use the calculator.':
+        'Enregistrez un record de poids pour utiliser le calculateur.',
+    'Current PR': 'Record actuel',
+    'Custom %': 'Pourcentage personnalisé',
+    'Result': 'Résultat',
+    'Preferred weight unit': 'Unité de poids préférée',
+    'Used to log and display your personal records by default.':
+        'Utilisée par défaut pour enregistrer et afficher vos records personnels.',
   };
 
   static AppLocalizations of(BuildContext context) {

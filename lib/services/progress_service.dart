@@ -47,6 +47,21 @@ class ProgressService {
         .map((s) => s.docs.map(Booking.fromSnapshot).toList());
   }
 
+  /// Stream all PRs for [userId], newest first.
+  Stream<List<PersonalRecord>> streamPersonalRecords(String userId) {
+    return _db
+        .collection('personalRecords')
+        .where('userId', isEqualTo: userId)
+        .orderBy('achievedAt', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(PersonalRecord.fromSnapshot).toList());
+  }
+
+  /// Saves a new personal record logged by the member.
+  Future<void> addPersonalRecord(PersonalRecord record) async {
+    await _db.collection('personalRecords').add(record.toJson());
+  }
+
   /// Stream all PRs for [userId].
   Stream<List<PersonalRecord>> _streamPRs(String userId) {
     return _db
