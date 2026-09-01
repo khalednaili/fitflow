@@ -70,6 +70,20 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
     super.dispose();
   }
 
+  /// Forces an immediate one-time refresh of the PR list (in addition to the
+  /// passive realtime stream), so the calculator/history reflect a newly
+  /// saved or deleted PR right away instead of waiting on listener latency.
+  Future<void> _reloadPrs() async {
+    if (_uid.isEmpty) return;
+    final prs = await _service.fetchPersonalRecords(_uid);
+    if (mounted) {
+      setState(() {
+        _prs = prs;
+        _loading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -90,6 +104,7 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
             uid: _uid,
             service: _service,
             defaultUnit: widget.defaultUnit,
+            onSaved: _reloadPrs,
           );
           final calculatorCard = _CalculatorCard(
             prs: _prs,
@@ -100,6 +115,7 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
             prs: _prs,
             loading: _loading,
             service: _service,
+            onDeleted: _reloadPrs,
           );
           return Align(
             alignment: Alignment.topCenter,
@@ -147,11 +163,17 @@ class _LogPrCard extends StatefulWidget {
     required this.uid,
     required this.service,
     required this.defaultUnit,
+    this.onSaved,
   });
 
   final String uid;
   final ProgressService service;
   final String defaultUnit;
+
+  /// Called right after a PR is successfully saved, so the parent can force
+  /// an immediate refresh of the list instead of waiting on the passive
+  /// realtime stream.
+  final VoidCallback? onSaved;
 
   @override
   State<_LogPrCard> createState() => _LogPrCardState();
@@ -209,6 +231,7 @@ class _LogPrCardState extends State<_LogPrCard> {
       _weightController.clear();
       _exerciseController?.clear();
       _notesController.clear();
+      widget.onSaved?.call();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.tr('Personal record saved'))),
       );
@@ -684,11 +707,16 @@ class _PrHistoryCard extends StatelessWidget {
     required this.prs,
     required this.loading,
     required this.service,
+    this.onDeleted,
   });
 
   final List<PersonalRecord> prs;
   final bool loading;
   final ProgressService service;
+
+  /// Called right after a PR is successfully deleted, so the parent can
+  /// force an immediate refresh instead of waiting on the passive stream.
+  final VoidCallback? onDeleted;
 
   /// Groups PRs by exercise, preserving the incoming (newest-first) order
   /// both across and within groups.
@@ -723,6 +751,7 @@ class _PrHistoryCard extends StatelessWidget {
     if (confirmed != true) return;
     try {
       await service.deletePersonalRecord(pr.id);
+      onDeleted?.call();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(l10n.tr('Personal record deleted'))),

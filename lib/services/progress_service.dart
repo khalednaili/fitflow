@@ -59,6 +59,18 @@ class ProgressService {
         .map((s) => s.docs.map(PersonalRecord.fromSnapshot).toList());
   }
 
+  /// One-time fetch of all PRs for [userId], newest first. Used to force an
+  /// immediate refresh (e.g. right after saving a new PR) instead of relying
+  /// solely on the passive realtime listener.
+  Future<List<PersonalRecord>> fetchPersonalRecords(String userId) async {
+    final snap = await _db
+        .collection('personalRecords')
+        .where('userId', isEqualTo: userId)
+        .orderBy('achievedAt', descending: true)
+        .get();
+    return snap.docs.map(PersonalRecord.fromSnapshot).toList();
+  }
+
   /// Saves a new personal record logged by the member.
   Future<void> addPersonalRecord(PersonalRecord record) async {
     await _db.collection('personalRecords').add(record.toJson());
