@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -20,6 +21,8 @@ class PersonalRecordsScreen extends StatefulWidget {
     super.key,
     this.gymId = '',
     this.defaultUnit = 'kg',
+    this.uid,
+    this.firestore,
   });
 
   final String gymId;
@@ -28,12 +31,20 @@ class PersonalRecordsScreen extends StatefulWidget {
   /// entries and for the calculator (overridable in each section).
   final String defaultUnit;
 
+  /// Overrides the signed-in user's uid; defaults to
+  /// `FirebaseAuth.instance.currentUser`. Mainly for widget tests.
+  final String? uid;
+
+  /// Overrides the Firestore instance used by [ProgressService]; defaults
+  /// to `FirebaseFirestore.instance`. Mainly for widget tests.
+  final FirebaseFirestore? firestore;
+
   @override
   State<PersonalRecordsScreen> createState() => _PersonalRecordsScreenState();
 }
 
 class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
-  final _service = ProgressService();
+  late final ProgressService _service;
   late final String _uid;
   List<PersonalRecord> _prs = const [];
   bool _loading = true;
@@ -42,7 +53,8 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
   @override
   void initState() {
     super.initState();
-    _uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    _service = ProgressService(firestore: widget.firestore);
+    _uid = widget.uid ?? FirebaseAuth.instance.currentUser?.uid ?? '';
     // Subscribed once here (rather than via a StreamBuilder further down the
     // tree) so the listener survives layout rebuilds — e.g. `LayoutBuilder`
     // swapping between its Row/Column children when the viewport crosses
