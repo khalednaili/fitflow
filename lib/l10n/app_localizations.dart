@@ -1142,6 +1142,13 @@ class AppLocalizations {
     'Preferred weight unit': 'Preferred weight unit',
     'Used to log and display your personal records by default.':
         'Used to log and display your personal records by default.',
+    'Your Personal Records': 'Your Personal Records',
+    'All the PRs you have logged, grouped by exercise.':
+        'All the PRs you have logged, grouped by exercise.',
+    'No personal records logged yet.': 'No personal records logged yet.',
+    'Delete personal record?': 'Delete personal record?',
+    'Personal record deleted': 'Personal record deleted',
+    'Could not delete personal record': 'Could not delete personal record',
   };
 
   static const _fr = <String, String>{
@@ -2294,6 +2301,15 @@ class AppLocalizations {
     'Preferred weight unit': 'Unité de poids préférée',
     'Used to log and display your personal records by default.':
         'Utilisée par défaut pour enregistrer et afficher vos records personnels.',
+    'Your Personal Records': 'Vos records personnels',
+    'All the PRs you have logged, grouped by exercise.':
+        'Tous les records que vous avez enregistrés, groupés par exercice.',
+    'No personal records logged yet.':
+        'Aucun record personnel enregistré pour le moment.',
+    'Delete personal record?': 'Supprimer ce record personnel ?',
+    'Personal record deleted': 'Record personnel supprimé',
+    'Could not delete personal record':
+        'Impossible de supprimer le record personnel',
   };
 
   static AppLocalizations of(BuildContext context) {

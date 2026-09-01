@@ -64,6 +64,11 @@ class ProgressService {
     await _db.collection('personalRecords').add(record.toJson());
   }
 
+  /// Deletes a previously logged personal record.
+  Future<void> deletePersonalRecord(String id) async {
+    await _db.collection('personalRecords').doc(id).delete();
+  }
+
   /// Stream all PRs for [userId].
   Stream<List<PersonalRecord>> _streamPRs(String userId) {
     return _db

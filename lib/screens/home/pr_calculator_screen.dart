@@ -36,6 +36,7 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
   final _service = ProgressService();
   late final String _uid;
   List<PersonalRecord> _prs = const [];
+  bool _loading = true;
   StreamSubscription<List<PersonalRecord>>? _prsSub;
 
   @override
@@ -51,8 +52,15 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
     // permanently empty.
     if (_uid.isNotEmpty) {
       _prsSub = _service.streamPersonalRecords(_uid).listen((prs) {
-        if (mounted) setState(() => _prs = prs);
+        if (mounted) {
+          setState(() {
+            _prs = prs;
+            _loading = false;
+          });
+        }
       });
+    } else {
+      _loading = false;
     }
   }
 
@@ -85,7 +93,13 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
           );
           final calculatorCard = _CalculatorCard(
             prs: _prs,
+            loading: _loading,
             defaultUnit: widget.defaultUnit,
+          );
+          final historyCard = _PrHistoryCard(
+            prs: _prs,
+            loading: _loading,
+            service: _service,
           );
           return Align(
             alignment: Alignment.topCenter,
@@ -93,23 +107,30 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
               constraints: BoxConstraints(maxWidth: isWide ? 1000 : 760),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 80),
-                child: isWide
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: logCard),
-                          const SizedBox(width: 20),
-                          Expanded(child: calculatorCard),
-                        ],
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          logCard,
-                          const SizedBox(height: 24),
-                          calculatorCard,
-                        ],
-                      ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    isWide
+                        ? Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: logCard),
+                              const SizedBox(width: 20),
+                              Expanded(child: calculatorCard),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              logCard,
+                              const SizedBox(height: 24),
+                              calculatorCard,
+                            ],
+                          ),
+                    const SizedBox(height: 24),
+                    historyCard,
+                  ],
+                ),
               ),
             ),
           );
@@ -213,12 +234,18 @@ class _LogPrCardState extends State<_LogPrCard> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                l10n.tr('Log a Personal Record'),
-                style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    color: cs.onSurface),
+              Row(
+                children: [
+                  const Icon(Icons.add_task_rounded, color: _kTeal, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    l10n.tr('Log a Personal Record'),
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        color: cs.onSurface),
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
               LayoutBuilder(
@@ -389,9 +416,14 @@ class _UnitToggle extends StatelessWidget {
 const List<int> _kPresetPercentages = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95];
 
 class _CalculatorCard extends StatefulWidget {
-  const _CalculatorCard({required this.prs, required this.defaultUnit});
+  const _CalculatorCard({
+    required this.prs,
+    required this.loading,
+    required this.defaultUnit,
+  });
 
   final List<PersonalRecord> prs;
+  final bool loading;
   final String defaultUnit;
 
   @override
@@ -441,12 +473,18 @@ class _CalculatorCardState extends State<_CalculatorCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              l10n.tr('Percentage Calculator'),
-              style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: cs.onSurface),
+            Row(
+              children: [
+                const Icon(Icons.calculate_rounded, color: _kTeal, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  l10n.tr('Percentage Calculator'),
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: cs.onSurface),
+                ),
+              ],
             ),
             const SizedBox(height: 4),
             Text(
@@ -454,12 +492,32 @@ class _CalculatorCardState extends State<_CalculatorCard> {
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 14),
-            if (prs.isEmpty)
+            if (widget.loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  ),
+                ),
+              )
+            else if (prs.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(
-                  l10n.tr('Log a PR to use the calculator.'),
-                  style: TextStyle(color: cs.onSurfaceVariant),
+                child: Row(
+                  children: [
+                    Icon(Icons.emoji_events_outlined,
+                        color: cs.onSurfaceVariant, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        l10n.tr('Log a PR to use the calculator.'),
+                        style: TextStyle(color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
                 ),
               )
             else ...[
@@ -613,6 +671,232 @@ class _CalculatorCardState extends State<_CalculatorCard> {
           ],
         ),
       ],
+    );
+  }
+}
+
+// ── PR history list ──────────────────────────────────────────────────────────
+
+/// Shows every PR the member has logged, grouped by exercise (newest first),
+/// with the ability to delete an entry.
+class _PrHistoryCard extends StatelessWidget {
+  const _PrHistoryCard({
+    required this.prs,
+    required this.loading,
+    required this.service,
+  });
+
+  final List<PersonalRecord> prs;
+  final bool loading;
+  final ProgressService service;
+
+  /// Groups PRs by exercise, preserving the incoming (newest-first) order
+  /// both across and within groups.
+  Map<String, List<PersonalRecord>> get _grouped {
+    final map = <String, List<PersonalRecord>>{};
+    for (final pr in prs) {
+      map.putIfAbsent(pr.exerciseName, () => []).add(pr);
+    }
+    return map;
+  }
+
+  Future<void> _confirmDelete(BuildContext context, PersonalRecord pr) async {
+    final l10n = context.l10n;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.tr('Delete personal record?')),
+        content: Text(l10n.tr('This cannot be undone.')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(l10n.tr('Cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text(l10n.tr('Delete')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await service.deletePersonalRecord(pr.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.tr('Personal record deleted'))),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.tr('Could not delete personal record'))),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final cs = Theme.of(context).colorScheme;
+    final grouped = _grouped;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.history_rounded, color: _kTeal, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  l10n.tr('Your Personal Records'),
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      color: cs.onSurface),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              l10n.tr('All the PRs you have logged, grouped by exercise.'),
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(height: 8),
+            if (loading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2.4),
+                  ),
+                ),
+              )
+            else if (grouped.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.emoji_events_outlined,
+                        color: cs.onSurfaceVariant, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        l10n.tr('No personal records logged yet.'),
+                        style: TextStyle(color: cs.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ...grouped.entries.map(
+                (entry) => _PrHistoryGroup(
+                  exerciseName: entry.key,
+                  records: entry.value,
+                  onDelete: (pr) => _confirmDelete(context, pr),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PrHistoryGroup extends StatelessWidget {
+  const _PrHistoryGroup({
+    required this.exerciseName,
+    required this.records,
+    required this.onDelete,
+  });
+
+  final String exerciseName;
+  final List<PersonalRecord> records;
+  final ValueChanged<PersonalRecord> onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final best = records.first; // already sorted newest-first
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(left: 4, bottom: 8),
+        leading: const CircleAvatar(
+          radius: 16,
+          backgroundColor: Color(0x1AF97316),
+          child: Icon(Icons.emoji_events_rounded, color: _kOrange, size: 18),
+        ),
+        title: Text(exerciseName,
+            style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(
+          '${best.value} · ${DateFormat('dd MMM yyyy').format(best.achievedAt)}',
+          style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+        ),
+        children: records
+            .map((pr) => _PrHistoryRow(
+                  pr: pr,
+                  isBest: identical(pr, best),
+                  onDelete: () => onDelete(pr),
+                ))
+            .toList(),
+      ),
+    );
+  }
+}
+
+class _PrHistoryRow extends StatelessWidget {
+  const _PrHistoryRow({
+    required this.pr,
+    required this.isBest,
+    required this.onDelete,
+  });
+
+  final PersonalRecord pr;
+  final bool isBest;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          const SizedBox(width: 36),
+          Expanded(
+            child: Text(
+              pr.notes.isNotEmpty ? '${pr.value}  ·  ${pr.notes}' : pr.value,
+              style: TextStyle(
+                fontWeight: isBest ? FontWeight.w700 : FontWeight.w400,
+                color: cs.onSurface,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            DateFormat('dd MMM yyyy').format(pr.achievedAt),
+            style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 18),
+            color: cs.error,
+            tooltip: l10n.tr('Delete'),
+            onPressed: onDelete,
+          ),
+        ],
+      ),
     );
   }
 }
