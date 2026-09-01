@@ -15,6 +15,17 @@ class AuthService {
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
 
+  // `GoogleSignIn.instance.initialize()` must be called exactly once, and
+  // awaited, before any other method on it — otherwise both authenticate()
+  // and signOut() throw "Bad state: ...must be called before any other
+  // method". Memoized statically so it only actually runs once per app
+  // process, no matter how many AuthService instances are created.
+  static Future<void>? _googleSignInInit;
+
+  static Future<void> _ensureGoogleSignInInitialized() {
+    return _googleSignInInit ??= GoogleSignIn.instance.initialize();
+  }
+
   Stream<User?> authStateChanges() => _auth.authStateChanges();
 
   User? get currentUser => _auth.currentUser;
@@ -68,6 +79,7 @@ class AuthService {
       final provider = GoogleAuthProvider();
       credential = await _auth.signInWithPopup(provider);
     } else {
+      await _ensureGoogleSignInInitialized();
       final googleUser = await GoogleSignIn.instance.authenticate();
       final googleAuth = googleUser.authentication;
       final authCredential = GoogleAuthProvider.credential(
@@ -142,11 +154,19 @@ class AuthService {
   /// which is exactly what caused web and mobile to show different data for
   /// what looked like "the same" account.
   Future<void> signOut() async {
-    try {
-      await GoogleSignIn.instance.signOut();
-    } catch (e, st) {
-      // Not signed in via Google, or platform doesn't support it — fine.
-      debugPrint('AuthService.signOut: GoogleSignIn.signOut ignored: $e\n$st');
+    // GoogleSignIn.instance is only ever used on non-web (see
+    // signInWithGoogle above; web signs in via Firebase's own popup flow
+    // instead), and initialize() must be called at least once before
+    // signOut() will work — otherwise this always throws "Bad state".
+    if (!kIsWeb) {
+      try {
+        await _ensureGoogleSignInInitialized();
+        await GoogleSignIn.instance.signOut();
+      } catch (e, st) {
+        // Not signed in via Google — fine.
+        debugPrint(
+            'AuthService.signOut: GoogleSignIn.signOut ignored: $e\n$st');
+      }
     }
 
     await _auth.signOut();
