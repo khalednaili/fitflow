@@ -151,13 +151,25 @@ class AuthService {
 
     await _auth.signOut();
 
-    try {
-      // Fails if a Firestore listener is still active; best-effort only —
-      // any lingering data is harmless once there's no signed-in user to
-      // scope it to, and the next sign-in reads fresh from the server.
-      await _firestore.clearPersistence();
-    } catch (e, st) {
-      debugPrint('AuthService.signOut: clearPersistence ignored: $e\n$st');
+    // Web never has offline persistence enabled (see app.dart), so there is
+    // nothing to clear there — and terminating the shared web Firestore
+    // instance would risk breaking any Firestore usage for the rest of this
+    // browser session. Only mobile needs its on-disk cache wiped so a
+    // previous account's cached documents can't linger.
+    if (!kIsWeb) {
+      try {
+        // clearPersistence() only succeeds while the instance has never been
+        // used, or right after terminate() — calling it directly (without
+        // terminating first) always throws failed-precondition once any
+        // query/listener has touched this instance, which is the normal
+        // case here. Terminating first is the documented way to actually
+        // clear the on-disk cache; the SDK transparently re-initializes the
+        // instance the next time it's used (e.g. after the next sign-in).
+        await _firestore.terminate();
+        await _firestore.clearPersistence();
+      } catch (e, st) {
+        debugPrint('AuthService.signOut: clearPersistence ignored: $e\n$st');
+      }
     }
 
     await CrashLogger.clearUser();
