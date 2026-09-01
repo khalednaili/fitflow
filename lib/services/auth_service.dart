@@ -1,7 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:google_sign_in/google_sign_in.dart';
+
+import '../utils/crash_logger.dart';
 
 class AuthService {
   AuthService({
@@ -133,5 +135,31 @@ class AuthService {
     });
   }
 
-  Future<void> signOut() => _auth.signOut();
+  /// Signs out and scrubs every trace of the previous account from this
+  /// device: the Google Sign-In session, Firestore's local cache, and the
+  /// crash-reporting user id. Without this, a stale cached session/UID from
+  /// a previous account can linger and be picked back up on next launch —
+  /// which is exactly what caused web and mobile to show different data for
+  /// what looked like "the same" account.
+  Future<void> signOut() async {
+    try {
+      await GoogleSignIn.instance.signOut();
+    } catch (e, st) {
+      // Not signed in via Google, or platform doesn't support it — fine.
+      debugPrint('AuthService.signOut: GoogleSignIn.signOut ignored: $e\n$st');
+    }
+
+    await _auth.signOut();
+
+    try {
+      // Fails if a Firestore listener is still active; best-effort only —
+      // any lingering data is harmless once there's no signed-in user to
+      // scope it to, and the next sign-in reads fresh from the server.
+      await _firestore.clearPersistence();
+    } catch (e, st) {
+      debugPrint('AuthService.signOut: clearPersistence ignored: $e\n$st');
+    }
+
+    await CrashLogger.clearUser();
+  }
 }

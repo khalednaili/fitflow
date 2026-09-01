@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/app_user.dart';
+import '../../services/auth_service.dart';
 import '../../services/booking_service.dart';
 import '../../services/class_service.dart';
 import '../../services/member_service.dart';
@@ -1087,7 +1088,7 @@ class _SidebarFooter extends StatelessWidget {
               Tooltip(
                 message: 'Sign out',
                 child: InkWell(
-                  onTap: () => FirebaseAuth.instance.signOut(),
+                  onTap: () => AuthService().signOut(),
                   borderRadius: BorderRadius.circular(6),
                   child: Container(
                     padding: const EdgeInsets.all(5),

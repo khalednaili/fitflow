@@ -1,7 +1,7 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/app_user.dart';
+import '../../services/auth_service.dart';
 import '../../services/member_service.dart';
 import 'super_admin_dashboard_screen.dart';
 import 'gyms_list_screen.dart';
@@ -80,7 +80,7 @@ class _SuperAdminShellState extends State<SuperAdminShell> {
       ),
     );
     if (confirm == true) {
-      await FirebaseAuth.instance.signOut();
+      await AuthService().signOut();
     }
   }
 

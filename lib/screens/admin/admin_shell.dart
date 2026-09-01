@@ -1,8 +1,8 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/app_user.dart';
+import '../../services/auth_service.dart';
 import '../../services/notification_service.dart';
 import '../notifications/notifications_screen.dart';
 import 'admin_calendar_screen.dart';
@@ -433,7 +433,7 @@ class _AdminShellState extends State<AdminShell> {
                 tooltip: context.l10n.tr('Admin menu'),
                 offset: const Offset(0, 40),
                 onSelected: (v) async {
-                  if (v == 'signout') await FirebaseAuth.instance.signOut();
+                  if (v == 'signout') await AuthService().signOut();
                   if (v == 'booking_rules' && context.mounted) {
                     await showDialog<void>(
                       context: context,
@@ -517,7 +517,7 @@ class _AdminShellState extends State<AdminShell> {
           IconButton(
             tooltip: context.l10n.tr('Sign out'),
             icon: const Icon(Icons.logout, color: Colors.white70),
-            onPressed: () async => FirebaseAuth.instance.signOut(),
+            onPressed: () async => AuthService().signOut(),
           ),
         const SizedBox(width: 4),
       ],
@@ -833,7 +833,7 @@ class _AdminShellState extends State<AdminShell> {
   // ── Sidebar utility bar (Sign out only) ──────────────────────────────────
 
   Widget _buildSidebarUtilityBar({required bool showLabels}) {
-    void signOut() => FirebaseAuth.instance.signOut();
+    void signOut() => AuthService().signOut();
 
     return Container(
       decoration: const BoxDecoration(

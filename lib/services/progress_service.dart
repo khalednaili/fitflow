@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/booking.dart';
@@ -73,11 +75,40 @@ class ProgressService {
   }
 
   Stream<ProgressData> streamProgress(String userId) {
-    return _streamCheckedIn(userId).asyncMap((bookings) async {
-      final prs =
-          await _streamPRs(userId).first.timeout(const Duration(seconds: 10));
-      return _compute(bookings, prs);
-    });
+    // Recompute whenever *either* checked-in bookings or personal records
+    // change. Previously this only re-ran on booking changes (via asyncMap)
+    // and read PRs with `.first`, so a PR added on another device wouldn't
+    // show up here until the user's next check-in — a manual combine-latest
+    // over both streams keeps this reactive to PR changes too.
+    late StreamController<ProgressData> controller;
+    StreamSubscription<List<Booking>>? bookingsSub;
+    StreamSubscription<List<PersonalRecord>>? prsSub;
+    List<Booking>? latestBookings;
+    List<PersonalRecord>? latestPrs;
+
+    void emitIfReady() {
+      if (latestBookings != null && latestPrs != null) {
+        controller.add(_compute(latestBookings!, latestPrs!));
+      }
+    }
+
+    controller = StreamController<ProgressData>.broadcast(
+      onListen: () {
+        bookingsSub = _streamCheckedIn(userId).listen((bookings) {
+          latestBookings = bookings;
+          emitIfReady();
+        }, onError: controller.addError);
+        prsSub = _streamPRs(userId).listen((prs) {
+          latestPrs = prs;
+          emitIfReady();
+        }, onError: controller.addError);
+      },
+      onCancel: () {
+        bookingsSub?.cancel();
+        prsSub?.cancel();
+      },
+    );
+    return controller.stream;
   }
 
   ProgressData _compute(

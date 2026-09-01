@@ -1135,6 +1135,7 @@ class AppLocalizations {
         'Select a PR to calculate percentages for it.',
     'Log a weight-based PR to use the calculator.':
         'Log a weight-based PR to use the calculator.',
+    'Log a PR to use the calculator.': 'Log a PR to use the calculator.',
     'Current PR': 'Current PR',
     'Custom %': 'Custom %',
     'Result': 'Result',
@@ -2285,6 +2286,8 @@ class AppLocalizations {
         'Sélectionnez un record pour calculer ses pourcentages.',
     'Log a weight-based PR to use the calculator.':
         'Enregistrez un record de poids pour utiliser le calculateur.',
+    'Log a PR to use the calculator.':
+        'Enregistrez un record pour utiliser le calculateur.',
     'Current PR': 'Record actuel',
     'Custom %': 'Pourcentage personnalisé',
     'Result': 'Résultat',

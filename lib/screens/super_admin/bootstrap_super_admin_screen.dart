@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:fit_flow/services/auth_service.dart';
 import 'package:fit_flow/utils/crash_logger.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -53,7 +54,7 @@ class _BootstrapSuperAdminScreenState extends State<BootstrapSuperAdminScreen> {
   }
 
   Future<void> _signOut() async {
-    await FirebaseAuth.instance.signOut();
+    await AuthService().signOut();
   }
 
   @override

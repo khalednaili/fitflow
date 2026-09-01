@@ -9,14 +9,17 @@ import 'services/fcm_service.dart';
 import 'utils/crash_logger.dart';
 
 Future<void> main() async {
-  // Background handler is mobile-only; web has no background isolate.
-  if (!kIsWeb) {
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-  }
-
   runZonedGuarded(
     () async {
       WidgetsFlutterBinding.ensureInitialized();
+
+      // Background handler is mobile-only; web has no background isolate.
+      if (!kIsWeb) {
+        FirebaseMessaging.onBackgroundMessage(
+          firebaseMessagingBackgroundHandler,
+        );
+      }
+
       await initializeFirebase();
       runApp(const FitFlowApp());
     },

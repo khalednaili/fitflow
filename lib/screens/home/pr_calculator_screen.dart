@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -33,14 +35,31 @@ class PersonalRecordsScreen extends StatefulWidget {
 class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
   final _service = ProgressService();
   late final String _uid;
-  late Stream<List<PersonalRecord>> _prsStream;
+  List<PersonalRecord> _prs = const [];
+  StreamSubscription<List<PersonalRecord>>? _prsSub;
 
   @override
   void initState() {
     super.initState();
     _uid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    _prsStream =
-        _uid.isNotEmpty ? _service.streamPersonalRecords(_uid) : Stream.value(const []);
+    // Subscribed once here (rather than via a StreamBuilder further down the
+    // tree) so the listener survives layout rebuilds — e.g. `LayoutBuilder`
+    // swapping between its Row/Column children when the viewport crosses
+    // the wide breakpoint would otherwise tear down and recreate a nested
+    // StreamBuilder, which re-subscribes to Firestore's *broadcast* stream
+    // and misses the snapshot it already delivered, leaving the calculator
+    // permanently empty.
+    if (_uid.isNotEmpty) {
+      _prsSub = _service.streamPersonalRecords(_uid).listen((prs) {
+        if (mounted) setState(() => _prs = prs);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _prsSub?.cancel();
+    super.dispose();
   }
 
   @override
@@ -64,15 +83,9 @@ class _PersonalRecordsScreenState extends State<PersonalRecordsScreen> {
             service: _service,
             defaultUnit: widget.defaultUnit,
           );
-          final calculatorCard = StreamBuilder<List<PersonalRecord>>(
-            stream: _prsStream,
-            builder: (context, snap) {
-              final prs = snap.data ?? const <PersonalRecord>[];
-              return _CalculatorCard(
-                prs: prs,
-                defaultUnit: widget.defaultUnit,
-              );
-            },
+          final calculatorCard = _CalculatorCard(
+            prs: _prs,
+            defaultUnit: widget.defaultUnit,
           );
           return Align(
             alignment: Alignment.topCenter,
@@ -396,11 +409,12 @@ class _CalculatorCardState extends State<_CalculatorCard> {
     super.dispose();
   }
 
-  /// Latest weight-based PR (kg/lbs, parseable numeric value) per exercise.
-  Map<String, PersonalRecord> get _weightPrsByExercise {
+  /// Latest PR (with a parseable numeric value) per exercise, regardless of
+  /// unit — weight (kg/lb), reps, time, or other numeric PRs can all have a
+  /// percentage calculated from them.
+  Map<String, PersonalRecord> get _calculablePrsByExercise {
     final byExercise = <String, PersonalRecord>{};
     for (final pr in widget.prs) {
-      if (pr.unit != 'kg' && pr.unit != 'lbs') continue;
       if (parsePrValue(pr.value) == null) continue;
       final existing = byExercise[pr.exerciseName];
       if (existing == null || pr.achievedAt.isAfter(existing.achievedAt)) {
@@ -414,10 +428,12 @@ class _CalculatorCardState extends State<_CalculatorCard> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final cs = Theme.of(context).colorScheme;
-    final weightPrs = _weightPrsByExercise;
-    _selectedExercise ??= weightPrs.keys.isNotEmpty ? weightPrs.keys.first : null;
+    final prs = _calculablePrsByExercise;
+    _selectedExercise ??= prs.keys.isNotEmpty ? prs.keys.first : null;
     final selectedPr =
-        _selectedExercise != null ? weightPrs[_selectedExercise] : null;
+        _selectedExercise != null ? prs[_selectedExercise] : null;
+    final isWeightUnit =
+        selectedPr != null && (selectedPr.unit == 'kg' || selectedPr.unit == 'lbs');
 
     return Card(
       child: Padding(
@@ -438,11 +454,11 @@ class _CalculatorCardState extends State<_CalculatorCard> {
               style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
             ),
             const SizedBox(height: 14),
-            if (weightPrs.isEmpty)
+            if (prs.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
-                  l10n.tr('Log a weight-based PR to use the calculator.'),
+                  l10n.tr('Log a PR to use the calculator.'),
                   style: TextStyle(color: cs.onSurfaceVariant),
                 ),
               )
@@ -456,22 +472,24 @@ class _CalculatorCardState extends State<_CalculatorCard> {
                         labelText: l10n.tr('Exercise'),
                         border: const OutlineInputBorder(),
                       ),
-                      items: weightPrs.keys
+                      items: prs.keys
                           .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                           .toList(),
                       onChanged: (v) => setState(() => _selectedExercise = v),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  _UnitToggle(
-                    unit: _displayUnit,
-                    onChanged: (u) => setState(() => _displayUnit = u),
-                  ),
+                  if (isWeightUnit) ...[
+                    const SizedBox(width: 12),
+                    _UnitToggle(
+                      unit: _displayUnit,
+                      onChanged: (u) => setState(() => _displayUnit = u),
+                    ),
+                  ],
                 ],
               ),
               if (selectedPr != null) ...[
                 const SizedBox(height: 12),
-                _buildResults(context, selectedPr),
+                _buildResults(context, selectedPr, isWeightUnit),
               ],
             ],
           ],
@@ -480,12 +498,16 @@ class _CalculatorCardState extends State<_CalculatorCard> {
     );
   }
 
-  Widget _buildResults(BuildContext context, PersonalRecord pr) {
+  Widget _buildResults(BuildContext context, PersonalRecord pr, bool isWeightUnit) {
     final l10n = context.l10n;
     final cs = Theme.of(context).colorScheme;
     final oneRm = parsePrValue(pr.value)!;
-    final oneRmInDisplayUnit =
-        roundToPlate(convertWeight(oneRm, pr.unit, _displayUnit), _displayUnit);
+    // Weight PRs convert/round to plate increments; other units (reps, time,
+    // etc.) are shown in their own unit with no conversion.
+    final oneRmInDisplayUnit = isWeightUnit
+        ? roundToPlate(convertWeight(oneRm, pr.unit, _displayUnit), _displayUnit)
+        : oneRm;
+    final displayUnit = isWeightUnit ? _displayUnit : pr.unit;
 
     final customPercent = double.tryParse(_customPercentController.text.trim());
 
@@ -506,7 +528,7 @@ class _CalculatorCardState extends State<_CalculatorCard> {
               ),
               const Spacer(),
               Text(
-                '${_formatNum(oneRmInDisplayUnit)} $_displayUnit',
+                '${_formatNum(oneRmInDisplayUnit)} $displayUnit',
                 style: const TextStyle(
                     fontWeight: FontWeight.w800, fontSize: 16, color: _kTeal),
               ),
@@ -515,7 +537,8 @@ class _CalculatorCardState extends State<_CalculatorCard> {
         ),
         const SizedBox(height: 12),
         ..._kPresetPercentages.map((pct) {
-          final result = roundToPlate(oneRmInDisplayUnit * pct / 100, _displayUnit);
+          final raw = oneRmInDisplayUnit * pct / 100;
+          final result = isWeightUnit ? roundToPlate(raw, displayUnit) : raw;
           return Padding(
             padding: const EdgeInsets.symmetric(vertical: 3),
             child: Row(
@@ -542,7 +565,7 @@ class _CalculatorCardState extends State<_CalculatorCard> {
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,
                     child: Text(
-                      '${_formatNum(result)} $_displayUnit',
+                      '${_formatNum(result)} $displayUnit',
                       textAlign: TextAlign.right,
                       style: TextStyle(
                           fontWeight: FontWeight.w700, color: cs.onSurface),
@@ -581,7 +604,7 @@ class _CalculatorCardState extends State<_CalculatorCard> {
                 ),
                 child: Text(
                   customPercent != null && customPercent > 0
-                      ? '${_formatNum(roundToPlate(oneRmInDisplayUnit * customPercent / 100, _displayUnit))} $_displayUnit'
+                      ? '${_formatNum(isWeightUnit ? roundToPlate(oneRmInDisplayUnit * customPercent / 100, displayUnit) : oneRmInDisplayUnit * customPercent / 100)} $displayUnit'
                       : '${l10n.tr('Result')}: —',
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),

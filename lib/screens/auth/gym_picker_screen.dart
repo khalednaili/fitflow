@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/gym.dart';
+import '../../services/auth_service.dart';
 import '../../services/gym_service.dart';
 import '../../services/member_service.dart';
 import '../../l10n/app_localizations.dart';
@@ -16,6 +17,7 @@ class GymPickerScreen extends StatefulWidget {
 class _GymPickerScreenState extends State<GymPickerScreen> {
   final _gymService = GymService();
   final _memberService = MemberService();
+  final _authService = AuthService();
 
   late final Stream<List<Gym>> _gymsStream = _gymService.streamActiveGyms();
 
@@ -59,7 +61,7 @@ class _GymPickerScreenState extends State<GymPickerScreen> {
         actions: [
           TextButton(
             onPressed: () async {
-              await FirebaseAuth.instance.signOut();
+              await _authService.signOut();
             },
             child: Text(context.l10n.tr('Sign out')),
           ),
