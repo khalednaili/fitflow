@@ -5,9 +5,14 @@ import 'package:latlong2/latlong.dart';
 
 import 'package:fit_flow/utils/crash_logger.dart';
 import '../../models/gym.dart';
+import '../../models/gym_usage.dart';
 import '../../services/gym_service.dart';
+import '../../services/platform_billing_service.dart';
+import '../../utils/currency.dart';
+import '../../utils/platform_pricing.dart';
 import '../../widgets/location_picker_map.dart';
 import 'create_gym_screen.dart';
+import 'gym_usage_screen.dart';
 import '../../l10n/app_localizations.dart';
 
 class GymsListScreen extends StatelessWidget {
@@ -495,9 +500,65 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
             ),
             SizedBox(height: 16),
             _GymStatsCard(gymId: _gym.id),
+            SizedBox(height: 16),
+            _GymUsageBillingCard(gym: _gym),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _GymUsageBillingCard extends StatelessWidget {
+  const _GymUsageBillingCard({required this.gym});
+
+  final Gym gym;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SectionCard(
+      title: context.l10n.tr('Usage & Billing'),
+      children: [
+        StreamBuilder<GymUsage>(
+          stream: PlatformBillingService().watchUsage(gym.id),
+          builder: (context, snap) {
+            final usage = snap.data ?? GymUsage.empty(gym.id);
+            final charge = PlatformPricing.compute(usage);
+            final storageMb = usage.totalStorageBytes / (1024 * 1024);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _InfoRow(
+                  label: context.l10n.tr('Estimated charge this period'),
+                  value: Currency.format(charge.total, charge.currency),
+                ),
+                _InfoRow(
+                  label: context.l10n.tr('Ops this period'),
+                  value: '${charge.periodOps}',
+                ),
+                _InfoRow(
+                  label: context.l10n.tr('Storage'),
+                  value: '${storageMb.toStringAsFixed(1)} MB',
+                ),
+                SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    icon: Icon(Icons.receipt_long_outlined),
+                    label: Text(context.l10n.tr('View Invoices')),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => GymPlatformInvoicesScreen(gym: gym),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 }

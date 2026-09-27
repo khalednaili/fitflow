@@ -10,21 +10,27 @@ import 'admin_wod_tab.dart';
 
 // ── Brand colours ─────────────────────────────────────────────────────────────
 
-const _kRed    = Color(0xFFEF4444); // today highlight (Octiv style)
+const _kRed = Color(0xFFEF4444); // today highlight
 const _kOrange = Color(0xFFF97316); // WOD brand / For Time
-const _kGreen  = Color(0xFF22C55E); // AMRAP
-const _kBlue   = Color(0xFF3B82F6); // EMOM
+const _kGreen = Color(0xFF22C55E); // AMRAP
+const _kBlue = Color(0xFF3B82F6); // EMOM
 const _kPurple = Color(0xFFA855F7); // Strength / Olympic
-const _kGray   = Color(0xFF94A3B8); // fallback
+const _kGray = Color(0xFF94A3B8); // fallback
 
 Color _formatColor(String fmt) {
   switch (fmt.toLowerCase()) {
-    case 'for time': return _kOrange;
-    case 'amrap':    return _kGreen;
-    case 'emom':     return _kBlue;
-    case 'strength': return _kPurple;
-    case 'tabata':   return _kRed;
-    default:         return _kGray;
+    case 'for time':
+      return _kOrange;
+    case 'amrap':
+      return _kGreen;
+    case 'emom':
+      return _kBlue;
+    case 'strength':
+      return _kPurple;
+    case 'tabata':
+      return _kRed;
+    default:
+      return _kGray;
   }
 }
 
@@ -46,7 +52,7 @@ class AdminWodCalendarTab extends StatefulWidget {
 }
 
 class _AdminWodCalendarTabState extends State<AdminWodCalendarTab> {
-  // Default to week view (Octiv-style)
+  // Default to week view
   _CalView _view = _CalView.week;
   late DateTime _refDate;
   late final WodService _svc;
@@ -57,7 +63,7 @@ class _AdminWodCalendarTabState extends State<AdminWodCalendarTab> {
   void initState() {
     super.initState();
     _refDate = DateTime.now();
-    _svc  = WodService(gymId: widget.gymId);
+    _svc = WodService(gymId: widget.gymId);
     _ctSvc = ClassTypeService(gymId: widget.gymId);
   }
 
@@ -117,7 +123,8 @@ class _AdminWodCalendarTabState extends State<AdminWodCalendarTab> {
     }
   }
 
-  void _showWodPicker(BuildContext context, DateTime date, List<WodEntry> wods) {
+  void _showWodPicker(
+      BuildContext context, DateTime date, List<WodEntry> wods) {
     final cs = Theme.of(context).colorScheme;
     showModalBottomSheet<void>(
       context: context,
@@ -129,7 +136,8 @@ class _AdminWodCalendarTabState extends State<AdminWodCalendarTab> {
         children: [
           const SizedBox(height: 8),
           Container(
-            width: 40, height: 4,
+            width: 40,
+            height: 4,
             decoration: BoxDecoration(
               color: cs.outlineVariant,
               borderRadius: BorderRadius.circular(2),
@@ -162,11 +170,13 @@ class _AdminWodCalendarTabState extends State<AdminWodCalendarTab> {
           ...wods.map((w) => ListTile(
                 leading: CircleAvatar(
                   backgroundColor: _kOrange.withAlpha(30),
-                  child: const Icon(Icons.fitness_center, color: _kOrange, size: 18),
+                  child: const Icon(Icons.fitness_center,
+                      color: _kOrange, size: 18),
                 ),
                 title: Text(w.title,
                     style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: w.classTypeName.isNotEmpty ? Text(w.classTypeName) : null,
+                subtitle:
+                    w.classTypeName.isNotEmpty ? Text(w.classTypeName) : null,
                 trailing: const Icon(Icons.chevron_right, size: 18),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -233,104 +243,153 @@ class _AdminWodCalendarTabState extends State<AdminWodCalendarTab> {
 
   Future<void> _seedDemoData() async {
     final classTypes = await _ctSvc.streamClassTypes().first;
-    final String ctId    = classTypes.isNotEmpty ? classTypes.first.id   : '';
-    final String ctName  = classTypes.isNotEmpty ? classTypes.first.name : 'WOD';
-    final String ct2Id   = classTypes.length > 1 ? classTypes[1].id   : ctId;
+    final String ctId = classTypes.isNotEmpty ? classTypes.first.id : '';
+    final String ctName = classTypes.isNotEmpty ? classTypes.first.name : 'WOD';
+    final String ct2Id = classTypes.length > 1 ? classTypes[1].id : ctId;
     final String ct2Name = classTypes.length > 1 ? classTypes[1].name : ctName;
 
     final y = _focusedMonth.year;
     final m = _focusedMonth.month;
 
     final demos = <_DemoWod>[
-      _DemoWod(day: 2,  title: 'Fran',              ctId: ctId,  ctName: ctName,
-        parts: [_DemoPart('Part A', 'For Time', '21-15-9 Thrusters & Pull-ups', [
+      _DemoWod(day: 2, title: 'Fran', ctId: ctId, ctName: ctName, parts: [
+        _DemoPart('Part A', 'For Time', '21-15-9 Thrusters & Pull-ups', [
           _DemoEx('Thruster', '3', '21-15-9', '95/65 lb'),
-          _DemoEx('Pull-up',  '',  '21-15-9', ''),
-        ])]),
-      _DemoWod(day: 3,  title: 'Strength Day',      ctId: ct2Id, ctName: ct2Name,
-        parts: [
-          _DemoPart('Part A – Squat', 'Strength', '5 × 5 Back Squat',   [_DemoEx('Back Squat',    '5', '5', '75% 1RM')]),
-          _DemoPart('Part B – Press', 'Strength', '4 × 8 Strict Press', [_DemoEx('Strict Press',  '4', '8', '60% 1RM')]),
-        ]),
-      _DemoWod(day: 5,  title: 'The Chief',         ctId: ctId,  ctName: ctName,
-        parts: [_DemoPart('Part A', 'AMRAP', '3 min AMRAP × 5 cycles', [
+          _DemoEx('Pull-up', '', '21-15-9', ''),
+        ])
+      ]),
+      _DemoWod(
+          day: 3,
+          title: 'Strength Day',
+          ctId: ct2Id,
+          ctName: ct2Name,
+          parts: [
+            _DemoPart('Part A – Squat', 'Strength', '5 × 5 Back Squat',
+                [_DemoEx('Back Squat', '5', '5', '75% 1RM')]),
+            _DemoPart('Part B – Press', 'Strength', '4 × 8 Strict Press',
+                [_DemoEx('Strict Press', '4', '8', '60% 1RM')]),
+          ]),
+      _DemoWod(day: 5, title: 'The Chief', ctId: ctId, ctName: ctName, parts: [
+        _DemoPart('Part A', 'AMRAP', '3 min AMRAP × 5 cycles', [
           _DemoEx('Power Clean', '', '3', '135/95 lb'),
-          _DemoEx('Push-up',     '', '6', ''),
-          _DemoEx('Air Squat',   '', '9', ''),
-        ])]),
-      _DemoWod(day: 7,  title: 'Cindy',             ctId: ctId,  ctName: ctName,
-        parts: [_DemoPart('Part A', 'AMRAP', '20 min AMRAP', [
-          _DemoEx('Pull-up',   '', '5',  ''),
-          _DemoEx('Push-up',   '', '10', ''),
+          _DemoEx('Push-up', '', '6', ''),
+          _DemoEx('Air Squat', '', '9', ''),
+        ])
+      ]),
+      _DemoWod(day: 7, title: 'Cindy', ctId: ctId, ctName: ctName, parts: [
+        _DemoPart('Part A', 'AMRAP', '20 min AMRAP', [
+          _DemoEx('Pull-up', '', '5', ''),
+          _DemoEx('Push-up', '', '10', ''),
           _DemoEx('Air Squat', '', '15', ''),
-        ])]),
-      _DemoWod(day: 9,  title: 'Deadlift + Metcon', ctId: ct2Id, ctName: ct2Name,
-        parts: [
-          _DemoPart('Part A', 'Strength', 'Build to a heavy triple', [_DemoEx('Deadlift', '5', '3', 'Heavy')]),
-          _DemoPart('Part B', 'For Time', '3 rounds for time', [
-            _DemoEx('Box Jump',         '3', '15', '24/20 in'),
-            _DemoEx('Kettlebell Swing', '3', '20', '53/35 lb'),
-            _DemoEx('Double Under',     '3', '30', ''),
+        ])
+      ]),
+      _DemoWod(
+          day: 9,
+          title: 'Deadlift + Metcon',
+          ctId: ct2Id,
+          ctName: ct2Name,
+          parts: [
+            _DemoPart('Part A', 'Strength', 'Build to a heavy triple',
+                [_DemoEx('Deadlift', '5', '3', 'Heavy')]),
+            _DemoPart('Part B', 'For Time', '3 rounds for time', [
+              _DemoEx('Box Jump', '3', '15', '24/20 in'),
+              _DemoEx('Kettlebell Swing', '3', '20', '53/35 lb'),
+              _DemoEx('Double Under', '3', '30', ''),
+            ]),
           ]),
-        ]),
-      _DemoWod(day: 10, title: 'EMOM 20',           ctId: ctId,  ctName: ctName,
-        parts: [_DemoPart('Part A', 'EMOM', 'E1MOM × 20 min', [
-          _DemoEx('Hang Power Snatch (odd)', '', '5',  '75/55 lb'),
-          _DemoEx('Toes-to-Bar (even)',      '', '10', ''),
-        ])]),
-      _DemoWod(day: 12, title: 'Half Murph',        ctId: ctId,  ctName: ctName,
-        parts: [_DemoPart('Part A', 'For Time', 'Partition as needed', [
-          _DemoEx('Run',       '', '800 m', ''),
-          _DemoEx('Pull-up',   '', '50',    ''),
-          _DemoEx('Push-up',   '', '100',   ''),
-          _DemoEx('Air Squat', '', '150',   ''),
-          _DemoEx('Run',       '', '800 m', ''),
-        ])]),
-      _DemoWod(day: 14, title: 'Olympic Lifting',   ctId: ct2Id, ctName: ct2Name,
-        parts: [
-          _DemoPart('Part A – Snatch',       'Strength', 'E2MOM × 6', [_DemoEx('Power Snatch', '6', '3', '70%')]),
-          _DemoPart('Part B – Clean & Jerk', 'Strength', 'E2MOM × 6', [_DemoEx('Clean & Jerk','6', '2', '75%')]),
-        ]),
-      _DemoWod(day: 16, title: 'Grace',             ctId: ctId,  ctName: ctName,
-        parts: [_DemoPart('Part A', 'For Time', '30 Clean & Jerks for time', [
+      _DemoWod(day: 10, title: 'EMOM 20', ctId: ctId, ctName: ctName, parts: [
+        _DemoPart('Part A', 'EMOM', 'E1MOM × 20 min', [
+          _DemoEx('Hang Power Snatch (odd)', '', '5', '75/55 lb'),
+          _DemoEx('Toes-to-Bar (even)', '', '10', ''),
+        ])
+      ]),
+      _DemoWod(
+          day: 12,
+          title: 'Half Murph',
+          ctId: ctId,
+          ctName: ctName,
+          parts: [
+            _DemoPart('Part A', 'For Time', 'Partition as needed', [
+              _DemoEx('Run', '', '800 m', ''),
+              _DemoEx('Pull-up', '', '50', ''),
+              _DemoEx('Push-up', '', '100', ''),
+              _DemoEx('Air Squat', '', '150', ''),
+              _DemoEx('Run', '', '800 m', ''),
+            ])
+          ]),
+      _DemoWod(
+          day: 14,
+          title: 'Olympic Lifting',
+          ctId: ct2Id,
+          ctName: ct2Name,
+          parts: [
+            _DemoPart('Part A – Snatch', 'Strength', 'E2MOM × 6',
+                [_DemoEx('Power Snatch', '6', '3', '70%')]),
+            _DemoPart('Part B – Clean & Jerk', 'Strength', 'E2MOM × 6',
+                [_DemoEx('Clean & Jerk', '6', '2', '75%')]),
+          ]),
+      _DemoWod(day: 16, title: 'Grace', ctId: ctId, ctName: ctName, parts: [
+        _DemoPart('Part A', 'For Time', '30 Clean & Jerks for time', [
           _DemoEx('Clean & Jerk', '', '30', '135/95 lb'),
-        ])]),
-      _DemoWod(day: 17, title: 'Tabata Assault',    ctId: ctId,  ctName: ctName,
-        parts: [_DemoPart('Part A', 'Tabata', '8 rounds: 20 sec on / 10 sec off', [
-          _DemoEx('Assault Bike', '8', '20 sec', ''),
-          _DemoEx('Wall Ball',    '8', '20 sec', '20/14 lb'),
-        ])]),
-      _DemoWod(day: 19, title: 'Annie',             ctId: ctId,  ctName: ctName,
-        parts: [_DemoPart('Part A', 'For Time', '50-40-30-20-10 reps', [
-          _DemoEx('Double Under', '', '50-40-30-20-10', ''),
-          _DemoEx('Sit-up',       '', '50-40-30-20-10', ''),
-        ])]),
-      _DemoWod(day: 21, title: 'Push & Pull',       ctId: ct2Id, ctName: ct2Name,
-        parts: [
-          _DemoPart('Part A', 'Strength', '4 × 6 Weighted Pull-ups',  [_DemoEx('Weighted Pull-up', '4', '6', '+25 lb')]),
-          _DemoPart('Part B', 'Strength', '4 × 8 DB Bench Press',     [_DemoEx('DB Bench Press',   '4', '8', '50/35 lb')]),
-          _DemoPart('Part C', 'AMRAP',    '10 min AMRAP', [
-            _DemoEx('Ring Dip',     '', '10', ''),
-            _DemoEx('Chest-to-Bar', '', '10', ''),
+        ])
+      ]),
+      _DemoWod(
+          day: 17,
+          title: 'Tabata Assault',
+          ctId: ctId,
+          ctName: ctName,
+          parts: [
+            _DemoPart('Part A', 'Tabata', '8 rounds: 20 sec on / 10 sec off', [
+              _DemoEx('Assault Bike', '8', '20 sec', ''),
+              _DemoEx('Wall Ball', '8', '20 sec', '20/14 lb'),
+            ])
           ]),
-        ]),
-      _DemoWod(day: 23, title: 'DT',                ctId: ctId,  ctName: ctName,
-        parts: [_DemoPart('Part A', 'For Time', '5 rounds for time', [
-          _DemoEx('Deadlift',         '5', '12', '155/105 lb'),
-          _DemoEx('Hang Power Clean', '5', '9',  '155/105 lb'),
-          _DemoEx('Push Jerk',        '5', '6',  '155/105 lb'),
-        ])]),
-      _DemoWod(day: 25, title: 'E2MOM Strength',    ctId: ct2Id, ctName: ct2Name,
-        parts: [_DemoPart('Part A', 'EMOM', 'E2MOM × 10 (5 sets each)', [
-          _DemoEx('Front Squat (odd)',  '5', '4', '80%'),
-          _DemoEx('Strict HSPU (even)', '5', '8', ''),
-        ])]),
-      _DemoWod(day: 27, title: 'Helen',             ctId: ctId,  ctName: ctName,
-        parts: [_DemoPart('Part A', 'For Time', '3 rounds for time', [
-          _DemoEx('Run',              '3', '400 m', ''),
-          _DemoEx('Kettlebell Swing', '3', '21',    '53/35 lb'),
-          _DemoEx('Pull-up',          '3', '12',    ''),
-        ])]),
+      _DemoWod(day: 19, title: 'Annie', ctId: ctId, ctName: ctName, parts: [
+        _DemoPart('Part A', 'For Time', '50-40-30-20-10 reps', [
+          _DemoEx('Double Under', '', '50-40-30-20-10', ''),
+          _DemoEx('Sit-up', '', '50-40-30-20-10', ''),
+        ])
+      ]),
+      _DemoWod(
+          day: 21,
+          title: 'Push & Pull',
+          ctId: ct2Id,
+          ctName: ct2Name,
+          parts: [
+            _DemoPart('Part A', 'Strength', '4 × 6 Weighted Pull-ups',
+                [_DemoEx('Weighted Pull-up', '4', '6', '+25 lb')]),
+            _DemoPart('Part B', 'Strength', '4 × 8 DB Bench Press',
+                [_DemoEx('DB Bench Press', '4', '8', '50/35 lb')]),
+            _DemoPart('Part C', 'AMRAP', '10 min AMRAP', [
+              _DemoEx('Ring Dip', '', '10', ''),
+              _DemoEx('Chest-to-Bar', '', '10', ''),
+            ]),
+          ]),
+      _DemoWod(day: 23, title: 'DT', ctId: ctId, ctName: ctName, parts: [
+        _DemoPart('Part A', 'For Time', '5 rounds for time', [
+          _DemoEx('Deadlift', '5', '12', '155/105 lb'),
+          _DemoEx('Hang Power Clean', '5', '9', '155/105 lb'),
+          _DemoEx('Push Jerk', '5', '6', '155/105 lb'),
+        ])
+      ]),
+      _DemoWod(
+          day: 25,
+          title: 'E2MOM Strength',
+          ctId: ct2Id,
+          ctName: ct2Name,
+          parts: [
+            _DemoPart('Part A', 'EMOM', 'E2MOM × 10 (5 sets each)', [
+              _DemoEx('Front Squat (odd)', '5', '4', '80%'),
+              _DemoEx('Strict HSPU (even)', '5', '8', ''),
+            ])
+          ]),
+      _DemoWod(day: 27, title: 'Helen', ctId: ctId, ctName: ctName, parts: [
+        _DemoPart('Part A', 'For Time', '3 rounds for time', [
+          _DemoEx('Run', '3', '400 m', ''),
+          _DemoEx('Kettlebell Swing', '3', '21', '53/35 lb'),
+          _DemoEx('Pull-up', '3', '12', ''),
+        ])
+      ]),
     ];
 
     for (final demo in demos) {
@@ -396,7 +455,8 @@ class _AdminWodCalendarTabState extends State<AdminWodCalendarTab> {
                 onPostWorkout: () => _openEditor(context),
               ),
               if (isLoading)
-                const Expanded(child: Center(child: CircularProgressIndicator()))
+                const Expanded(
+                    child: Center(child: CircularProgressIndicator()))
               else if (_view == _CalView.week)
                 Expanded(
                   child: _WeekView(
@@ -518,7 +578,8 @@ class _ControlBar extends StatelessWidget {
           // Seed button
           if (seeding)
             const SizedBox(
-              width: 18, height: 18,
+              width: 18,
+              height: 18,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           else
@@ -633,8 +694,8 @@ class _ViewToggle extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           btn(_CalView.month, 'Month'),
-          btn(_CalView.week,  'Week'),
-          btn(_CalView.list,  'List'),
+          btn(_CalView.week, 'Week'),
+          btn(_CalView.list, 'List'),
         ],
       ),
     );
@@ -658,13 +719,12 @@ class _WeekView extends StatelessWidget {
   Widget build(BuildContext context) {
     final today = DateTime.now();
     final days = List.generate(7, (i) => monday.add(Duration(days: i)));
-    final cs   = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
 
     // Group wods by day
     final Map<String, List<WodEntry>> byDay = {};
     for (final w in wods) {
-      final key =
-          '${w.date.year}-${w.date.month}-${w.date.day}';
+      final key = '${w.date.year}-${w.date.month}-${w.date.day}';
       byDay.putIfAbsent(key, () => []).add(w);
     }
 
@@ -736,7 +796,8 @@ class _WeekDayHeader extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Container(
-            width: 30, height: 30,
+            width: 30,
+            height: 30,
             decoration: BoxDecoration(
               color: isToday ? _kRed : Colors.transparent,
               shape: BoxShape.circle,
@@ -796,9 +857,7 @@ class _WeekDayColumnState extends State<_WeekDayColumn> {
           color: highlightColor,
           border: Border(
             top: BorderSide(
-              color: _hovered
-                  ? cs.primary.withAlpha(60)
-                  : Colors.transparent,
+              color: _hovered ? cs.primary.withAlpha(60) : Colors.transparent,
             ),
             right: BorderSide(color: cs.outlineVariant.withAlpha(80)),
           ),
@@ -1064,7 +1123,8 @@ class _PartCard extends StatelessWidget {
               if (part.format.isNotEmpty)
                 Container(
                   margin: const EdgeInsets.only(left: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(
                     color: partColor.withAlpha(30),
                     borderRadius: BorderRadius.circular(3),
@@ -1154,7 +1214,8 @@ class _ExRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 4, height: 4,
+            width: 4,
+            height: 4,
             margin: const EdgeInsets.only(top: 4, right: 5),
             decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
@@ -1213,7 +1274,9 @@ class _MonthView extends StatelessWidget {
 
     // Group wods by day
     final Map<int, List<WodEntry>> byDay = {};
-    for (final w in wods) { byDay.putIfAbsent(w.date.day, () => []).add(w); }
+    for (final w in wods) {
+      byDay.putIfAbsent(w.date.day, () => []).add(w);
+    }
 
     return Column(
       children: [
@@ -1253,8 +1316,7 @@ class _MonthView extends StatelessWidget {
                 if (day < 1 || day > daysInMonth) {
                   return const SizedBox.shrink();
                 }
-                final date =
-                    DateTime(month.year, month.month, day);
+                final date = DateTime(month.year, month.month, day);
                 final isToday = _sameDay(date, today);
                 final dayWods = byDay[day] ?? [];
                 return _MonthDayCell(

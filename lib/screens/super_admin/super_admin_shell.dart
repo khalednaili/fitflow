@@ -5,11 +5,12 @@ import '../../services/auth_service.dart';
 import '../../services/member_service.dart';
 import 'super_admin_dashboard_screen.dart';
 import 'gyms_list_screen.dart';
+import 'gym_usage_screen.dart';
 import 'super_admins_list_screen.dart';
 import 'unassigned_members_screen.dart';
 import '../../l10n/app_localizations.dart';
 
-enum _SuperAdminTab { dashboard, gyms, unassignedMembers, superAdmins }
+enum _SuperAdminTab { dashboard, gyms, usageBilling, unassignedMembers, superAdmins }
 
 class SuperAdminShell extends StatefulWidget {
   const SuperAdminShell({super.key});
@@ -35,6 +36,12 @@ class _SuperAdminShellState extends State<SuperAdminShell> {
           label: context.l10n.tr('Gyms'),
         ),
         _NavItem(
+          tab: _SuperAdminTab.usageBilling,
+          icon: Icons.receipt_long_outlined,
+          activeIcon: Icons.receipt_long,
+          label: context.l10n.tr('Usage & Billing'),
+        ),
+        _NavItem(
           tab: _SuperAdminTab.unassignedMembers,
           icon: Icons.person_off_outlined,
           activeIcon: Icons.person_off,
@@ -54,6 +61,8 @@ class _SuperAdminShellState extends State<SuperAdminShell> {
         return const SuperAdminDashboardScreen();
       case _SuperAdminTab.gyms:
         return const GymsListScreen();
+      case _SuperAdminTab.usageBilling:
+        return const GymUsageScreen();
       case _SuperAdminTab.unassignedMembers:
         return const UnassignedMembersScreen();
       case _SuperAdminTab.superAdmins:

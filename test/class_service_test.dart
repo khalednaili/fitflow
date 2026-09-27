@@ -64,6 +64,29 @@ void main() {
     });
   });
 
+  group('gym scoping (regression for cross-gym calendar bug)', () {
+    test('streamUpcomingClasses only returns classes for the active gym',
+        () async {
+      await addClass(id: 'gymA-class', start: soon, gymId: 'gymA');
+      await addClass(id: 'gymB-class', start: soon, gymId: 'gymB');
+
+      final scoped = ClassService(gymId: 'gymB', firestore: db);
+      final list = await scoped.streamUpcomingClasses().first;
+
+      expect(list.map((c) => c.id).toList(), ['gymB-class']);
+    });
+
+    test('newly created gym with no classes sees an empty calendar',
+        () async {
+      await addClass(id: 'other-gym-class', start: soon, gymId: 'gymA');
+
+      final scoped = ClassService(gymId: 'brand-new-gym', firestore: db);
+      final list = await scoped.streamUpcomingClasses().first;
+
+      expect(list, isEmpty);
+    });
+  });
+
   group('streamUpcomingClassesForIds', () {
     test('returns only the requested upcoming classes, mutable', () async {
       await addClass(id: 'past', start: past);

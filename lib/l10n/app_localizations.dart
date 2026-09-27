@@ -1149,6 +1149,24 @@ class AppLocalizations {
     'Delete personal record?': 'Delete personal record?',
     'Personal record deleted': 'Personal record deleted',
     'Could not delete personal record': 'Could not delete personal record',
+    'Usage & Billing': 'Usage & Billing',
+    'Backfill usage from existing data (run once)':
+        'Backfill usage from existing data (run once)',
+    'Backfilled usage for': 'Backfilled usage for',
+    'gyms': 'gyms',
+    'Estimated charge this period (all gyms)':
+        'Estimated charge this period (all gyms)',
+    'Estimated charge this period': 'Estimated charge this period',
+    'Est. Charge (this period)': 'Est. Charge (this period)',
+    'Docs': 'Docs',
+    'Ops this period': 'Ops this period',
+    'Storage': 'Storage',
+    'Invoices': 'Invoices',
+    'View Invoices': 'View Invoices',
+    'No invoices yet.': 'No invoices yet.',
+    'Share PDF': 'Share PDF',
+    'Mark as paid': 'Mark as paid',
+    'created': 'created',
   };
 
   static const _fr = <String, String>{
@@ -2310,6 +2328,24 @@ class AppLocalizations {
     'Personal record deleted': 'Record personnel supprimé',
     'Could not delete personal record':
         'Impossible de supprimer le record personnel',
+    'Usage & Billing': 'Utilisation et facturation',
+    'Backfill usage from existing data (run once)':
+        'Recalculer à partir des données existantes (une fois)',
+    'Backfilled usage for': 'Utilisation recalculée pour',
+    'gyms': 'salles',
+    'Estimated charge this period (all gyms)':
+        'Charge estimée cette période (toutes les salles)',
+    'Estimated charge this period': 'Charge estimée cette période',
+    'Est. Charge (this period)': 'Charge est. (cette période)',
+    'Docs': 'Documents',
+    'Ops this period': 'Opérations cette période',
+    'Storage': 'Stockage',
+    'Invoices': 'Factures',
+    'View Invoices': 'Voir les factures',
+    'No invoices yet.': 'Aucune facture pour le moment.',
+    'Share PDF': 'Partager le PDF',
+    'Mark as paid': 'Marquer comme payée',
+    'created': 'créée',
   };
 
   static AppLocalizations of(BuildContext context) {

@@ -77,9 +77,8 @@ class _ClassWhiteboardScreenState extends State<ClassWhiteboardScreen>
       DateFormat('EEEE, d MMMM yyyy').format(widget.gymClass.startTime);
 
   String get _duration {
-    final mins = widget.gymClass.endTime
-        .difference(widget.gymClass.startTime)
-        .inMinutes;
+    final mins =
+        widget.gymClass.endTime.difference(widget.gymClass.startTime).inMinutes;
     if (mins <= 0) return '';
     if (mins < 60) return '$mins min';
     final h = mins ~/ 60;
@@ -161,10 +160,8 @@ class _ClassWhiteboardScreenState extends State<ClassWhiteboardScreen>
               stream: _bookingsStream,
               builder: (context, bookSnap) {
                 final bookings = bookSnap.data ?? [];
-                final checkedIn =
-                    bookings.where((b) => b.checkedIn).toList();
-                final pending =
-                    bookings.where((b) => !b.checkedIn).toList();
+                final checkedIn = bookings.where((b) => b.checkedIn).toList();
+                final pending = bookings.where((b) => !b.checkedIn).toList();
 
                 return Column(
                   children: [
@@ -177,9 +174,8 @@ class _ClassWhiteboardScreenState extends State<ClassWhiteboardScreen>
                       totalCount: bookings.length,
                       pendingCount: pending.length,
                       onClose: () => Navigator.of(context).pop(),
-                      onCheckInAll: pending.isEmpty
-                          ? null
-                          : () => _checkInAll(pending),
+                      onCheckInAll:
+                          pending.isEmpty ? null : () => _checkInAll(pending),
                     ),
                     Expanded(
                       child: LayoutBuilder(
@@ -217,7 +213,8 @@ class _ClassWhiteboardScreenState extends State<ClassWhiteboardScreen>
                                 color: _ClassWhiteboardScreenState._card,
                                 child: TabBar(
                                   controller: _tabController,
-                                  labelColor: _ClassWhiteboardScreenState._accent,
+                                  labelColor:
+                                      _ClassWhiteboardScreenState._accent,
                                   unselectedLabelColor:
                                       _ClassWhiteboardScreenState._textSub,
                                   indicatorColor:
@@ -324,8 +321,8 @@ class _Header extends StatelessWidget {
               color: accent.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.dashboard_outlined,
-                color: accent, size: 18),
+            child:
+                const Icon(Icons.dashboard_outlined, color: accent, size: 18),
           ),
           const SizedBox(width: 12),
 
@@ -380,12 +377,11 @@ class _Header extends StatelessWidget {
                 backgroundColor: const Color(0xFF16A34A),
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                textStyle: const TextStyle(
-                    fontSize: 12, fontWeight: FontWeight.w700),
+                textStyle:
+                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
               ),
               icon: const Icon(Icons.done_all, size: 16),
-              label: Text(
-                  '${context.l10n.tr('Check In All')} ($pendingCount)'),
+              label: Text('${context.l10n.tr('Check In All')} ($pendingCount)'),
             ),
           if (onCheckInAll == null && totalCount > 0)
             _StatChip(
@@ -537,8 +533,8 @@ class _WodContent extends StatelessWidget {
         const SizedBox(height: 4),
         if (wod!.classTypeName.isNotEmpty)
           Text(wod!.classTypeName,
-              style: const TextStyle(color: _accent, fontSize: 13,
-                  fontWeight: FontWeight.w600)),
+              style: const TextStyle(
+                  color: _accent, fontSize: 13, fontWeight: FontWeight.w600)),
         const SizedBox(height: 12),
 
         // Warm-up
@@ -550,8 +546,10 @@ class _WodContent extends StatelessWidget {
 
         // Multi-part WOD
         if (wod!.parts.isNotEmpty)
-          ...wod!.parts.asMap().entries.map((e) =>
-              _WodPartCard(part: e.value, index: e.key))
+          ...wod!.parts
+              .asMap()
+              .entries
+              .map((e) => _WodPartCard(part: e.value, index: e.key))
         else ...[
           // Legacy flat format
           if (wod!.format.isNotEmpty || wod!.timeCap.isNotEmpty)
@@ -622,8 +620,7 @@ class _MemberPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Sort: pending first, then checked-in
-    final sorted = [...bookings]
-      ..sort((a, b) {
+    final sorted = [...bookings]..sort((a, b) {
         if (a.checkedIn == b.checkedIn) return 0;
         return a.checkedIn ? 1 : -1;
       });
@@ -654,8 +651,7 @@ class _MemberPanel extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
                   color: _ClassWhiteboardScreenState._accent
                       .withValues(alpha: 0.15),
@@ -676,8 +672,7 @@ class _MemberPanel extends StatelessWidget {
         // ── Column headers ──────────────────────────────────────────────
         if (bookings.isNotEmpty)
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: _border)),
             ),
@@ -751,10 +746,6 @@ class _MemberPanel extends StatelessWidget {
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// _MemberRow — table-style row matching Octiv whiteboard layout
-// ─────────────────────────────────────────────────────────────────────────────
 
 class _MemberRow extends StatelessWidget {
   const _MemberRow({
@@ -840,8 +831,7 @@ class _MemberRow extends StatelessWidget {
             child: Text(
               classTimeLabel,
               style: const TextStyle(
-                  color: _ClassWhiteboardScreenState._textSub,
-                  fontSize: 12),
+                  color: _ClassWhiteboardScreenState._textSub, fontSize: 12),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -867,9 +857,7 @@ class _MemberRow extends StatelessWidget {
                           checked
                               ? Icons.check_circle
                               : Icons.check_circle_outline,
-                          color: checked
-                              ? _checkedColor
-                              : Colors.white24,
+                          color: checked ? _checkedColor : Colors.white24,
                           size: 26,
                         ),
                       ),
@@ -924,8 +912,8 @@ class _TrainerViewScreenState extends State<_TrainerViewScreen> {
     final sections = <_TrainerSection>[];
 
     if (wod.warmUp.isNotEmpty) {
-      sections.add(_TrainerSection(
-          label: 'Warm Up', content: wod.warmUp, isText: true));
+      sections.add(
+          _TrainerSection(label: 'Warm Up', content: wod.warmUp, isText: true));
     }
 
     if (wod.parts.isNotEmpty) {
@@ -955,9 +943,7 @@ class _TrainerViewScreenState extends State<_TrainerViewScreen> {
               '• ${ex.name}${ex.shortLabel.isNotEmpty ? '  ${ex.shortLabel}' : ''}${ex.notes.isNotEmpty ? '  — ${ex.notes}' : ''}');
         }
         sections.add(_TrainerSection(
-            label: wod.title,
-            content: buf.toString().trim(),
-            isText: true));
+            label: wod.title, content: buf.toString().trim(), isText: true));
       }
     }
 
@@ -1020,8 +1006,7 @@ class _TrainerViewScreenState extends State<_TrainerViewScreen> {
             // ── Red header bar ───────────────────────────────────────────
             Container(
               color: const Color(0xFFEF4444),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               child: Row(
                 children: [
                   // WOD title (left)
@@ -1161,8 +1146,8 @@ class _TrainerViewScreenState extends State<_TrainerViewScreen> {
                     const Spacer(),
                     Text(
                       '${_currentPage + 1} / ${_sections.length}',
-                      style: const TextStyle(
-                          color: Colors.white38, fontSize: 12),
+                      style:
+                          const TextStyle(color: Colors.white38, fontSize: 12),
                     ),
                   ],
                 ),
@@ -1176,9 +1161,7 @@ class _TrainerViewScreenState extends State<_TrainerViewScreen> {
 
 class _TrainerSection {
   const _TrainerSection(
-      {required this.label,
-      required this.content,
-      required this.isText});
+      {required this.label, required this.content, required this.isText});
 
   final String label;
   final String content;
@@ -1203,8 +1186,7 @@ class _WodPartCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _ClassWhiteboardScreenState._card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: _ClassWhiteboardScreenState._border),
+        border: Border.all(color: _ClassWhiteboardScreenState._border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1239,8 +1221,7 @@ class _WodPartCard extends StatelessWidget {
                       fontWeight: FontWeight.w700),
                 ),
               ),
-              if (part.format.isNotEmpty)
-                _FormatBadge(part.format),
+              if (part.format.isNotEmpty) _FormatBadge(part.format),
             ],
           ),
           if (part.timeCap.isNotEmpty) ...[
@@ -1376,8 +1357,7 @@ class _FormatRow extends StatelessWidget {
         if (format.isNotEmpty) _FormatBadge(format),
         if (timeCap.isNotEmpty)
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
@@ -1458,8 +1438,8 @@ class _TextBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
-          color: Color(0xFFD1FAE5), fontSize: 13, height: 1.5),
+      style:
+          const TextStyle(color: Color(0xFFD1FAE5), fontSize: 13, height: 1.5),
     );
   }
 }
@@ -1528,8 +1508,7 @@ class _StatChip extends StatelessWidget {
           ),
           if (label.isNotEmpty)
             Text(label,
-                style: const TextStyle(
-                    color: Colors.white54, fontSize: 10)),
+                style: const TextStyle(color: Colors.white54, fontSize: 10)),
         ],
       ),
     );

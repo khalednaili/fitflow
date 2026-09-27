@@ -115,12 +115,14 @@ class GymClass {
       recurrenceGroupId: data['recurrenceGroupId'] as String?,
       recurrenceEndDate: (data['recurrenceEndDate'] as Timestamp?)?.toDate(),
       classTypeId: (data['classTypeId'] ?? '') as String,
+      gymId: (data['gymId'] ?? '') as String,
     );
   }
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'title': title,
+      'gymId': gymId,
       'coachName': coachName,
       'coachIds': coachIds,
       'coachNames': coachNames,

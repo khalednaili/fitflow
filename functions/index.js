@@ -1,5 +1,7 @@
 const admin = require('firebase-admin');
 const functions = require('firebase-functions');
+const { onDocumentWritten } = require('firebase-functions/v2/firestore');
+const { onObjectFinalized, onObjectDeleted } = require('firebase-functions/v2/storage');
 
 admin.initializeApp();
 
@@ -470,3 +472,197 @@ exports.migrateAllToGym = functions.https.onCall(
 
     return { gymId, summary };
   });
+
+// ---------------------------------------------------------------------------
+// Per-gym usage metering — powers the super admin "Gym Usage & Billing"
+// screen, which estimates each gym's Firebase footprint and lets the super
+// admin issue a platform invoice to that gym.
+//
+// One onDocumentWritten trigger per gym-scoped collection below increments
+// cumulative counters on `gymUsage/{gymId}` so usage can be read cheaply
+// without re-querying every collection. Reads are NOT tracked (there is no
+// server-side Firestore "read" trigger); only writes, deletes, and estimated
+// document storage size are metered.
+// ---------------------------------------------------------------------------
+const GYM_SCOPED_COLLECTIONS = [
+  'absences', 'announcements', 'attendance', 'bookings', 'classReviews',
+  'classTemplates', 'classTypes', 'classes', 'coach_unavailability',
+  'dropInRefunds', 'invoices', 'late_cancellations', 'membership_plans',
+  'notifications', 'personal_trainings', 'product_orders', 'products',
+  'sales', 'settings', 'subscriptions', 'user_subscriptions', 'users',
+  'waitlists', 'wodScores', 'wods',
+];
+
+/// Rough estimate of a document's on-disk size — good enough to compare gyms
+/// relatively, not an exact match of Firestore's internal billing formula.
+function estimateDocBytes(data) {
+  if (!data) return 0;
+  try {
+    return Buffer.byteLength(JSON.stringify(data), 'utf8');
+  } catch (_) {
+    return 0;
+  }
+}
+
+async function recordGymUsage(collectionName, event) {
+  const before = event.data.before.exists ? event.data.before.data() : null;
+  const after = event.data.after.exists ? event.data.after.data() : null;
+  const gymId = (after && after.gymId) || (before && before.gymId);
+  if (!gymId) return null;
+
+  const beforeBytes = estimateDocBytes(before);
+  const afterBytes = estimateDocBytes(after);
+  const byteDelta = afterBytes - beforeBytes;
+  const increment = admin.firestore.FieldValue.increment;
+
+  // NOTE: `set(..., {merge:true})` only deep-merges *nested plain objects* —
+  // dotted string keys like `'collections.classes.writes'` are stored as a
+  // literal field name instead of a nested path (that shorthand only works
+  // with `.update()`). So the per-collection breakdown below is built as a
+  // real nested object, which `merge: true` does correctly merge in.
+  const collectionUpdate = { storageBytes: increment(byteDelta) };
+
+  const update = {
+    lastWriteAt: admin.firestore.FieldValue.serverTimestamp(),
+    firestoreStorageBytes: increment(byteDelta),
+  };
+
+  if (!before && after) {
+    // Create
+    update.writes = increment(1);
+    update.docCount = increment(1);
+    collectionUpdate.writes = increment(1);
+    collectionUpdate.docCount = increment(1);
+  } else if (before && after) {
+    // Update
+    update.writes = increment(1);
+    collectionUpdate.writes = increment(1);
+  } else if (before && !after) {
+    // Delete
+    update.deletes = increment(1);
+    update.docCount = increment(-1);
+    collectionUpdate.deletes = increment(1);
+    collectionUpdate.docCount = increment(-1);
+  }
+
+  update.collections = { [collectionName]: collectionUpdate };
+
+  await admin.firestore().collection('gymUsage').doc(gymId).set(update, { merge: true });
+  return null;
+}
+
+GYM_SCOPED_COLLECTIONS.forEach((collectionName) => {
+  exports[`trackUsage_${collectionName}`] = onDocumentWritten(
+    `${collectionName}/{docId}`,
+    (event) => recordGymUsage(collectionName, event),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Cloud Storage usage metering — product images are uploaded under
+// `products/{gymId}/...` (see StorageService.uploadProductImage). Tracks
+// storage bytes + file count per gym, folded into the cost estimate above.
+// ---------------------------------------------------------------------------
+function gymIdFromStoragePath(name) {
+  const match = /^products\/([^/]+)\//.exec(name || '');
+  return match ? match[1] : null;
+}
+
+exports.trackStorageUpload = onObjectFinalized({ region: 'us-east1' }, async (event) => {
+  const gymId = gymIdFromStoragePath(event.data.name);
+  if (!gymId) return null;
+  const size = Number(event.data.size) || 0;
+  await admin.firestore().collection('gymUsage').doc(gymId).set({
+    cloudStorageBytes: admin.firestore.FieldValue.increment(size),
+    cloudStorageFileCount: admin.firestore.FieldValue.increment(1),
+    lastStorageWriteAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return null;
+});
+
+exports.trackStorageDelete = onObjectDeleted({ region: 'us-east1' }, async (event) => {
+  const gymId = gymIdFromStoragePath(event.data.name);
+  if (!gymId) return null;
+  const size = Number(event.data.size) || 0;
+  await admin.firestore().collection('gymUsage').doc(gymId).set({
+    cloudStorageBytes: admin.firestore.FieldValue.increment(-size),
+    cloudStorageFileCount: admin.firestore.FieldValue.increment(-1),
+    lastStorageWriteAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return null;
+});
+
+// ---------------------------------------------------------------------------
+// superAdminBackfillGymUsage — one-time (re-runnable) backfill that computes
+// `gymUsage/{gymId}` from scratch by scanning every gym-scoped collection +
+// the Storage bucket. Needed because the triggers above only observe writes
+// going forward; existing data would otherwise be invisible to the usage
+// screen until each document happens to be re-saved.
+//
+// Safe to re-run: it OVERWRITES (not increments) the scanned fields, so
+// running it twice in a row gives the same result. `lastInvoiced*` fields
+// (owned by invoice generation) are preserved.
+// ---------------------------------------------------------------------------
+exports.superAdminBackfillGymUsage = functions.https.onCall(
+  { timeoutSeconds: 540, memory: '512MB' },
+  async (data, context) => {
+    await assertRole(context, 'super_admin');
+    const db = admin.firestore();
+
+    // gymId -> { writes, docCount, firestoreStorageBytes, collections }
+    const usage = {};
+    function bucket(gymId) {
+      if (!usage[gymId]) {
+        usage[gymId] = { docCount: 0, firestoreStorageBytes: 0, collections: {} };
+      }
+      return usage[gymId];
+    }
+
+    for (const col of GYM_SCOPED_COLLECTIONS) {
+      const snap = await db.collection(col).get();
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        const gymId = d.gymId;
+        if (!gymId) continue;
+        const bytes = estimateDocBytes(d);
+        const b = bucket(gymId);
+        b.docCount += 1;
+        b.firestoreStorageBytes += bytes;
+        if (!b.collections[col]) b.collections[col] = { docCount: 0, storageBytes: 0 };
+        b.collections[col].docCount += 1;
+        b.collections[col].storageBytes += bytes;
+      }
+    }
+
+    // Cloud Storage — product images live under products/{gymId}/...
+    const [files] = await admin.storage().bucket().getFiles({ prefix: 'products/' });
+    const storageByGym = {};
+    for (const file of files) {
+      const gymId = gymIdFromStoragePath(file.name);
+      if (!gymId) continue;
+      if (!storageByGym[gymId]) storageByGym[gymId] = { bytes: 0, count: 0 };
+      storageByGym[gymId].bytes += Number(file.metadata.size) || 0;
+      storageByGym[gymId].count += 1;
+    }
+
+    const gymIds = new Set([...Object.keys(usage), ...Object.keys(storageByGym)]);
+    let backfilled = 0;
+    for (const gymId of gymIds) {
+      const u = usage[gymId] || { docCount: 0, firestoreStorageBytes: 0, collections: {} };
+      const s = storageByGym[gymId] || { bytes: 0, count: 0 };
+      await db.collection('gymUsage').doc(gymId).set({
+        docCount: u.docCount,
+        firestoreStorageBytes: u.firestoreStorageBytes,
+        collections: u.collections,
+        cloudStorageBytes: s.bytes,
+        cloudStorageFileCount: s.count,
+        writes: admin.firestore.FieldValue.increment(0),
+        deletes: admin.firestore.FieldValue.increment(0),
+        backfilledAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      backfilled += 1;
+    }
+
+    return { gymsBackfilled: backfilled };
+  },
+);

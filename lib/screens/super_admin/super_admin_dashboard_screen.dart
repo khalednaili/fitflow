@@ -5,7 +5,12 @@ import 'package:intl/intl.dart';
 
 import '../../models/app_user.dart';
 import '../../models/gym.dart';
+import '../../models/gym_usage.dart';
 import '../../services/member_service.dart';
+import '../../services/platform_billing_service.dart';
+import '../../utils/currency.dart';
+import '../../utils/platform_pricing.dart';
+import 'gym_usage_screen.dart';
 import 'gyms_list_screen.dart';
 import 'unassigned_members_screen.dart';
 import '../../l10n/app_localizations.dart';
@@ -51,6 +56,13 @@ class SuperAdminDashboardScreen extends StatelessWidget {
             builder: (context, memberSnap) {
               final unassigned = memberSnap.data ?? [];
 
+              return StreamBuilder<Map<String, GymUsage>>(
+                stream: PlatformBillingService().watchAllUsage(),
+                builder: (context, usageSnap) {
+                  final usageByGym = usageSnap.data ?? {};
+                  final estimatedRevenue =
+                      computeEstimatedPlatformRevenue(gyms, usageByGym);
+
               return SingleChildScrollView(
                 padding: EdgeInsets.all(24),
                 child: Column(
@@ -87,6 +99,22 @@ class SuperAdminDashboardScreen extends StatelessWidget {
                           label: context.l10n.tr('Unassigned'),
                           value: '${unassigned.length}',
                           color: unassigned.isEmpty ? Colors.green : Colors.red,
+                        ),
+                        GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => const GymUsageScreen(),
+                            ),
+                          ),
+                          child: _StatCard(
+                            icon: Icons.receipt_long_outlined,
+                            label: context.l10n
+                                .tr('Est. Charge (this period)'),
+                            value: Currency.format(
+                                estimatedRevenue, PlatformPricing.currency),
+                            color: Colors.teal,
+                          ),
                         ),
                       ],
                     ),
@@ -133,6 +161,8 @@ class SuperAdminDashboardScreen extends StatelessWidget {
                           ),
                   ],
                 ),
+              );
+                },
               );
             },
           );
