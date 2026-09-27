@@ -573,7 +573,9 @@ class _BookingCardState extends State<_BookingCard> {
                             child: FilledButton.icon(
                               onPressed: () => Navigator.of(context).push(
                                 MaterialPageRoute<void>(
-                                    builder: (_) => QrScannerScreen()),
+                                    builder: (_) => QrScannerScreen(
+                                        gymClass: gymClass,
+                                        gymId: widget.gymId)),
                               ),
                               icon:
                                   Icon(Icons.qr_code_scanner_rounded, size: 18),
