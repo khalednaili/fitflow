@@ -285,10 +285,19 @@ const _quickItems = <_QuickItem>[
 // ─────────────────────────────────────────────────────────────────────────────
 
 class AdminShell extends StatefulWidget {
-  const AdminShell({super.key, required this.userId, this.appUser});
+  const AdminShell({
+    super.key,
+    required this.userId,
+    this.appUser,
+    this.onExit,
+  });
 
   final String userId;
   final AppUser? appUser;
+
+  /// When set, replaces "Sign out" with "Exit" and calls this instead of
+  /// signing out — used by the super admin to exit gym impersonation.
+  final VoidCallback? onExit;
 
   @override
   State<AdminShell> createState() => _AdminShellState();
@@ -433,7 +442,13 @@ class _AdminShellState extends State<AdminShell> {
                 tooltip: context.l10n.tr('Admin menu'),
                 offset: const Offset(0, 40),
                 onSelected: (v) async {
-                  if (v == 'signout') await AuthService().signOut();
+                  if (v == 'signout') {
+                    if (widget.onExit != null) {
+                      widget.onExit!();
+                    } else {
+                      await AuthService().signOut();
+                    }
+                  }
                   if (v == 'booking_rules' && context.mounted) {
                     await showDialog<void>(
                       context: context,
@@ -504,9 +519,9 @@ class _AdminShellState extends State<AdminShell> {
                   PopupMenuItem(
                     value: 'signout',
                     child: Row(children: [
-                      const Icon(Icons.logout, size: 16),
+                      Icon(widget.onExit != null ? Icons.arrow_back : Icons.logout, size: 16),
                       const SizedBox(width: 8),
-                      Text(context.l10n.tr('Sign out')),
+                      Text(context.l10n.tr(widget.onExit != null ? 'Exit' : 'Sign out')),
                     ]),
                   ),
                 ],
@@ -515,9 +530,12 @@ class _AdminShellState extends State<AdminShell> {
           )
         else
           IconButton(
-            tooltip: context.l10n.tr('Sign out'),
-            icon: const Icon(Icons.logout, color: Colors.white70),
-            onPressed: () async => AuthService().signOut(),
+            tooltip: context.l10n.tr(widget.onExit != null ? 'Exit' : 'Sign out'),
+            icon: Icon(
+              widget.onExit != null ? Icons.arrow_back : Icons.logout,
+              color: Colors.white70,
+            ),
+            onPressed: widget.onExit ?? () async => AuthService().signOut(),
           ),
         const SizedBox(width: 4),
       ],
@@ -833,7 +851,13 @@ class _AdminShellState extends State<AdminShell> {
   // ── Sidebar utility bar (Sign out only) ──────────────────────────────────
 
   Widget _buildSidebarUtilityBar({required bool showLabels}) {
-    void signOut() => AuthService().signOut();
+    void signOut() {
+      if (widget.onExit != null) {
+        widget.onExit!();
+      } else {
+        AuthService().signOut();
+      }
+    }
 
     return Container(
       decoration: const BoxDecoration(
@@ -847,11 +871,14 @@ class _AdminShellState extends State<AdminShell> {
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Row(
                   children: [
-                    const Icon(Icons.logout,
-                        size: 16, color: Color(0xFF6B7280)),
+                    Icon(
+                      widget.onExit != null ? Icons.arrow_back : Icons.logout,
+                      size: 16,
+                      color: const Color(0xFF6B7280),
+                    ),
                     const SizedBox(width: 12),
                     Text(
-                      context.l10n.tr('Sign out'),
+                      context.l10n.tr(widget.onExit != null ? 'Exit' : 'Sign out'),
                       style: const TextStyle(
                           color: Color(0xFF6B7280),
                           fontSize: 12,
@@ -862,14 +889,18 @@ class _AdminShellState extends State<AdminShell> {
               ),
             )
           : Tooltip(
-              message: context.l10n.tr('Sign out'),
+              message: context.l10n.tr(widget.onExit != null ? 'Exit' : 'Sign out'),
               child: InkWell(
                 onTap: signOut,
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 14),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   child: Center(
-                      child: Icon(Icons.logout,
-                          size: 18, color: Color(0xFF6B7280))),
+                    child: Icon(
+                      widget.onExit != null ? Icons.arrow_back : Icons.logout,
+                      size: 18,
+                      color: const Color(0xFF6B7280),
+                    ),
+                  ),
                 ),
               ),
             ),

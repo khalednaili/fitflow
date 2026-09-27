@@ -1,11 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import 'package:fit_flow/utils/crash_logger.dart';
+import '../../models/app_user.dart';
 import '../../models/gym.dart';
 import '../../models/gym_usage.dart';
+import '../../screens/admin/admin_shell.dart';
 import '../../services/gym_service.dart';
 import '../../services/platform_billing_service.dart';
 import '../../utils/currency.dart';
@@ -99,6 +102,30 @@ class _GymCard extends StatefulWidget {
 
 class _GymCardState extends State<_GymCard> {
   bool _deleting = false;
+
+  void _connectToGym(BuildContext context) {
+    final superAdminUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final gym = widget.gym;
+    final syntheticUser = AppUser(
+      id: superAdminUid,
+      email: gym.adminEmail,
+      displayName: gym.name,
+      role: 'admin',
+      roles: const ['admin'],
+      membershipPlanId: '',
+      subscriptionStatus: 'none',
+      gymId: gym.id,
+    );
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => AdminShell(
+          userId: superAdminUid,
+          appUser: syntheticUser,
+          onExit: () => Navigator.of(context).pop(),
+        ),
+      ),
+    );
+  }
 
   Future<void> _confirmDelete(BuildContext context) async {
     final l10n = context.l10n;
@@ -227,11 +254,25 @@ class _GymCardState extends State<_GymCard> {
               PopupMenuButton<_GymAction>(
                 icon: Icon(Icons.more_vert),
                 onSelected: (action) {
-                  if (action == _GymAction.delete) {
+                  if (action == _GymAction.connect) {
+                    _connectToGym(context);
+                  } else if (action == _GymAction.delete) {
                     _confirmDelete(context);
                   }
                 },
                 itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: _GymAction.connect,
+                    child: Row(
+                      children: [
+                        Icon(Icons.login_outlined,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 20),
+                        SizedBox(width: 10),
+                        Text(context.l10n.tr('Connect to gym')),
+                      ],
+                    ),
+                  ),
                   PopupMenuItem(
                     value: _GymAction.delete,
                     child: Row(
@@ -260,7 +301,7 @@ class _GymCardState extends State<_GymCard> {
   }
 }
 
-enum _GymAction { delete }
+enum _GymAction { connect, delete }
 
 // ---------------------------------------------------------------------------
 // Gym Detail Screen

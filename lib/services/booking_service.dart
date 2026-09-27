@@ -19,6 +19,13 @@ class BookingService {
   final FirebaseFirestore _firestore;
   final NotificationService _notificationService;
 
+  /// Gym-scoped document ID for booking rules. Prior to this fix, every gym
+  /// read/wrote the same `settings/bookingRules` doc, so one gym's rule
+  /// changes silently overwrote every other gym's rules. Falls back to the
+  /// legacy shared doc only when no gymId is known (e.g. ungated contexts).
+  String get _bookingRulesDocId =>
+      gymId.isNotEmpty ? 'bookingRules_$gymId' : 'bookingRules';
+
   Query<Map<String, dynamic>> get _bookingsQuery {
     Query<Map<String, dynamic>> query = _firestore.collection('bookings');
     if (gymId.isNotEmpty) {
@@ -145,7 +152,7 @@ class BookingService {
   }
 
   Future<void> setMaxBookingsPerDay(int max) async {
-    await _firestore.collection('settings').doc('bookingRules').set(
+    await _firestore.collection('settings').doc(_bookingRulesDocId).set(
       <String, dynamic>{
         'maxBookingsPerDay': max,
         'gymId': gymId,
@@ -165,7 +172,7 @@ class BookingService {
   }
 
   Future<void> setLateCancellationMinutes(int minutes) async {
-    await _firestore.collection('settings').doc('bookingRules').set(
+    await _firestore.collection('settings').doc(_bookingRulesDocId).set(
       <String, dynamic>{
         'lateCancellationMinutes': minutes,
         'gymId': gymId,
@@ -185,7 +192,7 @@ class BookingService {
   }
 
   Future<void> setMinAdvanceBookingMinutes(int minutes) async {
-    await _firestore.collection('settings').doc('bookingRules').set(
+    await _firestore.collection('settings').doc(_bookingRulesDocId).set(
       <String, dynamic>{
         'minAdvanceBookingMinutes': minutes,
         'gymId': gymId,
@@ -203,7 +210,7 @@ class BookingService {
   }
 
   Future<void> setPreventOverlappingBookings(bool value) async {
-    await _firestore.collection('settings').doc('bookingRules').set(
+    await _firestore.collection('settings').doc(_bookingRulesDocId).set(
       <String, dynamic>{
         'preventOverlappingBookings': value,
         'gymId': gymId,
@@ -221,7 +228,7 @@ class BookingService {
   }
 
   Future<void> setPreventSameClassTypePerDay(bool value) async {
-    await _firestore.collection('settings').doc('bookingRules').set(
+    await _firestore.collection('settings').doc(_bookingRulesDocId).set(
       <String, dynamic>{
         'preventSameClassTypePerDay': value,
         'gymId': gymId,
@@ -237,7 +244,7 @@ class BookingService {
   }
 
   Future<void> setHideClassesWithoutSubscription(bool value) async {
-    await _firestore.collection('settings').doc('bookingRules').set(
+    await _firestore.collection('settings').doc(_bookingRulesDocId).set(
       <String, dynamic>{
         'hideClassesWithoutSubscription': value,
         'gymId': gymId,
@@ -300,7 +307,7 @@ class BookingService {
       return _rulesCache!;
     }
     final doc =
-        await _firestore.collection('settings').doc('bookingRules').get();
+        await _firestore.collection('settings').doc(_bookingRulesDocId).get();
     _rulesCache = doc.data() ?? {};
     _rulesCachedAt = now;
     return _rulesCache!;
@@ -1421,6 +1428,8 @@ class BookingService {
     required String classTitle,
     required String userId,
   }) async {
+    // Fast pre-check: catches an attendance record created by any check-in
+    // path (admin manual check-in, bulk check-in, or an earlier QR scan).
     final existing = await _firestore
         .collection('attendance')
         .where('userId', isEqualTo: userId)
@@ -1432,14 +1441,31 @@ class BookingService {
       return {'status': 'already_checked_in', 'classTitle': classTitle};
     }
 
-    await _firestore.collection('attendance').add(<String, dynamic>{
-      'userId': userId,
-      'classId': classId,
-      'gymId': gymId,
-      'checkedInAt': Timestamp.now(),
-      'classTitle': classTitle,
-      'checkedInBy': 'qr',
-    });
+    // Atomically guard against a second, near-simultaneous QR scan (e.g. a
+    // double-tap, or the same code scanned from two devices) racing past the
+    // query-based pre-check above. A Firestore transaction on a deterministic
+    // document ID gives real optimistic-concurrency protection, unlike a
+    // plain query-then-write, which two concurrent calls could both pass.
+    final qrAttendanceRef =
+        _firestore.collection('attendance').doc('qr_${classId}_$userId');
+    try {
+      await _firestore.runTransaction((tx) async {
+        final snap = await tx.get(qrAttendanceRef);
+        if (snap.exists) {
+          throw StateError('already_checked_in');
+        }
+        tx.set(qrAttendanceRef, <String, dynamic>{
+          'userId': userId,
+          'classId': classId,
+          'gymId': gymId,
+          'checkedInAt': Timestamp.now(),
+          'classTitle': classTitle,
+          'checkedInBy': 'qr',
+        });
+      });
+    } on StateError {
+      return {'status': 'already_checked_in', 'classTitle': classTitle};
+    }
 
     return {'status': 'success', 'classTitle': classTitle};
   }
