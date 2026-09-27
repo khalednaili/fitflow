@@ -8,7 +8,6 @@ import '../../services/member_service.dart';
 import '../../services/notification_service.dart';
 import '../admin/admin_dashboard_screen.dart';
 import '../admin/admin_shell.dart';
-import '../checkin/qr_scanner_screen.dart';
 import '../coach/coach_portal_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../wod/wod_screen.dart';
@@ -66,7 +65,8 @@ class _HomeShellState extends State<HomeShell> {
 
   List<Widget> _buildScreens(
       bool showAdminTab, bool showCoachTab, String gymId, AppUser? appUser) {
-    final showScanTab = !showAdminTab && !showCoachTab;
+    // Scan tab removed from the member nav bar; members still check in via
+    // the "Scan to Check In" buttons on Bookings / Class Details screens.
     final screens = <Widget>[
       DashboardScreen(
         gymId: gymId,
@@ -78,7 +78,6 @@ class _HomeShellState extends State<HomeShell> {
       ProductsScreen(gymId: gymId),
       ProfileScreen(gymId: gymId),
     ];
-    if (showScanTab) screens.add(QrScannerScreen(gymId: gymId));
     if (showCoachTab) screens.add(CoachPortalScreen());
     if (showAdminTab) screens.add(AdminDashboardScreen());
     return screens;
@@ -89,7 +88,8 @@ class _HomeShellState extends State<HomeShell> {
     bool showCoachTab,
     AppLocalizations l10n,
   ) {
-    final showScanTab = !showAdminTab && !showCoachTab;
+    // Scan tab removed from the member nav bar; members still check in via
+    // the "Scan to Check In" buttons on Bookings / Class Details screens.
     final items = <_NavItem>[
       _NavItem(
         icon: Icons.home_outlined,
@@ -128,14 +128,6 @@ class _HomeShellState extends State<HomeShell> {
         color: _primaryTeal,
       ),
     ];
-    if (showScanTab) {
-      items.add(_NavItem(
-        icon: Icons.qr_code_scanner_outlined,
-        activeIcon: Icons.qr_code_scanner_rounded,
-        label: l10n.tr('Scan'),
-        color: _primaryTeal,
-      ));
-    }
     if (showCoachTab) {
       items.add(_NavItem(
         icon: Icons.sports_outlined,
